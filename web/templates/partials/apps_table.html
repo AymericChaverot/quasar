@@ -23,8 +23,8 @@
           <a href="/apps/{{.ID}}" class="font-medium hover:underline">{{.Name}}</a>
         </td>
         <td>
-          <a href="https://{{.Subdomain}}.{{.Domain}}" target="_blank" rel="noopener"
-             class="link mono">{{.Subdomain}}.{{.Domain}}</a>
+          <a href="https://{{.Host}}" target="_blank" rel="noopener"
+             class="link mono">{{.Host}}</a>
         </td>
         <td class="muted">{{.DeployType}}</td>
         <td>{{template "status_badge" .Status.State}}</td>

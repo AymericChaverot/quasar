@@ -85,7 +85,11 @@ func TestExecuteTemplates(t *testing.T) {
 		data any
 	}{
 		{"system_stats", vps.Stats{CPUPercent: 42.5, MemPercent: 61, MemUsedGB: 1.2, MemTotalGB: 2, DiskPercent: 90, DiskUsedGB: 18, DiskTotalGB: 20}},
-		{"apps_table", []AppView{app}},
+		{"apps_table", []AppView{app, {
+			App:    &db.App{ID: "ff00ff00", Name: "Site", Subdomain: "@", DeployType: "image", ImageRef: "nginx", Port: 80},
+			Status: docker.AppStatus{State: "running"},
+			Domain: "example.com",
+		}}},
 		{"apps_table", []AppView(nil)},
 		{"app_status_panel", app},
 		{"container_stats", docker.ContainerStats{CPUPercent: 1.5, MemUsedMB: 128, MemLimitMB: 2048, MemPercent: 6.3}},

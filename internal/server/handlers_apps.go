@@ -37,6 +37,15 @@ type AppView struct {
 	Deploy *docker.DeployState
 }
 
+// Host is the public hostname of the app: "sub.domain", or the bare root
+// domain when the app claims the apex via the "@" subdomain.
+func (v AppView) Host() string {
+	if v.App.Subdomain == "@" {
+		return v.Domain
+	}
+	return v.App.Subdomain + "." + v.Domain
+}
+
 func (s *Server) appView(ctx context.Context, a *db.App) AppView {
 	return AppView{
 		App:    a,
@@ -142,8 +151,9 @@ func (s *Server) validateNewApp(a *db.App) string {
 	if a.Name == "" {
 		return "Application name is required."
 	}
-	if !subdomainRe.MatchString(a.Subdomain) {
-		return "Subdomain must contain only lowercase letters, digits and hyphens."
+	// "@" claims the root domain itself (DNS apex convention).
+	if a.Subdomain != "@" && !subdomainRe.MatchString(a.Subdomain) {
+		return "Subdomain must contain only lowercase letters, digits and hyphens (or @ for the root domain)."
 	}
 	if a.Subdomain == "admin" {
 		return "The subdomain \"admin\" is reserved for this dashboard."

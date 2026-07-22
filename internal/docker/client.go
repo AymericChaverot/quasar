@@ -97,7 +97,11 @@ func (c *Client) AppDirSize(appID string) int64 {
 // subdomain — plus any custom domains — to the container's internal port.
 func (c *Client) traefikLabels(a *db.App) map[string]string {
 	r := "qs-" + a.ID
-	rule := fmt.Sprintf("Host(`%s.%s`)", a.Subdomain, c.domain)
+	host := a.Subdomain + "." + c.domain
+	if a.Subdomain == "@" { // app claims the root domain
+		host = c.domain
+	}
+	rule := fmt.Sprintf("Host(`%s`)", host)
 	for _, d := range a.CustomDomainList() {
 		rule += fmt.Sprintf(" || Host(`%s`)", d)
 	}

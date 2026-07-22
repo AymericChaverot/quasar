@@ -34,6 +34,7 @@
           <input id="subdomain" name="subdomain" type="text" required value="{{with .Form}}{{.Subdomain}}{{end}}" class="input">
           <span class="input-suffix">.{{.Domain}}</span>
         </div>
+        <p class="help">Use @ to serve the root domain ({{.Domain}}) itself.</p>
       </div>
     </div>
   </section>
