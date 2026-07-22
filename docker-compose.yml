@@ -3,7 +3,7 @@
 services:
 
   socket-proxy:
-    image: tecnativa/docker-socket-proxy:0.3
+    image: tecnativa/docker-socket-proxy:v0.4.2
     container_name: quasar-socket-proxy
     restart: unless-stopped
     environment:
@@ -31,7 +31,9 @@ services:
       - socket-net
 
   traefik:
-    image: traefik:v3.1
+    # v3.7+ required: older Traefik fails Docker API negotiation against
+    # recent daemons ("client version 1.24 is too old").
+    image: traefik:v3.7
     container_name: quasar-traefik
     restart: unless-stopped
     depends_on:
