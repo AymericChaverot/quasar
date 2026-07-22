@@ -1,0 +1,21 @@
+{{define "app_status_panel"}}
+<div class="card flex flex-wrap items-center justify-between gap-4 p-4">
+  <div class="flex items-center gap-4">
+    {{template "status_badge" .Status.State}}
+    {{if .Status.Uptime}}<span class="mono muted text-sm">up {{.Status.Uptime}}</span>{{end}}
+  </div>
+  <div class="flex items-center gap-2">
+    <button hx-post="/apps/{{.ID}}/start" hx-target="#status-panel" hx-swap="innerHTML" class="btn">Start</button>
+    <button hx-post="/apps/{{.ID}}/stop" hx-target="#status-panel" hx-swap="innerHTML" class="btn">Stop</button>
+    <button hx-post="/apps/{{.ID}}/restart" hx-target="#status-panel" hx-swap="innerHTML" class="btn">Restart</button>
+    <button hx-post="/apps/{{.ID}}/redeploy" hx-target="#status-panel" hx-swap="innerHTML"
+            hx-confirm="Redeploy {{.Name}}? The container will be replaced."
+            class="btn-primary">Redeploy</button>
+  </div>
+</div>
+{{if and .Deploy .Deploy.Err}}
+<div class="alert-err mono mt-3 text-xs">
+  Last deploy failed: {{.Deploy.Err}}
+</div>
+{{end}}
+{{end}}

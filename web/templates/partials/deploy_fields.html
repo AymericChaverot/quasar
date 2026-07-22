@@ -1,0 +1,38 @@
+{{define "deploy_fields_image"}}
+<div>
+  <label for="image_ref" class="label">Image reference</label>
+  <input id="image_ref" name="image_ref" type="text" placeholder="nginx:latest" value="{{with .Form}}{{.ImageRef}}{{end}}" class="input mono">
+  <p class="help">Any registry image, e.g. nginx:latest, redis:alpine, ghcr.io/org/app:v1. Private registries configured in Settings are used automatically.</p>
+</div>
+{{end}}
+
+{{define "deploy_fields_git"}}
+<div class="space-y-4">
+  <div>
+    <label for="git_url" class="label">Repository URL</label>
+    <input id="git_url" name="git_url" type="text" placeholder="https://github.com/user/repo.git" class="input mono">
+    <p class="help">The repository must contain a Dockerfile at its root.</p>
+  </div>
+  <div class="w-1/2">
+    <label for="git_branch" class="label">Branch</label>
+    <input id="git_branch" name="git_branch" type="text" placeholder="main" class="input mono">
+  </div>
+</div>
+{{end}}
+
+{{define "deploy_fields_compose"}}
+<div>
+  <label for="compose_yaml" class="label">docker-compose.yml</label>
+  <textarea id="compose_yaml" name="compose_yaml" rows="12" spellcheck="false"
+            placeholder="services:&#10;  web:&#10;    image: nginx:latest&#10;    networks: [traefik-net]&#10;networks:&#10;  traefik-net:&#10;    external: true"
+            class="input mono"></textarea>
+  <p class="help">
+    Services must join the external network traefik-net and carry their own Traefik labels to be routed.
+    The subdomain and port fields below are informational for compose apps.
+  </p>
+</div>
+{{end}}
+
+{{define "env_saved"}}
+<span class="text-xs" style="color: var(--ok)">Saved.</span>
+{{end}}

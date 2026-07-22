@@ -1,0 +1,38 @@
+{{define "apps_table"}}
+{{if not .}}
+<div class="empty p-10 text-center">
+  <p class="muted text-sm">No applications yet.</p>
+  <a href="/apps/new" class="link mt-2 inline-block text-sm underline underline-offset-4">Deploy your first application</a>
+</div>
+{{else}}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Application</th>
+        <th>URL</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Uptime</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .}}
+      <tr>
+        <td>
+          <a href="/apps/{{.ID}}" class="font-medium hover:underline">{{.Name}}</a>
+        </td>
+        <td>
+          <a href="https://{{.Subdomain}}.{{.Domain}}" target="_blank" rel="noopener"
+             class="link mono">{{.Subdomain}}.{{.Domain}}</a>
+        </td>
+        <td class="muted">{{.DeployType}}</td>
+        <td>{{template "status_badge" .Status.State}}</td>
+        <td class="mono muted">{{if .Status.Uptime}}{{.Status.Uptime}}{{else}}–{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+{{end}}

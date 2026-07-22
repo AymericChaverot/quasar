@@ -1,0 +1,93 @@
+# Quasar system stack: Traefik (edge router + TLS), a restricted Docker socket
+# proxy, and the admin dashboard. Deployed to /opt/quasar by setup.sh.
+services:
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3
+    container_name: quasar-socket-proxy
+    restart: unless-stopped
+    environment:
+      # Only the Engine API sections the platform needs are exposed.
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      BUILD: 1
+      VOLUMES: 1
+      INFO: 1
+      SYSTEM: 1
+      EVENTS: 1
+      PING: 1
+      VERSION: 1
+      # Write operations (create/start/stop/restart containers, pull, build).
+      POST: 1
+      ALLOW_START: 1
+      ALLOW_STOP: 1
+      ALLOW_RESTARTS: 1
+      # Required by the web terminal and scheduled tasks (docker exec).
+      EXEC: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - socket-net
+
+  traefik:
+    image: traefik:v3.1
+    container_name: quasar-traefik
+    restart: unless-stopped
+    depends_on:
+      - socket-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/acme.json:/acme.json
+    networks:
+      - traefik-net
+      - socket-net
+
+  dashboard:
+    # QUASAR_IMAGE is pinned by the self-updater; build: . is the fallback
+    # for installs without registry access (docker compose up --build).
+    image: ${QUASAR_IMAGE:-ghcr.io/aymericchaverot/quasar:latest}
+    build: .
+    container_name: quasar-dashboard
+    restart: unless-stopped
+    depends_on:
+      - socket-proxy
+      - traefik
+    env_file: .env
+    environment:
+      DOCKER_HOST: tcp://socket-proxy:2375
+      DB_PATH: /opt/quasar/storage/database.sqlite
+      APPS_DIR: /opt/quasar/apps
+      BACKUPS_DIR: /opt/quasar/backups
+      # gopsutil reads host metrics through these mounts.
+      HOST_PROC: /host/proc
+      HOST_ROOT: /host/root
+    volumes:
+      # Mounted at the same path as on the host so bind mounts created for
+      # apps resolve identically for the Docker daemon.
+      - /opt/quasar/apps:/opt/quasar/apps
+      - /opt/quasar/storage:/opt/quasar/storage
+      - /opt/quasar/backups:/opt/quasar/backups
+      - /proc:/host/proc:ro
+      - /:/host/root:ro
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.quasar-admin.rule: Host(`admin.${DOMAIN}`)
+      traefik.http.routers.quasar-admin.entrypoints: websecure
+      traefik.http.routers.quasar-admin.tls.certresolver: letsencrypt
+      traefik.http.services.quasar-admin.loadbalancer.server.port: "8080"
+    networks:
+      - traefik-net
+      - socket-net
+
+networks:
+  traefik-net:
+    external: true
+  socket-net:
+    # Fixed name so the self-updater container (created via the API, outside
+    # compose) can join it to reach the socket proxy.
+    name: quasar-socket-net
+    internal: true

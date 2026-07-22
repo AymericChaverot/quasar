@@ -1,0 +1,31 @@
+{{define "system_stats"}}
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+  <div class="card p-4">
+    <div class="mb-2 flex items-baseline justify-between">
+      <span class="muted text-sm">CPU</span>
+      <span class="mono text-sm">{{printf "%.1f" .CPUPercent}}%</span>
+    </div>
+    <div class="meter">
+      <div class="{{if gt .CPUPercent 85.0}}fill-err{{else if gt .CPUPercent 60.0}}fill-warn{{else}}fill-ok{{end}}" style="width: {{printf "%.0f" .CPUPercent}}%"></div>
+    </div>
+  </div>
+  <div class="card p-4">
+    <div class="mb-2 flex items-baseline justify-between">
+      <span class="muted text-sm">Memory</span>
+      <span class="mono text-sm">{{printf "%.1f" .MemUsedGB}} / {{printf "%.1f" .MemTotalGB}} GB</span>
+    </div>
+    <div class="meter">
+      <div class="{{if gt .MemPercent 85.0}}fill-err{{else if gt .MemPercent 60.0}}fill-warn{{else}}fill-ok{{end}}" style="width: {{printf "%.0f" .MemPercent}}%"></div>
+    </div>
+  </div>
+  <div class="card p-4">
+    <div class="mb-2 flex items-baseline justify-between">
+      <span class="muted text-sm">Disk</span>
+      <span class="mono text-sm">{{printf "%.0f" .DiskUsedGB}} / {{printf "%.0f" .DiskTotalGB}} GB</span>
+    </div>
+    <div class="meter">
+      <div class="{{if gt .DiskPercent 85.0}}fill-err{{else if gt .DiskPercent 60.0}}fill-warn{{else}}fill-ok{{end}}" style="width: {{printf "%.0f" .DiskPercent}}%"></div>
+    </div>
+  </div>
+</div>
+{{end}}

@@ -1,0 +1,137 @@
+{{define "content"}}
+{{with .App}}
+<div class="mb-8 flex items-start justify-between">
+  <div>
+    <h1 class="text-lg font-semibold">{{.Name}}</h1>
+    <a href="https://{{.Subdomain}}.{{.Domain}}" target="_blank" rel="noopener"
+       class="link mono text-sm">{{.Subdomain}}.{{.Domain}}</a>
+  </div>
+  <div class="flex items-center gap-3">
+    <a href="/apps/{{.ID}}/terminal" class="btn">Terminal</a>
+    <span class="chip">{{.DeployType}}</span>
+  </div>
+</div>
+
+<div id="status-panel"
+     hx-get="/partials/apps/{{.ID}}/status" hx-trigger="every 3s" hx-swap="innerHTML">
+  {{template "app_status_panel" .}}
+</div>
+
+<div class="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
+  <section>
+    <h2 class="h-label mb-3">Container resources</h2>
+    <div hx-get="/partials/apps/{{.ID}}/stats" hx-trigger="load, every 5s" hx-swap="innerHTML">
+      <div class="card h-20 animate-pulse"></div>
+    </div>
+    <div class="mt-4" hx-get="/partials/apps/{{.ID}}/metrics" hx-trigger="load, every 60s" hx-swap="innerHTML"></div>
+  </section>
+
+  <section>
+    <h2 class="h-label mb-3">Environment</h2>
+    <form hx-post="/apps/{{.ID}}/env" hx-target="#env-feedback" hx-swap="innerHTML" class="space-y-3">
+      <textarea name="env_content" rows="6" spellcheck="false" placeholder="KEY=value"
+                class="input mono">{{.EnvContent}}</textarea>
+      {{if eq .DeployType "compose"}}
+      <textarea name="compose_yaml" rows="10" spellcheck="false"
+                class="input mono">{{.ComposeYAML}}</textarea>
+      {{end}}
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn">Save</button>
+        <span id="env-feedback"></span>
+        <span class="help !mt-0">Redeploy to apply changes.</span>
+      </div>
+    </form>
+  </section>
+</div>
+
+<div class="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
+  <section>
+    <h2 class="h-label mb-3">Custom domains</h2>
+    <form hx-post="/apps/{{.ID}}/domains" hx-target="#domains-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
+      <input name="custom_domains" type="text" placeholder="www.example.com, example.com"
+             value="{{.CustomDomains}}" class="input mono">
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn">Save</button>
+        <span id="domains-feedback"></span>
+        <span class="help !mt-0">Redeploy to apply. Point DNS at this server first.</span>
+      </div>
+    </form>
+  </section>
+
+  <section>
+    <h2 class="h-label mb-3">Deploy webhook</h2>
+    <div class="card space-y-2 p-4">
+      <p class="muted text-sm">POST to this URL (e.g. from a GitHub push webhook) to trigger a redeploy:</p>
+      <code class="mono block break-all rounded p-2 text-xs" style="background: var(--surface-2)">https://admin.{{.Domain}}/hooks/{{.ID}}/{{.WebhookSecret}}</code>
+      <p class="help">Keep this URL secret — anyone who has it can redeploy the app.</p>
+    </div>
+  </section>
+</div>
+
+<div class="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
+  <section>
+    <h2 class="h-label mb-3">Health check</h2>
+    <form hx-post="/apps/{{.ID}}/health" hx-target="#health-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
+      <input name="health_path" type="text" placeholder="/health" value="{{.HealthPath}}" class="input mono">
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn">Save</button>
+        <span id="health-feedback"></span>
+        <span class="help !mt-0">HTTP path probed every 30s; 3 failures restart the container. Empty disables.</span>
+      </div>
+    </form>
+  </section>
+
+  <section>
+    <h2 class="h-label mb-3">Password protection</h2>
+    <form hx-post="/apps/{{.ID}}/basic-auth" hx-target="#ba-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
+      {{if .BasicAuthUser}}
+      <p class="muted text-sm">Protected — user <span class="mono">{{.BasicAuthUser}}</span>. Set new credentials or disable.</p>
+      {{else}}
+      <p class="muted text-sm">Adds Traefik basic auth in front of the app. Redeploy to apply.</p>
+      {{end}}
+      <div class="grid grid-cols-2 gap-3">
+        <input name="ba_user" type="text" placeholder="username" value="{{.BasicAuthUser}}" class="input mono">
+        <input name="ba_password" type="password" placeholder="password" class="input mono">
+      </div>
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn">Save</button>
+        {{if .BasicAuthUser}}
+        <button type="submit" name="disable" value="1" class="btn-danger">Disable</button>
+        {{end}}
+        <span id="ba-feedback"></span>
+      </div>
+    </form>
+  </section>
+</div>
+
+<section class="mt-8">
+  <h2 class="h-label mb-3">Tasks</h2>
+  <div id="tasks-pane" hx-get="/partials/apps/{{.ID}}/tasks" hx-trigger="load" hx-swap="innerHTML">
+    <div class="card h-16 animate-pulse"></div>
+  </div>
+</section>
+
+<section class="mt-8">
+  <h2 class="h-label mb-3">Deployment history</h2>
+  <div hx-get="/partials/apps/{{.ID}}/deployments" hx-trigger="load, every 5s" hx-swap="innerHTML">
+    <div class="card h-16 animate-pulse"></div>
+  </div>
+</section>
+
+<section class="mt-8">
+  <h2 class="h-label mb-3">Live logs</h2>
+  <div hx-ext="sse" sse-connect="/apps/{{.ID}}/logs">
+    <div id="log-pane" sse-swap="message" hx-swap="beforeend scroll:bottom" class="log-pane"></div>
+  </div>
+</section>
+
+<section class="mt-10 border-t pt-6" style="border-color: var(--border)">
+  <h2 class="h-label mb-3" style="color: var(--err)">Danger zone</h2>
+  <button hx-post="/apps/{{.ID}}/delete"
+          hx-confirm="Delete {{.Name}}? Its container, images metadata and data directory will be removed permanently."
+          class="btn-danger">
+    Delete application
+  </button>
+</section>
+{{end}}
+{{end}}

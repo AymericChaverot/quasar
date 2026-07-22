@@ -1,0 +1,203 @@
+package server
+
+import (
+	"html/template"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"quasar/internal/auth"
+	"quasar/internal/db"
+)
+
+// Theme describes a selectable UI theme, rendered on the settings page.
+type Theme struct {
+	ID          string
+	Name        string
+	Description string
+}
+
+var themes = []Theme{
+	{"nebula", "Nebula", "Dark developer dashboard (default)"},
+	{"terminal", "Terminal", "Brutalist green-on-black CRT"},
+	{"paper", "Paper", "Minimal light"},
+}
+
+const themeCookie = "quasar_theme"
+
+func validTheme(id string) bool {
+	for _, t := range themes {
+		if t.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// themeFrom resolves the active theme from the request cookie.
+func themeFrom(r *http.Request) string {
+	if c, _ := r.Cookie(themeCookie); c != nil && validTheme(c.Value) {
+		return c.Value
+	}
+	return themes[0].ID
+}
+
+func (s *Server) handleThemeSet(w http.ResponseWriter, r *http.Request) {
+	theme := r.FormValue("theme")
+	if !validTheme(theme) {
+		theme = themes[0].ID
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     themeCookie,
+		Value:    theme,
+		Path:     "/",
+		MaxAge:   365 * 24 * 3600,
+		HttpOnly: true,
+		Secure:   s.cfg.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// currentUser resolves the logged-in user from the session cookie. requireAuth
+// already validated the session, so failures here are exceptional.
+func (s *Server) currentUser(r *http.Request) (int64, string, string) {
+	cookie, _ := r.Cookie(auth.SessionCookie)
+	if cookie == nil {
+		return 0, "", ""
+	}
+	id, name, err := auth.UserForSession(s.db, cookie.Value)
+	if err != nil {
+		return 0, "", cookie.Value
+	}
+	return id, name, cookie.Value
+}
+
+func (s *Server) settingsData(r *http.Request) map[string]any {
+	userID, username, _ := s.currentUser(r)
+	registries, _ := db.ListRegistries(s.db)
+	return map[string]any{
+		"Title":       "Settings",
+		"Username":    username,
+		"Themes":      themes,
+		"Domain":      s.cfg.Domain,
+		"AppsDir":     s.cfg.AppsDir,
+		"DBPath":      s.cfg.DBPath,
+		"Registries":  registries,
+		"GitTokenSet": db.GetSetting(s.db, db.SettingGitToken) != "",
+		"NotifyURL":   db.GetSetting(s.db, db.SettingNotifyURL),
+		"TOTPEnabled": auth.TOTPEnabled(s.db, userID),
+	}
+}
+
+// handle2FASetupBegin generates a secret and shows the QR code to scan.
+func (s *Server) handle2FASetupBegin(w http.ResponseWriter, r *http.Request) {
+	userID, username, _ := s.currentUser(r)
+	secret, qr, err := auth.BeginTOTPSetup(s.db, userID, "Quasar ("+s.cfg.Domain+")", username)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	data := s.settingsData(r)
+	// template.URL marks the data: URI as safe — html/template would
+	// otherwise replace it with #ZgotmplZ.
+	data["TOTPSetup"] = map[string]any{"Secret": secret, "QR": template.URL(qr)}
+	s.render(w, r, "settings", data)
+}
+
+func (s *Server) handle2FAEnable(w http.ResponseWriter, r *http.Request) {
+	userID, _, _ := s.currentUser(r)
+	if err := auth.EnableTOTP(s.db, userID, r.FormValue("code")); err != nil {
+		data := s.settingsData(r)
+		data["Error"] = err.Error() + " — scan the QR code again if needed."
+		s.render(w, r, "settings", data)
+		return
+	}
+	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+}
+
+func (s *Server) handle2FADisable(w http.ResponseWriter, r *http.Request) {
+	userID, _, _ := s.currentUser(r)
+	if err := auth.DisableTOTP(s.db, userID, r.FormValue("password")); err != nil {
+		data := s.settingsData(r)
+		data["Error"] = err.Error()
+		s.render(w, r, "settings", data)
+		return
+	}
+	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+}
+
+// handleRegistryAdd stores (or replaces) credentials for an image registry.
+func (s *Server) handleRegistryAdd(w http.ResponseWriter, r *http.Request) {
+	server := strings.TrimSpace(r.FormValue("server"))
+	username := strings.TrimSpace(r.FormValue("username"))
+	secret := r.FormValue("secret")
+	if server == "" || username == "" || secret == "" {
+		data := s.settingsData(r)
+		data["Error"] = "Registry server, username and token are all required."
+		s.render(w, r, "settings", data)
+		return
+	}
+	if err := db.InsertRegistry(s.db, &db.Registry{Server: server, Username: username, Secret: secret}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+}
+
+func (s *Server) handleRegistryDelete(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	db.DeleteRegistry(s.db, id)
+	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+}
+
+// handleIntegrationsSave stores the git token and notification webhook URL.
+func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) {
+	if r.FormValue("clear_git_token") == "on" {
+		db.SetSetting(s.db, db.SettingGitToken, "")
+	} else if token := r.FormValue("git_token"); token != "" {
+		db.SetSetting(s.db, db.SettingGitToken, token)
+	}
+	db.SetSetting(s.db, db.SettingNotifyURL, strings.TrimSpace(r.FormValue("notify_url")))
+	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+}
+
+func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
+	data := s.settingsData(r)
+	if r.URL.Query().Get("saved") == "1" {
+		data["Saved"] = "Settings saved."
+	}
+	s.render(w, r, "settings", data)
+}
+
+func (s *Server) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
+	userID, _, token := s.currentUser(r)
+
+	newPassword := r.FormValue("new_password")
+	if newPassword != r.FormValue("confirm_password") {
+		data := s.settingsData(r)
+		data["Error"] = "New passwords do not match."
+		s.render(w, r, "settings", data)
+		return
+	}
+	if err := auth.ChangePassword(s.db, userID, token, r.FormValue("current_password"), newPassword); err != nil {
+		data := s.settingsData(r)
+		data["Error"] = err.Error()
+		s.render(w, r, "settings", data)
+		return
+	}
+	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+}
+
+func (s *Server) handleSessionsClear(w http.ResponseWriter, r *http.Request) {
+	if err := auth.ClearAllSessions(s.db); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	auth.ClearCookie(w, s.cfg.CookieSecure)
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}

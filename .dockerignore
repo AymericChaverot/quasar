@@ -1,0 +1,7 @@
+.git
+.env
+storage
+apps
+traefik/acme.json
+*.md
+setup.sh

@@ -1,0 +1,56 @@
+{{define "tasks"}}
+{{$appID := .AppID}}
+<div class="space-y-3">
+  {{if .Tasks}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Command</th><th>Schedule</th><th>Last run</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody>
+        {{range .Tasks}}
+        <tr>
+          <td class="mono">{{.Command}}</td>
+          <td class="muted">{{if gt .IntervalMinutes 0}}every {{.IntervalMinutes}} min{{else}}manual{{end}}</td>
+          <td class="mono muted">{{if .LastRun.Valid}}{{.LastRun.Time.Format "01-02 15:04"}}{{else}}–{{end}}</td>
+          <td>
+            {{if eq .LastStatus "success"}}<span class="badge badge-ok">success</span>
+            {{else if eq .LastStatus "failed"}}<span class="badge badge-err">failed</span>
+            {{else}}<span class="faint">–</span>{{end}}
+          </td>
+          <td>
+            <div class="flex items-center gap-2">
+              <button hx-post="/apps/{{$appID}}/tasks/{{.ID}}/run" hx-target="#tasks-pane" hx-swap="innerHTML"
+                      class="btn !py-1 text-xs">Run now</button>
+              <button hx-post="/apps/{{$appID}}/tasks/{{.ID}}/delete" hx-target="#tasks-pane" hx-swap="innerHTML"
+                      hx-confirm="Delete this task?" class="btn-danger !py-1 text-xs">Delete</button>
+            </div>
+          </td>
+        </tr>
+        {{if .LastOutput}}
+        <tr>
+          <td colspan="5" class="!py-2">
+            <pre class="mono max-h-32 overflow-y-auto whitespace-pre-wrap rounded p-2 text-xs" style="background: var(--surface-2)">{{.LastOutput}}</pre>
+          </td>
+        </tr>
+        {{end}}
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <div class="card muted p-4 text-sm">No tasks yet. Commands run inside the app's container via /bin/sh.</div>
+  {{end}}
+  <form hx-post="/apps/{{$appID}}/tasks" hx-target="#tasks-pane" hx-swap="innerHTML" class="flex flex-wrap items-end gap-3">
+    <div class="min-w-64 flex-1">
+      <label class="label">Command</label>
+      <input name="command" type="text" placeholder="php artisan migrate" class="input mono" required>
+    </div>
+    <div>
+      <label class="label">Every N minutes (0 = manual)</label>
+      <input name="interval_minutes" type="number" min="0" value="0" class="input !w-40">
+    </div>
+    <button type="submit" class="btn">Add task</button>
+  </form>
+</div>
+{{end}}

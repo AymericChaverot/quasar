@@ -1,0 +1,28 @@
+{{define "container_stats"}}
+<div class="grid grid-cols-2 gap-4">
+  <div class="card p-4">
+    <div class="mb-2 flex items-baseline justify-between">
+      <span class="muted text-sm">CPU</span>
+      <span class="mono text-sm">{{printf "%.1f" .CPUPercent}}%</span>
+    </div>
+    <div class="meter">
+      <div class="fill-info" style="width: {{printf "%.0f" .CPUPercent}}%"></div>
+    </div>
+  </div>
+  <div class="card p-4">
+    <div class="mb-2 flex items-baseline justify-between">
+      <span class="muted text-sm">Memory</span>
+      <span class="mono text-sm">{{printf "%.0f" .MemUsedMB}} MB</span>
+    </div>
+    <div class="meter">
+      <div class="fill-info" style="width: {{printf "%.0f" .MemPercent}}%"></div>
+    </div>
+  </div>
+</div>
+{{end}}
+
+{{define "container_stats_unavailable"}}
+<div class="card muted p-4 text-sm">
+  Resource metrics unavailable (container not running, or compose application).
+</div>
+{{end}}

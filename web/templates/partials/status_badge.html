@@ -1,0 +1,13 @@
+{{define "status_badge"}}
+{{if eq . "running"}}
+<span class="badge badge-ok"><span class="dot"></span>Running</span>
+{{else if eq . "deploying"}}
+<span class="badge badge-warn"><span class="dot animate-pulse"></span>Deploying</span>
+{{else if eq . "error"}}
+<span class="badge badge-err"><span class="dot"></span>Error</span>
+{{else if eq . "stopped"}}
+<span class="badge badge-muted"><span class="dot"></span>Stopped</span>
+{{else}}
+<span class="badge badge-muted"><span class="dot"></span>{{.}}</span>
+{{end}}
+{{end}}

@@ -1,0 +1,44 @@
+{{define "deployments"}}
+{{if not .Deployments}}
+<div class="card muted p-4 text-sm">No deployments recorded yet.</div>
+{{else}}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Source</th>
+        <th>Image</th>
+        <th>Duration</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{$appID := .AppID}}
+      {{range .Deployments}}
+      <tr>
+        <td class="mono muted">{{.StartedAt.Format "2006-01-02 15:04:05"}}</td>
+        <td class="muted">{{.Source}}</td>
+        <td class="mono muted break-all">{{if .ImageTag}}{{.ImageTag}}{{else}}–{{end}}</td>
+        <td class="mono muted">{{.Duration}}</td>
+        <td>
+          {{if eq .Status "success"}}<span class="badge badge-ok">success</span>
+          {{else if eq .Status "failed"}}<span class="badge badge-err" title="{{.Detail}}">failed</span>
+          {{else}}<span class="badge badge-warn"><span class="dot animate-pulse"></span>running</span>{{end}}
+        </td>
+        <td>
+          {{if .CanRollback}}
+          <button hx-post="/apps/{{$appID}}/rollback" hx-vals='{"tag": "{{.ImageTag}}"}'
+                  hx-target="#status-panel" hx-swap="innerHTML"
+                  hx-confirm="Roll back to {{.ImageTag}}?"
+                  class="btn !py-1 text-xs">Rollback</button>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+{{end}}

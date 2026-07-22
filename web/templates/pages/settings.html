@@ -1,0 +1,168 @@
+{{define "content"}}
+<h1 class="mb-8 text-lg font-semibold">Settings</h1>
+
+{{if .Saved}}
+<div class="card mb-6 px-4 py-3 text-sm" style="color: var(--ok)">{{.Saved}}</div>
+{{end}}
+{{if .Error}}
+<div class="alert-err mb-6">{{.Error}}</div>
+{{end}}
+
+<div class="max-w-2xl space-y-10">
+
+  <section class="space-y-4">
+    <h2 class="h-label">Appearance</h2>
+    <form method="post" action="/theme" class="card space-y-4 p-4">
+      <div class="space-y-2">
+        {{range .Themes}}
+        <label class="flex items-center gap-3 text-sm">
+          <input type="radio" name="theme" value="{{.ID}}" {{if eq .ID $.Theme}}checked{{end}}>
+          <span class="w-40">{{.Name}}</span>
+          <span class="faint">{{.Description}}</span>
+        </label>
+        {{end}}
+      </div>
+      <button type="submit" class="btn">Apply theme</button>
+    </form>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Account</h2>
+    <form method="post" action="/settings/password" class="card space-y-4 p-4">
+      <p class="muted text-sm">Signed in as <span class="mono">{{.Username}}</span></p>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div>
+          <label for="current_password" class="label">Current password</label>
+          <input id="current_password" name="current_password" type="password" required class="input">
+        </div>
+        <div>
+          <label for="new_password" class="label">New password</label>
+          <input id="new_password" name="new_password" type="password" required minlength="8" class="input">
+        </div>
+        <div>
+          <label for="confirm_password" class="label">Confirm</label>
+          <input id="confirm_password" name="confirm_password" type="password" required minlength="8" class="input">
+        </div>
+      </div>
+      <p class="help">Changing the password signs out every other session.</p>
+      <button type="submit" class="btn">Change password</button>
+    </form>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Two-factor authentication</h2>
+    <div class="card space-y-4 p-4">
+      {{if .TOTPSetup}}
+      <p class="muted text-sm">Scan this QR code with your authenticator app, then confirm with a code:</p>
+      <div class="flex items-start gap-6">
+        <img src="{{.TOTPSetup.QR}}" alt="TOTP QR code" class="rounded" width="160" height="160">
+        <div class="space-y-3">
+          <p class="help">Manual entry secret: <span class="mono select-all">{{.TOTPSetup.Secret}}</span></p>
+          <form method="post" action="/settings/2fa/enable" class="flex items-end gap-3">
+            <div>
+              <label for="totp_code" class="label">Code</label>
+              <input id="totp_code" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required class="input mono !w-32">
+            </div>
+            <button type="submit" class="btn-primary">Activate 2FA</button>
+          </form>
+        </div>
+      </div>
+      {{else if .TOTPEnabled}}
+      <p class="text-sm" style="color: var(--ok)">Two-factor authentication is enabled.</p>
+      <form method="post" action="/settings/2fa/disable" class="flex items-end gap-3">
+        <div>
+          <label for="disable_pw" class="label">Confirm with your password</label>
+          <input id="disable_pw" name="password" type="password" required class="input">
+        </div>
+        <button type="submit" class="btn-danger">Disable 2FA</button>
+      </form>
+      {{else}}
+      <p class="muted text-sm">Require a TOTP code from an authenticator app at sign-in.</p>
+      <form method="post" action="/settings/2fa/begin">
+        <button type="submit" class="btn">Set up 2FA</button>
+      </form>
+      {{end}}
+    </div>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Image registries</h2>
+    <div class="card space-y-4 p-4">
+      {{if .Registries}}
+      <ul class="space-y-2">
+        {{range .Registries}}
+        <li class="flex items-center justify-between text-sm">
+          <span><span class="mono">{{.Server}}</span> <span class="faint">as {{.Username}}</span></span>
+          <form method="post" action="/settings/registries/{{.ID}}/delete">
+            <button type="submit" class="btn-danger !py-1 text-xs">Remove</button>
+          </form>
+        </li>
+        {{end}}
+      </ul>
+      {{else}}
+      <p class="muted text-sm">No private registry configured. Public images always work.</p>
+      {{end}}
+      <form method="post" action="/settings/registries" class="grid grid-cols-1 gap-3 border-t pt-4 sm:grid-cols-4" style="border-color: var(--border)">
+        <input name="server" type="text" placeholder="ghcr.io" class="input mono" required>
+        <input name="username" type="text" placeholder="username" class="input mono" required>
+        <input name="secret" type="password" placeholder="token / password" class="input mono" required>
+        <button type="submit" class="btn">Add registry</button>
+      </form>
+      <p class="help">Use "docker.io" for private Docker Hub images. Credentials are used when pulling images whose reference matches the registry.</p>
+    </div>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Integrations</h2>
+    <form method="post" action="/settings/integrations" class="card space-y-4 p-4">
+      <div>
+        <label for="git_token" class="label">Git access token</label>
+        <input id="git_token" name="git_token" type="password"
+               placeholder="{{if .GitTokenSet}}configured — enter a new value to replace{{else}}ghp_… / glpat-…{{end}}" class="input mono">
+        <p class="help">Injected into https clone URLs so private repositories build. Leave empty to keep the current token.</p>
+        {{if .GitTokenSet}}
+        <label class="mt-2 flex items-center gap-2 text-sm">
+          <input type="checkbox" name="clear_git_token">
+          <span class="muted">Remove the stored token</span>
+        </label>
+        {{end}}
+      </div>
+      <div>
+        <label for="notify_url" class="label">Notification webhook URL</label>
+        <input id="notify_url" name="notify_url" type="text" value="{{.NotifyURL}}"
+               placeholder="https://discord.com/api/webhooks/…" class="input mono">
+        <p class="help">Discord and Slack-compatible. Receives deploy failures, app crashes and backup errors. Empty disables notifications.</p>
+      </div>
+      <button type="submit" class="btn">Save integrations</button>
+    </form>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Sessions</h2>
+    <div class="card flex items-center justify-between p-4">
+      <p class="muted text-sm">Invalidate every active session, including this one.</p>
+      <form method="post" action="/settings/sessions/clear">
+        <button type="submit" class="btn-danger">Sign out everywhere</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Platform</h2>
+    <div class="card p-4">
+      <dl class="grid grid-cols-[10rem_1fr] gap-y-2 text-sm">
+        <dt class="muted">Root domain</dt>
+        <dd class="mono">{{.Domain}}</dd>
+        <dt class="muted">Dashboard URL</dt>
+        <dd class="mono">admin.{{.Domain}}</dd>
+        <dt class="muted">Apps directory</dt>
+        <dd class="mono">{{.AppsDir}}</dd>
+        <dt class="muted">Database</dt>
+        <dd class="mono">{{.DBPath}}</dd>
+      </dl>
+      <p class="help mt-3">Domain and TLS email are set at install time in /opt/quasar/.env; changing them requires restarting the stack.</p>
+    </div>
+  </section>
+
+</div>
+{{end}}

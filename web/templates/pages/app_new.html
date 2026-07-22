@@ -1,0 +1,116 @@
+{{define "content"}}
+<h1 class="mb-8 text-lg font-semibold">New application</h1>
+
+{{if .Error}}
+<div class="alert-err mb-6">{{.Error}}</div>
+{{end}}
+
+{{if .Catalog}}
+<section class="mb-10">
+  <h2 class="h-label mb-3">One-click apps</h2>
+  <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    {{range .Catalog}}
+    <a href="/apps/new?template={{.ID}}" class="card block p-3 transition-colors hover:border-[var(--border-strong)]">
+      <p class="text-sm font-medium">{{.Name}}</p>
+      <p class="faint mt-0.5 text-xs">{{.Description}}</p>
+    </a>
+    {{end}}
+  </div>
+  <p class="help mt-2">Selecting a template prefills the form below — review it, then create.</p>
+</section>
+{{end}}
+
+<form method="post" action="/apps" class="max-w-2xl space-y-8">
+  <section class="space-y-4">
+    <h2 class="h-label">General</h2>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label for="name" class="label">Name</label>
+        <input id="name" name="name" type="text" required value="{{with .Form}}{{.Name}}{{end}}" class="input">
+      </div>
+      <div>
+        <label for="subdomain" class="label">Subdomain</label>
+        <div class="has-suffix flex items-center">
+          <input id="subdomain" name="subdomain" type="text" required value="{{with .Form}}{{.Subdomain}}{{end}}" class="input">
+          <span class="input-suffix">.{{.Domain}}</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Deployment</h2>
+    <div class="flex gap-6 text-sm">
+      <label class="flex items-center gap-2">
+        <input type="radio" name="deploy_type" value="image" checked
+               hx-get="/partials/deploy-fields?type=image" hx-target="#deploy-fields" hx-swap="innerHTML">
+        <span>Docker image</span>
+      </label>
+      <label class="flex items-center gap-2">
+        <input type="radio" name="deploy_type" value="git"
+               hx-get="/partials/deploy-fields?type=git" hx-target="#deploy-fields" hx-swap="innerHTML">
+        <span>Git build</span>
+      </label>
+      <label class="flex items-center gap-2">
+        <input type="radio" name="deploy_type" value="compose"
+               hx-get="/partials/deploy-fields?type=compose" hx-target="#deploy-fields" hx-swap="innerHTML">
+        <span>Docker Compose</span>
+      </label>
+    </div>
+    <div id="deploy-fields">
+      {{template "deploy_fields_image" .}}
+    </div>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Routing and persistence</h2>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label for="port" class="label">Internal port</label>
+        <input id="port" name="port" type="number" value="{{if .Form}}{{.Form.Port}}{{else}}80{{end}}" min="1" max="65535" class="input">
+        <p class="help">Port your app listens on inside the container. Ignored for compose apps.</p>
+      </div>
+      <div>
+        <label for="data_mount" class="label">Persistent data mount (optional)</label>
+        <input id="data_mount" name="data_mount" type="text" placeholder="/data" value="{{with .Form}}{{.DataMount}}{{end}}" class="input">
+        <p class="help">Container path bound to this app's data directory on the host.</p>
+      </div>
+    </div>
+    <div>
+      <label for="custom_domains" class="label">Custom domains (optional)</label>
+      <input id="custom_domains" name="custom_domains" type="text" placeholder="www.example.com, example.com"
+             value="{{with .Form}}{{.CustomDomains}}{{end}}" class="input mono">
+      <p class="help">Comma-separated full domains also routed to this app. Point their DNS at this server; TLS certificates are issued automatically.</p>
+    </div>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Resource limits</h2>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label for="cpu_limit" class="label">CPU limit (cores)</label>
+        <input id="cpu_limit" name="cpu_limit" type="number" step="0.1" min="0" placeholder="0 = unlimited"
+               value="{{with .Form}}{{if .CPULimit}}{{.CPULimit}}{{end}}{{end}}" class="input">
+      </div>
+      <div>
+        <label for="mem_limit_mb" class="label">Memory limit (MB)</label>
+        <input id="mem_limit_mb" name="mem_limit_mb" type="number" min="0" placeholder="0 = unlimited"
+               value="{{with .Form}}{{if .MemLimitMB}}{{.MemLimitMB}}{{end}}{{end}}" class="input">
+      </div>
+    </div>
+    <p class="help">Prevents one application from starving the server. Ignored for compose apps.</p>
+  </section>
+
+  <section class="space-y-2">
+    <h2 class="h-label">Environment variables</h2>
+    <textarea name="env_content" rows="5" placeholder="KEY=value" spellcheck="false"
+              class="input mono">{{with .Form}}{{.EnvContent}}{{end}}</textarea>
+    <p class="help">One KEY=value per line. Also written to the app's .env file.</p>
+  </section>
+
+  <div class="flex items-center gap-4">
+    <button type="submit" class="btn-primary px-4 py-2">Create and deploy</button>
+    <a href="/" class="link text-sm">Cancel</a>
+  </div>
+</form>
+{{end}}

@@ -1,0 +1,10 @@
+# Runtime state (only exists on the VPS)
+.env
+.dev/
+storage/
+apps/
+traefik/acme.json
+
+# Build artifacts
+quasar
+quasar.exe

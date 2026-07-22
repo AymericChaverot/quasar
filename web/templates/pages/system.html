@@ -1,0 +1,144 @@
+{{define "content"}}
+<h1 class="mb-8 text-lg font-semibold">System</h1>
+
+{{if .Saved}}
+<div class="card mb-6 px-4 py-3 text-sm" style="color: var(--ok)">{{.Saved}}</div>
+{{end}}
+
+<div class="space-y-10">
+
+  <section class="space-y-4">
+    <h2 class="h-label">Software update</h2>
+    <div class="card max-w-2xl space-y-4 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <dl class="grid grid-cols-[8rem_1fr] gap-y-1 text-sm">
+          <dt class="muted">Current version</dt>
+          <dd class="mono">{{.Current}}</dd>
+          <dt class="muted">Latest release</dt>
+          <dd class="mono">{{if .Latest}}{{.Latest}}{{else}}unknown — run a check{{end}}</dd>
+        </dl>
+        <div class="flex items-center gap-2">
+          <form method="post" action="/system/update/check">
+            <button type="submit" class="btn">Check for updates</button>
+          </form>
+          {{if .UpdateAvail}}
+          <form method="post" action="/system/update/apply"
+                onsubmit="return confirm('Update the dashboard to {{.Latest}}? Applications keep running; the dashboard restarts briefly.')">
+            <button type="submit" class="btn-primary">Update to {{.Latest}}</button>
+          </form>
+          {{end}}
+        </div>
+      </div>
+      {{if .UpdateAvail}}
+      <p class="text-sm" style="color: var(--warn)">A newer version is available. Updating replaces only the dashboard container — running applications are not touched.</p>
+      {{end}}
+      <p class="help">Releases come from github.com/{{.Repo}}. The platform checks automatically every 6 hours.</p>
+    </div>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Docker disk usage</h2>
+    {{if .Disk}}
+    <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div class="card p-4">
+        <p class="muted text-sm">Images</p>
+        <p class="mono mt-1 text-lg">{{.Disk.ImagesCount}}</p>
+        <p class="faint text-xs">{{printf "%.1f" .Disk.ImagesSizeGB}} GB layers</p>
+      </div>
+      <div class="card p-4">
+        <p class="muted text-sm">Containers</p>
+        <p class="mono mt-1 text-lg">{{.Disk.ContainersCount}}</p>
+      </div>
+      <div class="card p-4">
+        <p class="muted text-sm">Volumes</p>
+        <p class="mono mt-1 text-lg">{{.Disk.VolumesCount}}</p>
+        <p class="faint text-xs">{{printf "%.1f" .Disk.VolumesSizeGB}} GB</p>
+      </div>
+      <div class="card flex items-center p-4">
+        <form method="post" action="/system/prune">
+          <button type="submit" class="btn"
+                  onclick="return confirm('Remove all dangling images?')">Prune dangling images</button>
+        </form>
+      </div>
+    </div>
+    {{else}}
+    <div class="card muted p-4 text-sm">Docker disk usage unavailable.</div>
+    {{end}}
+  </section>
+
+  {{if .AppSizes}}
+  <section class="space-y-4">
+    <h2 class="h-label">Application storage</h2>
+    <div class="table-wrap max-w-2xl">
+      <table>
+        <thead><tr><th>Application</th><th>On-disk size</th></tr></thead>
+        <tbody>
+          {{range .AppSizes}}
+          <tr>
+            <td><a href="/apps/{{.ID}}" class="font-medium hover:underline">{{.Name}}</a></td>
+            <td class="mono muted">{{printf "%.1f" .SizeMB}} MB</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {{end}}
+
+  <section class="space-y-4">
+    <h2 class="h-label">Backups</h2>
+    <div class="card max-w-2xl space-y-4 p-4">
+      <div class="flex items-center justify-between">
+        <p class="muted text-sm">Archive of the database and every app's data directory.</p>
+        <form method="post" action="/system/backup">
+          <button type="submit" class="btn-primary">Back up now</button>
+        </form>
+      </div>
+      <form method="post" action="/system/backup-settings" class="flex flex-wrap items-end gap-4 border-t pt-4" style="border-color: var(--border)">
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="backup_auto" {{if .AutoOn}}checked{{end}}>
+          <span>Daily automatic backup</span>
+        </label>
+        <div>
+          <label for="retention" class="label !mb-1">Keep last</label>
+          <input id="retention" name="retention" type="number" min="1" value="{{if .Retention}}{{.Retention}}{{else}}7{{end}}" class="input !w-24">
+        </div>
+        <button type="submit" class="btn">Save</button>
+      </form>
+    </div>
+
+    {{if .Backups}}
+    <div class="table-wrap max-w-2xl">
+      <table>
+        <thead><tr><th>Archive</th><th>Date</th><th>Size</th><th></th></tr></thead>
+        <tbody>
+          {{range .Backups}}
+          <tr>
+            <td class="mono">{{.Name}}</td>
+            <td class="mono muted">{{.Date.Format "2006-01-02 15:04"}}</td>
+            <td class="mono muted">{{printf "%.1f" .SizeMB}} MB</td>
+            <td class="flex items-center gap-2">
+              <a href="/system/backups/{{.Name}}" class="btn !py-1 text-xs">Download</a>
+              <form method="post" action="/system/backups/{{.Name}}/restore"
+                    onsubmit="return confirm('Restore this backup? Current app configuration and data will be overwritten; redeploy applications afterwards.')">
+                <button type="submit" class="btn !py-1 text-xs">Restore</button>
+              </form>
+              <form method="post" action="/system/backups/{{.Name}}/delete"
+                    onsubmit="return confirm('Delete this backup?')">
+                <button type="submit" class="btn-danger !py-1 text-xs">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <div class="empty max-w-2xl p-6 text-center">
+      <p class="muted text-sm">No backups yet.</p>
+    </div>
+    {{end}}
+  </section>
+
+</div>
+{{end}}
