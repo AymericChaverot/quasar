@@ -72,6 +72,9 @@ func TestExecuteTemplates(t *testing.T) {
 			"AutoOn":   true, "Retention": "7", "Saved": "Backup created.",
 			"Current": "v1.0.0", "Latest": "v1.1.0", "UpdateAvail": true,
 			"CheckedAt": "2026-07-22", "Repo": "AymericChaverot/quasar",
+			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64", Uptime: "3d 4h"},
+			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44", OSType: "linux/amd64", TraefikImage: "traefik:v3.7"},
+			"GoRuntime": "go1.26.5",
 		}},
 	}
 	for _, c := range cases {
@@ -104,6 +107,12 @@ func TestExecuteTemplates(t *testing.T) {
 				StartedAt: time.Now().Add(-time.Hour), FinishedAt: sql.NullTime{Time: time.Now().Add(-59 * time.Minute), Valid: true}}, CanRollback: true},
 		}}},
 		{"deployments", map[string]any{"AppID": "abcd1234", "Deployments": []DeploymentView(nil)}},
+		{"system_containers", []docker.SystemContainer{
+			{Name: "quasar-dashboard", Image: "ghcr.io/aymericchaverot/quasar:latest", State: "running", Uptime: "2h 5m"},
+			{Name: "quasar-traefik", Image: "traefik:v3.7", State: "running", Uptime: "2h 5m"},
+			{Name: "quasar-socket-proxy", Image: "tecnativa/docker-socket-proxy:v0.4.2", State: "exited"},
+		}},
+		{"system_containers", []docker.SystemContainer(nil)},
 		{"tasks", map[string]any{"AppID": "abcd1234", "Tasks": []*db.Task{
 			{ID: 1, AppID: "abcd1234", Command: "echo ok", IntervalMinutes: 30,
 				LastRun: sql.NullTime{Time: time.Now(), Valid: true}, LastStatus: "success", LastOutput: "ok"},

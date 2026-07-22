@@ -29,12 +29,16 @@ func randomHex(n int) string {
 	return hex.EncodeToString(buf)
 }
 
-// AppView bundles an app with its live status for templates.
+// AppView bundles an app with its live status for templates. First/Last are
+// only set when rendering the ordered dashboard list (they gate the
+// move-up/move-down buttons).
 type AppView struct {
 	*db.App
 	Status docker.AppStatus
 	Domain string
 	Deploy *docker.DeployState
+	First  bool
+	Last   bool
 }
 
 // Host is the public hostname of the app: "sub.domain", or the bare root
@@ -265,6 +269,45 @@ func (s *Server) handleAppRollback(w http.ResponseWriter, r *http.Request) {
 	}
 	s.dock.RollbackAsync(a, tag)
 	s.renderPartial(w, "app_status_panel", s.appView(r.Context(), a))
+}
+
+// handleAppMove shifts an app up or down in the manual order and re-renders
+// the list. It rewrites every position, which also heals legacy rows that
+// still share the default sort_order of 0.
+func (s *Server) handleAppMove(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	apps, err := db.ListApps(s.db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	idx := -1
+	for i, other := range apps {
+		if other.ID == a.ID {
+			idx = i
+			break
+		}
+	}
+	switch r.FormValue("dir") {
+	case "up":
+		if idx > 0 {
+			apps[idx-1], apps[idx] = apps[idx], apps[idx-1]
+		}
+	case "down":
+		if idx >= 0 && idx < len(apps)-1 {
+			apps[idx+1], apps[idx] = apps[idx], apps[idx+1]
+		}
+	default:
+		http.Error(w, "dir must be up or down", http.StatusBadRequest)
+		return
+	}
+	for i, other := range apps {
+		db.SetAppOrder(s.db, other.ID, i+1)
+	}
+	s.handleAppsPartial(w, r)
 }
 
 // handleAppHealth saves the HTTP health check path (empty disables checks).

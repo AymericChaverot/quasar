@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"quasar/internal/backup"
 	"quasar/internal/db"
 	"quasar/internal/updater"
 	"quasar/internal/version"
+	"quasar/internal/vps"
 )
 
 // AppSize pairs an app with its on-disk footprint for the system page.
@@ -31,6 +33,9 @@ func (s *Server) systemData(r *http.Request) map[string]any {
 		"CheckedAt":   db.GetSetting(s.db, updater.SettingCheckedAt),
 		"UpdateAvail": updater.IsNewer(version.Version, latest),
 		"Repo":        s.cfg.GitHubRepo,
+		"Host":        vps.CollectHost(),
+		"Engine":      s.dock.EngineInfo(r.Context()),
+		"GoRuntime":   runtime.Version(),
 	}
 	if du, err := s.dock.DiskUsage(r.Context()); err == nil {
 		data["Disk"] = du

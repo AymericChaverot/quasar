@@ -7,7 +7,7 @@
        class="link mono text-sm">{{.Host}}</a>
   </div>
   <div class="flex items-center gap-3">
-    <a href="/apps/{{.ID}}/terminal" class="btn">Terminal</a>
+    <a href="/apps/{{.ID}}/terminal" class="btn">{{template "icon_terminal"}}Terminal</a>
     <span class="chip">{{.DeployType}}</span>
   </div>
 </div>
@@ -130,7 +130,7 @@
   <button hx-post="/apps/{{.ID}}/delete"
           hx-confirm="Delete {{.Name}}? Its container, images metadata and data directory will be removed permanently."
           class="btn-danger">
-    Delete application
+    {{template "icon_trash"}}Delete application
   </button>
 </section>
 {{end}}

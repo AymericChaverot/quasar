@@ -9,6 +9,7 @@
   <table>
     <thead>
       <tr>
+        <th class="!pr-0 w-10"></th>
         <th>Application</th>
         <th>URL</th>
         <th>Type</th>
@@ -19,6 +20,22 @@
     <tbody>
       {{range .}}
       <tr>
+        <td class="!pr-0">
+          <div class="flex flex-col gap-0.5">
+            {{if not .First}}
+            <button hx-post="/apps/{{.ID}}/move" hx-vals='{"dir": "up"}' hx-target="#apps-pane" hx-swap="innerHTML"
+                    class="reorder-btn" aria-label="Move {{.Name}} up" title="Move up">
+              <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 4l5 6H3z"/></svg>
+            </button>
+            {{end}}
+            {{if not .Last}}
+            <button hx-post="/apps/{{.ID}}/move" hx-vals='{"dir": "down"}' hx-target="#apps-pane" hx-swap="innerHTML"
+                    class="reorder-btn" aria-label="Move {{.Name}} down" title="Move down">
+              <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 12L3 6h10z"/></svg>
+            </button>
+            {{end}}
+          </div>
+        </td>
         <td>
           <a href="/apps/{{.ID}}" class="font-medium hover:underline">{{.Name}}</a>
         </td>

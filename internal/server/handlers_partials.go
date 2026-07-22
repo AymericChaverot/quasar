@@ -19,10 +19,18 @@ func (s *Server) handleAppsPartial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	views := make([]AppView, 0, len(apps))
-	for _, a := range apps {
-		views = append(views, s.appView(r.Context(), a))
+	for i, a := range apps {
+		v := s.appView(r.Context(), a)
+		v.First = i == 0
+		v.Last = i == len(apps)-1
+		views = append(views, v)
 	}
 	s.renderPartial(w, "apps_table", views)
+}
+
+// handleSystemContainersPartial lists Quasar's own containers, read-only.
+func (s *Server) handleSystemContainersPartial(w http.ResponseWriter, r *http.Request) {
+	s.renderPartial(w, "system_containers", s.dock.SystemContainers(r.Context()))
 }
 
 // handleDeployFields swaps in the form fields specific to the chosen deploy type.

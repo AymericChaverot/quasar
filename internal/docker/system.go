@@ -2,8 +2,12 @@ package docker
 
 import (
 	"context"
+	"sort"
+	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 )
 
@@ -32,6 +36,62 @@ func (c *Client) DiskUsage(ctx context.Context) (DiskUsage, error) {
 		}
 	}
 	return out, nil
+}
+
+// SystemContainer is one of Quasar's own infrastructure containers, listed
+// read-only on the dashboard.
+type SystemContainer struct {
+	Name   string
+	Image  string
+	State  string // "running", "exited", ...
+	Uptime string
+}
+
+// SystemContainers lists the platform's own containers (dashboard, Traefik,
+// socket proxy, updater) by their quasar- name prefix.
+func (c *Client) SystemContainers(ctx context.Context) []SystemContainer {
+	list, err := c.api.ContainerList(ctx, container.ListOptions{
+		All:     true,
+		Filters: filters.NewArgs(filters.Arg("name", "quasar-")),
+	})
+	if err != nil {
+		return nil
+	}
+	var out []SystemContainer
+	for _, ct := range list {
+		name := ""
+		if len(ct.Names) > 0 {
+			name = strings.TrimPrefix(ct.Names[0], "/")
+		}
+		sc := SystemContainer{Name: name, Image: ct.Image, State: ct.State}
+		if ct.State == "running" {
+			sc.Uptime = humanDuration(time.Since(time.Unix(ct.Created, 0)))
+		}
+		out = append(out, sc)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// EngineInfo reports the versions of the container tooling in use.
+type EngineInfo struct {
+	DockerVersion string
+	APIVersion    string
+	OSType        string
+	TraefikImage  string
+}
+
+func (c *Client) EngineInfo(ctx context.Context) EngineInfo {
+	out := EngineInfo{DockerVersion: "unknown", APIVersion: "unknown"}
+	if v, err := c.api.ServerVersion(ctx); err == nil {
+		out.DockerVersion = v.Version
+		out.APIVersion = v.APIVersion
+		out.OSType = v.Os + "/" + v.Arch
+	}
+	if info, err := c.api.ContainerInspect(ctx, "quasar-traefik"); err == nil {
+		out.TraefikImage = info.Config.Image
+	}
+	return out
 }
 
 // PruneImages removes dangling images and reports the space reclaimed in MB.

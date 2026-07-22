@@ -25,6 +25,7 @@ type App struct {
 	HealthPath    string  // HTTP path probed for health, empty = disabled
 	BasicAuthUser string  // Traefik basic auth username, empty = no protection
 	BasicAuthHash string  // bcrypt hash in htpasswd format
+	SortOrder     int     // manual position in the dashboard list
 	CreatedAt     time.Time
 }
 
@@ -42,14 +43,14 @@ func (a *App) CustomDomainList() []string {
 	return out
 }
 
-const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, created_at"
+const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, created_at"
 
 func scanApp(row interface{ Scan(...any) error }) (*App, error) {
 	var a App
 	err := row.Scan(&a.ID, &a.Name, &a.Subdomain, &a.DeployType, &a.ImageRef, &a.GitURL,
 		&a.GitBranch, &a.ComposeYAML, &a.Port, &a.EnvContent, &a.DataMount,
 		&a.WebhookSecret, &a.CPULimit, &a.MemLimitMB, &a.CustomDomains,
-		&a.HealthPath, &a.BasicAuthUser, &a.BasicAuthHash, &a.CreatedAt)
+		&a.HealthPath, &a.BasicAuthUser, &a.BasicAuthHash, &a.SortOrder, &a.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -57,12 +58,18 @@ func scanApp(row interface{ Scan(...any) error }) (*App, error) {
 }
 
 func InsertApp(db *sql.DB, a *App) error {
-	_, err := db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	// New apps go to the bottom of the manually ordered list.
+	_, err := db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM apps))`,
 		a.ID, a.Name, a.Subdomain, a.DeployType, a.ImageRef, a.GitURL, a.GitBranch, a.ComposeYAML,
 		a.Port, a.EnvContent, a.DataMount, a.WebhookSecret, a.CPULimit, a.MemLimitMB, a.CustomDomains,
 		a.HealthPath, a.BasicAuthUser, a.BasicAuthHash)
 	return err
+}
+
+// SetAppOrder writes an app's explicit position in the list.
+func SetAppOrder(db *sql.DB, id string, order int) {
+	db.Exec("UPDATE apps SET sort_order = ? WHERE id = ?", order, id)
 }
 
 func UpdateAppHealth(db *sql.DB, id, healthPath string) error {
@@ -100,7 +107,7 @@ func GetApp(db *sql.DB, id string) (*App, error) {
 }
 
 func ListApps(db *sql.DB) ([]*App, error) {
-	rows, err := db.Query("SELECT " + appCols + " FROM apps ORDER BY created_at DESC")
+	rows, err := db.Query("SELECT " + appCols + " FROM apps ORDER BY sort_order, created_at")
 	if err != nil {
 		return nil, err
 	}

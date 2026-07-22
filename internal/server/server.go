@@ -94,6 +94,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /apps/new", s.requireAuth(s.handleAppNew))
 	s.mux.Handle("POST /apps", s.requireAuth(s.handleAppCreate))
 	s.mux.Handle("GET /apps/{id}", s.requireAuth(s.handleAppDetail))
+	s.mux.Handle("POST /apps/{id}/move", s.requireAuth(s.handleAppMove))
 	s.mux.Handle("POST /apps/{id}/start", s.requireAuth(s.appAction("start")))
 	s.mux.Handle("POST /apps/{id}/stop", s.requireAuth(s.appAction("stop")))
 	s.mux.Handle("POST /apps/{id}/restart", s.requireAuth(s.appAction("restart")))
@@ -113,6 +114,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /apps/{id}/tasks/{task}/delete", s.requireAuth(s.handleTaskDelete))
 
 	s.mux.Handle("GET /partials/system", s.requireAuth(s.handleSystemPartial))
+	s.mux.Handle("GET /partials/system-containers", s.requireAuth(s.handleSystemContainersPartial))
 	s.mux.Handle("GET /partials/apps", s.requireAuth(s.handleAppsPartial))
 	s.mux.Handle("GET /partials/deploy-fields", s.requireAuth(s.handleDeployFields))
 	s.mux.Handle("GET /partials/apps/{id}/stats", s.requireAuth(s.handleAppStatsPartial))

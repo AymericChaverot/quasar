@@ -2,7 +2,7 @@
 <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
   <div class="card p-4">
     <div class="mb-2 flex items-baseline justify-between">
-      <span class="muted text-sm">CPU</span>
+      <span class="stat-label muted text-sm">{{template "icon_cpu"}}CPU</span>
       <span class="mono text-sm">{{printf "%.1f" .CPUPercent}}%</span>
     </div>
     <div class="meter">
@@ -11,7 +11,7 @@
   </div>
   <div class="card p-4">
     <div class="mb-2 flex items-baseline justify-between">
-      <span class="muted text-sm">Memory</span>
+      <span class="stat-label muted text-sm">{{template "icon_memory"}}Memory</span>
       <span class="mono text-sm">{{printf "%.1f" .MemUsedGB}} / {{printf "%.1f" .MemTotalGB}} GB</span>
     </div>
     <div class="meter">
@@ -20,7 +20,7 @@
   </div>
   <div class="card p-4">
     <div class="mb-2 flex items-baseline justify-between">
-      <span class="muted text-sm">Disk</span>
+      <span class="stat-label muted text-sm">{{template "icon_disk"}}Disk</span>
       <span class="mono text-sm">{{printf "%.0f" .DiskUsedGB}} / {{printf "%.0f" .DiskTotalGB}} GB</span>
     </div>
     <div class="meter">

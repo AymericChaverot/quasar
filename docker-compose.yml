@@ -64,9 +64,11 @@ services:
       DB_PATH: /opt/quasar/storage/database.sqlite
       APPS_DIR: /opt/quasar/apps
       BACKUPS_DIR: /opt/quasar/backups
-      # gopsutil reads host metrics through these mounts.
+      # gopsutil reads host metrics through these mounts. HOST_ETC lets it
+      # read the host's /etc/os-release instead of the Alpine container's.
       HOST_PROC: /host/proc
       HOST_ROOT: /host/root
+      HOST_ETC: /host/root/etc
     volumes:
       # Mounted at the same path as on the host so bind mounts created for
       # apps resolve identically for the Docker daemon.

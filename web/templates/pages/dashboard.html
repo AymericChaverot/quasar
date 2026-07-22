@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="mb-8 flex items-center justify-between">
   <h1 class="text-lg font-semibold">Dashboard</h1>
-  <a href="/apps/new" class="btn-primary inline-block">New application</a>
+  <a href="/apps/new" class="btn-primary">{{template "icon_plus"}}New application</a>
 </div>
 
 <section class="mb-10">
@@ -25,10 +25,21 @@
   </div>
 </section>
 
-<section>
+<section class="mb-10">
   <h2 class="h-label mb-3">Applications</h2>
-  <div hx-get="/partials/apps" hx-trigger="load, every 5s" hx-swap="innerHTML">
+  <div id="apps-pane" hx-get="/partials/apps" hx-trigger="load, every 5s" hx-swap="innerHTML">
     <div class="card h-24 animate-pulse"></div>
+  </div>
+</section>
+
+<section>
+  <h2 class="h-label mb-3">System containers</h2>
+  <div hx-get="/partials/system-containers" hx-trigger="load, every 10s" hx-swap="innerHTML">
+    <div class="grid grid-cols-3 gap-3">
+      <div class="empty h-20 animate-pulse"></div>
+      <div class="empty h-20 animate-pulse"></div>
+      <div class="empty h-20 animate-pulse"></div>
+    </div>
   </div>
 </section>
 {{end}}

@@ -1,0 +1,25 @@
+{{define "system_containers"}}
+{{if .}}
+<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+  {{range .}}
+  <div class="empty p-4 opacity-70">
+    <div class="flex items-center justify-between gap-2">
+      <p class="mono truncate text-sm">{{.Name}}</p>
+      {{if eq .State "running"}}
+      <span class="badge badge-muted"><span class="dot" style="background: var(--ok)"></span>running</span>
+      {{else}}
+      <span class="badge badge-muted"><span class="dot"></span>{{.State}}</span>
+      {{end}}
+    </div>
+    <p class="faint mt-1 truncate text-xs">{{.Image}}</p>
+    {{if .Uptime}}<p class="faint mt-0.5 text-xs">up {{.Uptime}}</p>{{end}}
+  </div>
+  {{end}}
+</div>
+{{else}}
+<div class="empty muted p-4 text-sm">
+  No quasar-* containers found — normal in local development; on a server
+  deployment the dashboard, Traefik and socket-proxy containers appear here.
+</div>
+{{end}}
+{{end}}
