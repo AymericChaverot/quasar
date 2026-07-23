@@ -119,7 +119,10 @@
 </section>
 
 <section class="mt-8">
-  <h2 class="h-label mb-3">Live logs</h2>
+  <div class="mb-3 flex items-center justify-between">
+    <h2 class="h-label !mb-0">Live logs</h2>
+    <a href="/logs?app={{.ID}}" class="link text-sm">Search history</a>
+  </div>
   <div hx-ext="sse" sse-connect="/apps/{{.ID}}/logs">
     <div id="log-pane" sse-swap="message" hx-swap="beforeend scroll:bottom" class="log-pane"></div>
   </div>

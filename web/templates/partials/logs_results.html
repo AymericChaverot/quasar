@@ -1,0 +1,25 @@
+{{define "logs_results"}}
+{{if .Lines}}
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Time</th><th>Application</th><th>Line</th></tr></thead>
+    <tbody>
+      {{range .Lines}}
+      <tr>
+        <td class="mono muted whitespace-nowrap text-xs">{{.TS.Format "2006-01-02 15:04:05"}}</td>
+        <td><a href="/apps/{{.AppID}}" class="hover:underline">{{.AppName}}</a></td>
+        <td class="mono break-all text-xs">{{.Line}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{if .Truncated}}
+<p class="help mt-2">Showing the most recent matches only — narrow your search to see older lines.</p>
+{{end}}
+{{else}}
+<div class="empty p-6 text-center">
+  <p class="muted text-sm">No matching log lines.</p>
+</div>
+{{end}}
+{{end}}

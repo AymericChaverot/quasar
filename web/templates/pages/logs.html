@@ -1,0 +1,24 @@
+{{define "content"}}
+<h1 class="mb-8 text-lg font-semibold">Logs</h1>
+
+<form class="mb-6 flex flex-wrap items-end gap-4" hx-get="/partials/logs" hx-target="#log-results" hx-swap="innerHTML">
+  <div>
+    <label for="app" class="label !mb-1">Application</label>
+    <select id="app" name="app" class="input">
+      <option value="">All applications</option>
+      {{range .Apps}}
+      <option value="{{.ID}}" {{if eq $.App .ID}}selected{{end}}>{{.Name}}</option>
+      {{end}}
+    </select>
+  </div>
+  <div class="min-w-64 flex-1">
+    <label for="q" class="label !mb-1">Search</label>
+    <input id="q" name="q" type="text" value="{{.Query}}" placeholder="error, exception, ..." class="input mono">
+  </div>
+  <button type="submit" class="btn-primary">Search</button>
+</form>
+
+<div id="log-results" hx-get="/partials/logs?app={{.App | urlquery}}&q={{.Query | urlquery}}" hx-trigger="load" hx-swap="innerHTML">
+  <div class="card h-20 animate-pulse"></div>
+</div>
+{{end}}

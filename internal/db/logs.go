@@ -1,0 +1,77 @@
+package db
+
+import (
+	"database/sql"
+	"time"
+)
+
+// LogLine is one persisted line of container output, joined with the app's
+// current name so cross-app search results are readable without extra lookups.
+type LogLine struct {
+	AppID   string
+	AppName string
+	TS      time.Time
+	Line    string
+}
+
+// maxLogLineLen caps a single stored line so one runaway line can't dominate
+// storage; the live SSE view is unaffected, only the persisted copy is capped.
+const maxLogLineLen = 4000
+
+// AppendLogs batches a captured chunk of an app's container output into
+// storage in a single transaction.
+func AppendLogs(database *sql.DB, appID string, lines []string) {
+	if len(lines) == 0 {
+		return
+	}
+	tx, err := database.Begin()
+	if err != nil {
+		return
+	}
+	stmt, err := tx.Prepare("INSERT INTO app_logs (app_id, line) VALUES (?, ?)")
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+	for _, l := range lines {
+		if len(l) > maxLogLineLen {
+			l = l[:maxLogLineLen]
+		}
+		stmt.Exec(appID, l)
+	}
+	stmt.Close()
+	tx.Commit()
+}
+
+// SearchLogs returns persisted log lines, newest first, optionally scoped to
+// one app and/or filtered by a substring match. An empty appID searches
+// across every app; an empty query returns the most recent lines unfiltered.
+func SearchLogs(database *sql.DB, appID, query string, limit int) ([]LogLine, error) {
+	rows, err := database.Query(`
+		SELECT app_logs.app_id, apps.name, app_logs.ts, app_logs.line
+		FROM app_logs
+		JOIN apps ON apps.id = app_logs.app_id
+		WHERE (? = '' OR app_logs.app_id = ?)
+		  AND (? = '' OR app_logs.line LIKE '%' || ? || '%')
+		ORDER BY app_logs.ts DESC
+		LIMIT ?`, appID, appID, query, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []LogLine
+	for rows.Next() {
+		var l LogLine
+		if err := rows.Scan(&l.AppID, &l.AppName, &l.TS, &l.Line); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
+}
+
+// DeleteAppLogs removes an app's persisted log history; called when the app
+// itself is deleted.
+func DeleteAppLogs(database *sql.DB, appID string) {
+	database.Exec("DELETE FROM app_logs WHERE app_id = ?", appID)
+}

@@ -78,6 +78,7 @@ func PruneTimeSeries(db *sql.DB, olderThan time.Time) {
 	db.Exec("DELETE FROM metrics WHERE ts < ?", olderThan)
 	db.Exec("DELETE FROM app_metrics WHERE ts < ?", olderThan)
 	db.Exec("DELETE FROM health_history WHERE ts < ?", olderThan)
+	db.Exec("DELETE FROM app_logs WHERE ts < ?", olderThan)
 }
 
 func DeleteAppTimeSeries(db *sql.DB, appID string) {

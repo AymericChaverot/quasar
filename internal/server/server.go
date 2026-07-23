@@ -79,6 +79,9 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /settings/2fa/disable", s.requireAuth(s.handle2FADisable))
 	s.mux.Handle("POST /theme", s.requireAuth(s.handleThemeSet))
 
+	s.mux.Handle("GET /logs", s.requireAuth(s.handleLogsPage))
+	s.mux.Handle("GET /partials/logs", s.requireAuth(s.handleLogsSearchPartial))
+
 	s.mux.Handle("GET /system", s.requireAuth(s.handleSystem))
 	s.mux.Handle("POST /system/prune", s.requireAuth(s.handlePrune))
 	s.mux.Handle("POST /system/backup", s.requireAuth(s.handleBackupNow))

@@ -399,6 +399,7 @@ func (s *Server) handleAppDelete(w http.ResponseWriter, r *http.Request) {
 	db.DeleteDeployments(s.db, a.ID)
 	db.DeleteTasksForApp(s.db, a.ID)
 	db.DeleteAppTimeSeries(s.db, a.ID)
+	db.DeleteAppLogs(s.db, a.ID)
 	w.Header().Set("HX-Redirect", "/")
 	w.WriteHeader(http.StatusOK)
 }

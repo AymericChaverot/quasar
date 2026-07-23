@@ -5,7 +5,37 @@ import (
 	"html"
 	"net/http"
 	"strings"
+
+	"quasar/internal/db"
 )
+
+// logSearchLimit caps how many matching lines a single search returns.
+const logSearchLimit = 300
+
+// handleLogsPage renders the cross-app log search page.
+func (s *Server) handleLogsPage(w http.ResponseWriter, r *http.Request) {
+	apps, _ := db.ListApps(s.db)
+	s.render(w, r, "logs", map[string]any{
+		"Title": "Logs",
+		"Apps":  apps,
+		"App":   r.URL.Query().Get("app"),
+		"Query": r.URL.Query().Get("q"),
+	})
+}
+
+// handleLogsSearchPartial runs a search over persisted log history, across
+// every app or scoped to one, optionally filtered by a substring.
+func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request) {
+	lines, err := db.SearchLogs(s.db, r.URL.Query().Get("app"), r.URL.Query().Get("q"), logSearchLimit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.renderPartial(w, "logs_results", map[string]any{
+		"Lines":     lines,
+		"Truncated": len(lines) == logSearchLimit,
+	})
+}
 
 // handleAppLogs streams container logs as Server-Sent Events, consumed by the
 // htmx SSE extension on the app detail page.
