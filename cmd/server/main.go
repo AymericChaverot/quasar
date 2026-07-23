@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"path/filepath"
 
 	"quasar/internal/auth"
 	"quasar/internal/backup"
@@ -10,6 +11,7 @@ import (
 	"quasar/internal/db"
 	"quasar/internal/docker"
 	"quasar/internal/monitor"
+	"quasar/internal/secrets"
 	"quasar/internal/server"
 	"quasar/internal/updater"
 )
@@ -27,16 +29,29 @@ func main() {
 		log.Fatalf("admin bootstrap: %v", err)
 	}
 
+	// The master key lives alongside the database (persisted, mounted volume)
+	// but — deliberately — outside anything backup.Run archives, so a leaked
+	// backup or a copied-out database file alone can't be decrypted.
+	keyring, err := secrets.LoadOrCreateKey(filepath.Join(filepath.Dir(cfg.DBPath), "master.key"))
+	if err != nil {
+		log.Fatalf("encryption key: %v", err)
+	}
+	if n, err := db.EncryptLegacyApps(database, keyring); err != nil {
+		log.Printf("encrypt legacy app secrets: %v", err)
+	} else if n > 0 {
+		log.Printf("encrypted %d app(s)' stored env/compose data at rest", n)
+	}
+
 	dock, err := docker.New(cfg, database)
 	if err != nil {
 		log.Fatalf("docker: %v", err)
 	}
 
-	monitor.Start(database, dock, cfg.HostRootPath)
+	monitor.Start(database, dock, cfg.HostRootPath, keyring)
 	backup.StartScheduler(database, cfg.AppsDir, cfg.BackupsDir)
 	updater.StartChecker(database, cfg.GitHubRepo)
 
-	srv, err := server.New(cfg, database, dock)
+	srv, err := server.New(cfg, database, dock, keyring)
 	if err != nil {
 		log.Fatalf("server: %v", err)
 	}

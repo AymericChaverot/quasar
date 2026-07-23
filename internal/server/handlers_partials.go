@@ -13,7 +13,7 @@ func (s *Server) handleSystemPartial(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAppsPartial(w http.ResponseWriter, r *http.Request) {
-	apps, err := db.ListApps(s.db)
+	apps, err := db.ListApps(s.db, s.keyring)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

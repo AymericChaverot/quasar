@@ -11,25 +11,28 @@ import (
 	"quasar/internal/auth"
 	"quasar/internal/config"
 	"quasar/internal/docker"
+	"quasar/internal/secrets"
 	"quasar/internal/version"
 	"quasar/web"
 )
 
 type Server struct {
-	cfg   config.Config
-	db    *sql.DB
-	dock  *docker.Client
-	pages map[string]*template.Template
-	mux   *http.ServeMux
+	cfg     config.Config
+	db      *sql.DB
+	dock    *docker.Client
+	keyring *secrets.Keyring
+	pages   map[string]*template.Template
+	mux     *http.ServeMux
 }
 
-func New(cfg config.Config, database *sql.DB, dock *docker.Client) (*Server, error) {
+func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) (*Server, error) {
 	s := &Server{
-		cfg:   cfg,
-		db:    database,
-		dock:  dock,
-		pages: map[string]*template.Template{},
-		mux:   http.NewServeMux(),
+		cfg:     cfg,
+		db:      database,
+		dock:    dock,
+		keyring: keyring,
+		pages:   map[string]*template.Template{},
+		mux:     http.NewServeMux(),
 	}
 	if err := s.parseTemplates(); err != nil {
 		return nil, err

@@ -130,7 +130,7 @@ func (s *Server) handleAppCreate(w http.ResponseWriter, r *http.Request) {
 	a.ID = randomHex(4)
 	a.WebhookSecret = randomHex(16)
 
-	if err := db.InsertApp(s.db, a); err != nil {
+	if err := db.InsertApp(s.db, s.keyring, a); err != nil {
 		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -193,7 +193,7 @@ func (s *Server) validateNewApp(a *db.App) string {
 }
 
 func (s *Server) getApp(w http.ResponseWriter, r *http.Request) *db.App {
-	a, err := db.GetApp(s.db, r.PathValue("id"))
+	a, err := db.GetApp(s.db, s.keyring, r.PathValue("id"))
 	if err != nil {
 		http.Error(w, "application not found", http.StatusNotFound)
 		return nil
@@ -279,7 +279,7 @@ func (s *Server) handleAppMove(w http.ResponseWriter, r *http.Request) {
 	if a == nil {
 		return
 	}
-	apps, err := db.ListApps(s.db)
+	apps, err := db.ListApps(s.db, s.keyring)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -410,14 +410,14 @@ func (s *Server) handleAppEnvSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.EnvContent = strings.ReplaceAll(r.FormValue("env_content"), "\r\n", "\n")
-	if err := db.UpdateAppEnv(s.db, a.ID, a.EnvContent); err != nil {
+	if err := db.UpdateAppEnv(s.db, s.keyring, a.ID, a.EnvContent); err != nil {
 		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if a.DeployType == "compose" {
 		if yaml := r.FormValue("compose_yaml"); yaml != "" {
 			a.ComposeYAML = yaml
-			db.UpdateAppCompose(s.db, a.ID, yaml)
+			db.UpdateAppCompose(s.db, s.keyring, a.ID, yaml)
 		}
 	}
 	if err := s.dock.WriteEnvFile(a); err != nil {

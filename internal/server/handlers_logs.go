@@ -14,7 +14,7 @@ const logSearchLimit = 300
 
 // handleLogsPage renders the cross-app log search page.
 func (s *Server) handleLogsPage(w http.ResponseWriter, r *http.Request) {
-	apps, _ := db.ListApps(s.db)
+	apps, _ := db.ListApps(s.db, s.keyring)
 	s.render(w, r, "logs", map[string]any{
 		"Title": "Logs",
 		"Apps":  apps,

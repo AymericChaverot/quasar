@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+
+	"quasar/internal/secrets"
 )
 
 func openTestDB(t *testing.T) *sql.DB {
@@ -16,14 +18,24 @@ func openTestDB(t *testing.T) *sql.DB {
 	return database
 }
 
-func TestAppendAndSearchLogs(t *testing.T) {
-	database := openTestDB(t)
-
-	// SearchLogs joins against apps, so rows need a real app to show up.
-	if err := InsertApp(database, &App{ID: "app1", Name: "Web", Subdomain: "web", DeployType: "image", ImageRef: "nginx"}); err != nil {
+func testKeyring(t *testing.T) *secrets.Keyring {
+	t.Helper()
+	k, err := secrets.LoadOrCreateKey(filepath.Join(t.TempDir(), "master.key"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := InsertApp(database, &App{ID: "app2", Name: "Worker", Subdomain: "worker", DeployType: "image", ImageRef: "worker"}); err != nil {
+	return k
+}
+
+func TestAppendAndSearchLogs(t *testing.T) {
+	database := openTestDB(t)
+	keyring := testKeyring(t)
+
+	// SearchLogs joins against apps, so rows need a real app to show up.
+	if err := InsertApp(database, keyring, &App{ID: "app1", Name: "Web", Subdomain: "web", DeployType: "image", ImageRef: "nginx"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := InsertApp(database, keyring, &App{ID: "app2", Name: "Worker", Subdomain: "worker", DeployType: "image", ImageRef: "worker"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -66,7 +78,7 @@ func TestAppendAndSearchLogs(t *testing.T) {
 
 func TestAppendLogsTruncatesLongLines(t *testing.T) {
 	database := openTestDB(t)
-	if err := InsertApp(database, &App{ID: "app1", Name: "Web", Subdomain: "web", DeployType: "image", ImageRef: "nginx"}); err != nil {
+	if err := InsertApp(database, testKeyring(t), &App{ID: "app1", Name: "Web", Subdomain: "web", DeployType: "image", ImageRef: "nginx"}); err != nil {
 		t.Fatal(err)
 	}
 

@@ -46,7 +46,7 @@ func (s *Server) systemData(r *http.Request) map[string]any {
 	if list, err := certs.Collect(acmePath); err == nil {
 		data["Certs"] = list
 	}
-	if apps, err := db.ListApps(s.db); err == nil {
+	if apps, err := db.ListApps(s.db, s.keyring); err == nil {
 		var sizes []AppSize
 		for _, a := range apps {
 			sizes = append(sizes, AppSize{

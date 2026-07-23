@@ -14,6 +14,7 @@ import (
 	"quasar/internal/db"
 	"quasar/internal/docker"
 	"quasar/internal/notify"
+	"quasar/internal/secrets"
 	"quasar/internal/vps"
 )
 
@@ -33,20 +34,20 @@ const (
 var healthClient = &http.Client{Timeout: 5 * time.Second}
 
 // Start launches every background worker.
-func Start(database *sql.DB, dock *docker.Client, hostRoot string) {
-	go watchStates(database, dock)
-	go checkHealth(database, dock)
-	go sampleMetrics(database, dock, hostRoot)
-	go runScheduledTasks(database, dock)
-	go captureLogs(database, dock)
+func Start(database *sql.DB, dock *docker.Client, hostRoot string, keyring *secrets.Keyring) {
+	go watchStates(database, dock, keyring)
+	go checkHealth(database, dock, keyring)
+	go sampleMetrics(database, dock, hostRoot, keyring)
+	go runScheduledTasks(database, dock, keyring)
+	go captureLogs(database, dock, keyring)
 }
 
 // watchStates notifies when an app enters or recovers from an error state.
-func watchStates(database *sql.DB, dock *docker.Client) {
+func watchStates(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) {
 	last := map[string]string{} // app ID -> last observed state
 	for {
 		time.Sleep(stateInterval)
-		apps, err := db.ListApps(database)
+		apps, err := db.ListApps(database, keyring)
 		if err != nil {
 			continue
 		}
@@ -79,10 +80,10 @@ func watchStates(database *sql.DB, dock *docker.Client) {
 
 // checkHealth probes each app's health URL over the shared Docker network and
 // restarts the container after too many consecutive failures.
-func checkHealth(database *sql.DB, dock *docker.Client) {
+func checkHealth(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) {
 	for {
 		time.Sleep(healthInterval)
-		apps, err := db.ListApps(database)
+		apps, err := db.ListApps(database, keyring)
 		if err != nil {
 			continue
 		}
@@ -126,14 +127,14 @@ func probe(url string) bool {
 }
 
 // sampleMetrics stores server and per-app usage samples, pruning old data.
-func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string) {
+func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyring *secrets.Keyring) {
 	lastPrune := time.Now()
 	for {
 		time.Sleep(metricsInterval)
 		if s, err := vps.Collect(hostRoot); err == nil {
 			db.RecordServerMetric(database, s.CPUPercent, s.MemPercent, s.DiskPercent)
 		}
-		apps, err := db.ListApps(database)
+		apps, err := db.ListApps(database, keyring)
 		if err == nil {
 			for _, a := range apps {
 				if a.DeployType == "compose" {
@@ -204,11 +205,11 @@ func (lc *logCapture) stopMissing(seen map[string]bool) {
 // captureLogs persists each running app's container output so history
 // survives past a live SSE session and can be searched later, on the
 // system-wide Logs page.
-func captureLogs(database *sql.DB, dock *docker.Client) {
+func captureLogs(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) {
 	lc := &logCapture{active: map[string]context.CancelFunc{}}
 	for {
 		time.Sleep(logRescanInterval)
-		apps, err := db.ListApps(database)
+		apps, err := db.ListApps(database, keyring)
 		if err != nil {
 			continue
 		}
@@ -268,7 +269,7 @@ func streamAppLogs(ctx context.Context, database *sql.DB, dock *docker.Client, a
 }
 
 // runScheduledTasks executes due interval tasks inside their app containers.
-func runScheduledTasks(database *sql.DB, dock *docker.Client) {
+func runScheduledTasks(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) {
 	for {
 		time.Sleep(taskInterval)
 		tasks, err := db.ListAllScheduledTasks(database)
@@ -280,7 +281,7 @@ func runScheduledTasks(database *sql.DB, dock *docker.Client) {
 			if !t.Due(now) {
 				continue
 			}
-			a, err := db.GetApp(database, t.AppID)
+			a, err := db.GetApp(database, keyring, t.AppID)
 			if err != nil {
 				continue
 			}

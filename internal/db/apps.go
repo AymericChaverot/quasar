@@ -2,8 +2,11 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
+
+	"quasar/internal/secrets"
 )
 
 type App struct {
@@ -45,7 +48,10 @@ func (a *App) CustomDomainList() []string {
 
 const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, created_at"
 
-func scanApp(row interface{ Scan(...any) error }) (*App, error) {
+// scanApp reads one row and decrypts its at-rest-encrypted columns, so every
+// *App leaving the db package carries plaintext EnvContent/ComposeYAML —
+// callers never need to know encryption is involved.
+func scanApp(row interface{ Scan(...any) error }, k *secrets.Keyring) (*App, error) {
 	var a App
 	err := row.Scan(&a.ID, &a.Name, &a.Subdomain, &a.DeployType, &a.ImageRef, &a.GitURL,
 		&a.GitBranch, &a.ComposeYAML, &a.Port, &a.EnvContent, &a.DataMount,
@@ -54,15 +60,29 @@ func scanApp(row interface{ Scan(...any) error }) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	if a.EnvContent, err = k.Decrypt(a.EnvContent); err != nil {
+		return nil, fmt.Errorf("app %s: decrypt env: %w", a.ID, err)
+	}
+	if a.ComposeYAML, err = k.Decrypt(a.ComposeYAML); err != nil {
+		return nil, fmt.Errorf("app %s: decrypt compose yaml: %w", a.ID, err)
+	}
 	return &a, nil
 }
 
-func InsertApp(db *sql.DB, a *App) error {
+func InsertApp(db *sql.DB, k *secrets.Keyring, a *App) error {
+	envContent, err := k.Encrypt(a.EnvContent)
+	if err != nil {
+		return fmt.Errorf("encrypt env: %w", err)
+	}
+	composeYAML, err := k.Encrypt(a.ComposeYAML)
+	if err != nil {
+		return fmt.Errorf("encrypt compose yaml: %w", err)
+	}
 	// New apps go to the bottom of the manually ordered list.
-	_, err := db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order)
+	_, err = db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM apps))`,
-		a.ID, a.Name, a.Subdomain, a.DeployType, a.ImageRef, a.GitURL, a.GitBranch, a.ComposeYAML,
-		a.Port, a.EnvContent, a.DataMount, a.WebhookSecret, a.CPULimit, a.MemLimitMB, a.CustomDomains,
+		a.ID, a.Name, a.Subdomain, a.DeployType, a.ImageRef, a.GitURL, a.GitBranch, composeYAML,
+		a.Port, envContent, a.DataMount, a.WebhookSecret, a.CPULimit, a.MemLimitMB, a.CustomDomains,
 		a.HealthPath, a.BasicAuthUser, a.BasicAuthHash)
 	return err
 }
@@ -87,13 +107,21 @@ func UpdateAppDomains(db *sql.DB, id, customDomains string) error {
 	return err
 }
 
-func UpdateAppEnv(db *sql.DB, id, envContent string) error {
-	_, err := db.Exec("UPDATE apps SET env_content = ? WHERE id = ?", envContent, id)
+func UpdateAppEnv(db *sql.DB, k *secrets.Keyring, id, envContent string) error {
+	enc, err := k.Encrypt(envContent)
+	if err != nil {
+		return fmt.Errorf("encrypt env: %w", err)
+	}
+	_, err = db.Exec("UPDATE apps SET env_content = ? WHERE id = ?", enc, id)
 	return err
 }
 
-func UpdateAppCompose(db *sql.DB, id, composeYAML string) error {
-	_, err := db.Exec("UPDATE apps SET compose_yaml = ? WHERE id = ?", composeYAML, id)
+func UpdateAppCompose(db *sql.DB, k *secrets.Keyring, id, composeYAML string) error {
+	enc, err := k.Encrypt(composeYAML)
+	if err != nil {
+		return fmt.Errorf("encrypt compose yaml: %w", err)
+	}
+	_, err = db.Exec("UPDATE apps SET compose_yaml = ? WHERE id = ?", enc, id)
 	return err
 }
 
@@ -102,11 +130,11 @@ func DeleteApp(db *sql.DB, id string) error {
 	return err
 }
 
-func GetApp(db *sql.DB, id string) (*App, error) {
-	return scanApp(db.QueryRow("SELECT "+appCols+" FROM apps WHERE id = ?", id))
+func GetApp(db *sql.DB, k *secrets.Keyring, id string) (*App, error) {
+	return scanApp(db.QueryRow("SELECT "+appCols+" FROM apps WHERE id = ?", id), k)
 }
 
-func ListApps(db *sql.DB) ([]*App, error) {
+func ListApps(db *sql.DB, k *secrets.Keyring) ([]*App, error) {
 	rows, err := db.Query("SELECT " + appCols + " FROM apps ORDER BY sort_order, created_at")
 	if err != nil {
 		return nil, err
@@ -114,7 +142,7 @@ func ListApps(db *sql.DB) ([]*App, error) {
 	defer rows.Close()
 	var apps []*App
 	for rows.Next() {
-		a, err := scanApp(rows)
+		a, err := scanApp(rows, k)
 		if err != nil {
 			return nil, err
 		}
@@ -127,4 +155,51 @@ func SubdomainTaken(db *sql.DB, subdomain string) (bool, error) {
 	var n int
 	err := db.QueryRow("SELECT COUNT(*) FROM apps WHERE subdomain = ?", subdomain).Scan(&n)
 	return n > 0, err
+}
+
+// EncryptLegacyApps re-encrypts any apps.env_content/compose_yaml columns
+// still holding plaintext from before at-rest encryption existed, and
+// returns how many rows it touched. Meant to run once at startup so
+// upgrading an existing install closes the plaintext gap immediately,
+// instead of only as each app happens to be edited next.
+func EncryptLegacyApps(database *sql.DB, k *secrets.Keyring) (int, error) {
+	rows, err := database.Query("SELECT id, env_content, compose_yaml FROM apps")
+	if err != nil {
+		return 0, err
+	}
+	type legacyRow struct{ id, env, compose string }
+	var legacy []legacyRow
+	for rows.Next() {
+		var r legacyRow
+		if err := rows.Scan(&r.id, &r.env, &r.compose); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		if (r.env != "" && !secrets.IsEncrypted(r.env)) || (r.compose != "" && !secrets.IsEncrypted(r.compose)) {
+			legacy = append(legacy, r)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	for _, r := range legacy {
+		env := r.env
+		if env != "" && !secrets.IsEncrypted(env) {
+			if env, err = k.Encrypt(env); err != nil {
+				return 0, fmt.Errorf("app %s: encrypt env: %w", r.id, err)
+			}
+		}
+		compose := r.compose
+		if compose != "" && !secrets.IsEncrypted(compose) {
+			if compose, err = k.Encrypt(compose); err != nil {
+				return 0, fmt.Errorf("app %s: encrypt compose yaml: %w", r.id, err)
+			}
+		}
+		if _, err := database.Exec("UPDATE apps SET env_content = ?, compose_yaml = ? WHERE id = ?", env, compose, r.id); err != nil {
+			return 0, fmt.Errorf("app %s: %w", r.id, err)
+		}
+	}
+	return len(legacy), nil
 }

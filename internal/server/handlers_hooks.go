@@ -12,7 +12,7 @@ import (
 //
 //	POST https://admin.<domain>/hooks/<app-id>/<secret>
 func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
-	a, err := db.GetApp(s.db, r.PathValue("id"))
+	a, err := db.GetApp(s.db, s.keyring, r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
