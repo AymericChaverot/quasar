@@ -35,3 +35,32 @@ func (s *Server) handleAppLogs(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 	}
 }
+
+// handleSystemContainerLogs streams a system container's logs the same way
+// handleAppLogs does, but by container name and with no mutating routes
+// alongside it — this view is read-only.
+func (s *Server) handleSystemContainerLogs(w http.ResponseWriter, r *http.Request) {
+	sc := s.getSystemContainer(w, r)
+	if sc == nil {
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	err := s.dock.StreamLogsByName(r.Context(), sc.Name, func(line string) {
+		fmt.Fprintf(w, "data: <div>%s</div>\n\n", html.EscapeString(strings.ToValidUTF8(line, "�")))
+		flusher.Flush()
+	})
+	if err != nil && r.Context().Err() == nil {
+		fmt.Fprintf(w, "data: <div class=\"text-red-400\">log stream error: %s</div>\n\n", html.EscapeString(err.Error()))
+		flusher.Flush()
+	}
+}

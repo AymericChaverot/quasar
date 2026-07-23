@@ -88,6 +88,8 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /system/backup-settings", s.requireAuth(s.handleBackupSettings))
 	s.mux.Handle("POST /system/update/check", s.requireAuth(s.handleUpdateCheck))
 	s.mux.Handle("POST /system/update/apply", s.requireAuth(s.handleUpdateApply))
+	s.mux.Handle("GET /system/containers/{name}", s.requireAuth(s.handleSystemContainerDetail))
+	s.mux.Handle("GET /system/containers/{name}/logs", s.requireAuth(s.handleSystemContainerLogs))
 
 	// Deploy webhooks are authenticated by their per-app secret, not a session.
 	s.mux.HandleFunc("POST /hooks/{id}/{secret}", s.handleWebhook)
@@ -115,6 +117,7 @@ func (s *Server) routes() {
 
 	s.mux.Handle("GET /partials/system", s.requireAuth(s.handleSystemPartial))
 	s.mux.Handle("GET /partials/system-containers", s.requireAuth(s.handleSystemContainersPartial))
+	s.mux.Handle("GET /partials/system/containers/{name}/stats", s.requireAuth(s.handleSystemContainerStatsPartial))
 	s.mux.Handle("GET /partials/apps", s.requireAuth(s.handleAppsPartial))
 	s.mux.Handle("GET /partials/deploy-fields", s.requireAuth(s.handleDeployFields))
 	s.mux.Handle("GET /partials/apps/{id}/stats", s.requireAuth(s.handleAppStatsPartial))

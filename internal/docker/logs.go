@@ -20,7 +20,12 @@ func (c *Client) StreamLogs(ctx context.Context, a *db.App, send func(line strin
 		send("(" + err.Error() + ")")
 		return nil
 	}
+	return c.StreamLogsByName(ctx, name, send)
+}
 
+// StreamLogsByName follows any container's logs by name — used for both app
+// containers and read-only system containers.
+func (c *Client) StreamLogsByName(ctx context.Context, name string, send func(line string)) error {
 	rc, err := c.api.ContainerLogs(ctx, name, container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,

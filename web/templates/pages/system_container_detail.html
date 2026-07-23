@@ -1,0 +1,38 @@
+{{define "content"}}
+{{with .Container}}
+<div class="mb-8 flex items-start justify-between">
+  <div>
+    <h1 class="mono text-lg font-semibold">{{.Name}}</h1>
+    <p class="faint mt-1 text-sm">{{.Image}}</p>
+  </div>
+  <div class="flex items-center gap-3">
+    {{if eq .State "running"}}
+    <span class="badge badge-muted"><span class="dot" style="background: var(--ok)"></span>running{{if .Uptime}} — up {{.Uptime}}{{end}}</span>
+    {{else}}
+    <span class="badge badge-muted"><span class="dot"></span>{{.State}}</span>
+    {{end}}
+    <span class="chip">read-only</span>
+  </div>
+</div>
+
+<p class="help mb-8">
+  This is one of Quasar's own infrastructure containers. It's shown read-only
+  here — no start, stop, restart or delete — since managing it outside the
+  platform's own docker-compose stack risks breaking the platform itself.
+</p>
+
+<section>
+  <h2 class="h-label mb-3">Container resources</h2>
+  <div hx-get="/partials/system/containers/{{.Name}}/stats" hx-trigger="load, every 5s" hx-swap="innerHTML">
+    <div class="card h-20 animate-pulse"></div>
+  </div>
+</section>
+
+<section class="mt-8">
+  <h2 class="h-label mb-3">Live logs</h2>
+  <div hx-ext="sse" sse-connect="/system/containers/{{.Name}}/logs">
+    <div id="log-pane" sse-swap="message" hx-swap="beforeend scroll:bottom" class="log-pane"></div>
+  </div>
+</section>
+{{end}}
+{{end}}

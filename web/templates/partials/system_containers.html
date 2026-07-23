@@ -2,7 +2,7 @@
 {{if .}}
 <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
   {{range .}}
-  <div class="empty p-4 opacity-70">
+  <a href="/system/containers/{{.Name}}" class="empty block p-4 opacity-70 hover:opacity-100">
     <div class="flex items-center justify-between gap-2">
       <p class="mono truncate text-sm">{{.Name}}</p>
       {{if eq .State "running"}}
@@ -13,7 +13,7 @@
     </div>
     <p class="faint mt-1 truncate text-xs">{{.Image}}</p>
     {{if .Uptime}}<p class="faint mt-0.5 text-xs">up {{.Uptime}}</p>{{end}}
-  </div>
+  </a>
   {{end}}
 </div>
 {{else}}

@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -71,6 +72,31 @@ func (c *Client) SystemContainers(ctx context.Context) []SystemContainer {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// GetSystemContainer returns details for a single quasar-* container,
+// identified by its exact name. It rejects anything outside that name
+// prefix, since this backs the read-only system-container detail view and
+// must never resolve to an app or arbitrary container.
+func (c *Client) GetSystemContainer(ctx context.Context, name string) (SystemContainer, error) {
+	if !strings.HasPrefix(name, "quasar-") {
+		return SystemContainer{}, fmt.Errorf("not a system container")
+	}
+	info, err := c.api.ContainerInspect(ctx, name)
+	if err != nil {
+		return SystemContainer{}, err
+	}
+	sc := SystemContainer{
+		Name:  strings.TrimPrefix(info.Name, "/"),
+		Image: info.Config.Image,
+		State: info.State.Status,
+	}
+	if info.State.Running {
+		if started, err := time.Parse(time.RFC3339Nano, info.State.StartedAt); err == nil {
+			sc.Uptime = humanDuration(time.Since(started))
+		}
+	}
+	return sc, nil
 }
 
 // EngineInfo reports the versions of the container tooling in use.

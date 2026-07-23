@@ -9,6 +9,7 @@ import (
 
 	"quasar/internal/backup"
 	"quasar/internal/db"
+	"quasar/internal/docker"
 	"quasar/internal/updater"
 	"quasar/internal/version"
 	"quasar/internal/vps"
@@ -131,6 +132,44 @@ func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/system?msg=Update to "+latest+" started — the dashboard will restart in a few seconds.", http.StatusSeeOther)
+}
+
+// getSystemContainer fetches a quasar-* container by name for the read-only
+// detail view, 404ing on anything else (including non-system containers).
+func (s *Server) getSystemContainer(w http.ResponseWriter, r *http.Request) *docker.SystemContainer {
+	sc, err := s.dock.GetSystemContainer(r.Context(), r.PathValue("name"))
+	if err != nil {
+		http.Error(w, "container not found", http.StatusNotFound)
+		return nil
+	}
+	return &sc
+}
+
+// handleSystemContainerDetail shows a read-only detail page for one of
+// Quasar's own containers: image, state, live stats and logs, but no
+// start/stop/restart/delete actions.
+func (s *Server) handleSystemContainerDetail(w http.ResponseWriter, r *http.Request) {
+	sc := s.getSystemContainer(w, r)
+	if sc == nil {
+		return
+	}
+	s.render(w, r, "system_container_detail", map[string]any{
+		"Title":     sc.Name,
+		"Container": sc,
+	})
+}
+
+func (s *Server) handleSystemContainerStatsPartial(w http.ResponseWriter, r *http.Request) {
+	sc := s.getSystemContainer(w, r)
+	if sc == nil {
+		return
+	}
+	stats, err := s.dock.StatsByName(r.Context(), sc.Name)
+	if err != nil {
+		s.renderPartial(w, "container_stats_unavailable", nil)
+		return
+	}
+	s.renderPartial(w, "container_stats", stats)
 }
 
 func (s *Server) handleBackupSettings(w http.ResponseWriter, r *http.Request) {
