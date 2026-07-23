@@ -23,6 +23,9 @@ services:
       ALLOW_START: 1
       ALLOW_STOP: 1
       ALLOW_RESTARTS: 1
+      # Required so `docker compose up -d` can remove/replace a container
+      # whose image changed (self-updater recreating quasar-dashboard).
+      DELETE: 1
       # Required by the web terminal and scheduled tasks (docker exec).
       EXEC: 1
     volumes:

@@ -45,8 +45,11 @@ func (c *Client) SelfUpdate(ctx context.Context, imageRef, socketNetwork string)
 			Labels:     map[string]string{"quasar.updater": "true"},
 		},
 		&container.HostConfig{
-			AutoRemove: true,
-			Binds:      []string{"/opt/quasar:/opt/quasar"},
+			// Not auto-removed: the dashboard can't wait for this container
+			// (it dies mid-recreation), so `docker logs quasar-updater` is
+			// the only way to diagnose a failed update after the fact. The
+			// next SelfUpdate run removes the previous one (see above).
+			Binds: []string{"/opt/quasar:/opt/quasar"},
 		},
 		&network.NetworkingConfig{
 			EndpointsConfig: map[string]*network.EndpointSettings{socketNetwork: {}},
