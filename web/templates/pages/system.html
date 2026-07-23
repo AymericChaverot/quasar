@@ -95,6 +95,39 @@
   </section>
 
   <section class="space-y-4">
+    <h2 class="h-label">TLS certificates</h2>
+    {{if .Certs}}
+    <div class="table-wrap max-w-2xl">
+      <table>
+        <thead><tr><th>Domain</th><th>Issuer</th><th>Expires</th><th></th></tr></thead>
+        <tbody>
+          {{range .Certs}}
+          {{$domain := .Domain}}
+          <tr>
+            <td class="mono">
+              {{$domain}}
+              {{range .SANs}}{{if ne . $domain}}<span class="faint block text-xs">{{.}}</span>{{end}}{{end}}
+            </td>
+            <td class="muted text-sm">{{.Issuer}}</td>
+            <td class="mono muted text-sm">{{.NotAfter.Format "2006-01-02"}}</td>
+            <td>
+              {{if eq .Status "critical"}}<span class="badge badge-err">{{if lt .DaysLeft 0}}expired{{else}}{{.DaysLeft}}d left{{end}}</span>
+              {{else if eq .Status "warning"}}<span class="badge badge-warn">{{.DaysLeft}}d left</span>
+              {{else}}<span class="badge badge-ok">{{.DaysLeft}}d left</span>{{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <div class="empty max-w-2xl p-6 text-center">
+      <p class="muted text-sm">No certificates found — normal if the domain hasn't finished its first Let's Encrypt issuance yet.</p>
+    </div>
+    {{end}}
+  </section>
+
+  <section class="space-y-4">
     <h2 class="h-label">Docker disk usage</h2>
     {{if .Disk}}
     <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"quasar/internal/backup"
+	"quasar/internal/certs"
 	"quasar/internal/db"
 	"quasar/internal/docker"
 	"quasar/internal/updater"
@@ -40,6 +41,10 @@ func (s *Server) systemData(r *http.Request) map[string]any {
 	}
 	if du, err := s.dock.DiskUsage(r.Context()); err == nil {
 		data["Disk"] = du
+	}
+	acmePath := filepath.Join(s.cfg.HostRootPath, filepath.Dir(s.cfg.AppsDir), "traefik", "acme.json")
+	if list, err := certs.Collect(acmePath); err == nil {
+		data["Certs"] = list
 	}
 	if apps, err := db.ListApps(s.db); err == nil {
 		var sizes []AppSize
