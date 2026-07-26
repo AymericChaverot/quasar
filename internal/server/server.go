@@ -16,6 +16,13 @@ import (
 	"quasar/web"
 )
 
+// Access levels a route can be registered at.
+const (
+	accessPublic = "public" // no session needed
+	accessSelf   = "self"   // any signed-in user, including a viewer
+	accessAdmin  = "admin"  // admins only
+)
+
 type Server struct {
 	cfg     config.Config
 	db      *sql.DB
@@ -23,6 +30,11 @@ type Server struct {
 	keyring *secrets.Keyring
 	pages   map[string]*template.Template
 	mux     *http.ServeMux
+
+	// guards records the access level every route was registered at, so the
+	// route table can be asserted on rather than trusted. Adding a mutating
+	// route without admin gating is the mistake this makes visible.
+	guards map[string]string
 }
 
 func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) (*Server, error) {
@@ -33,6 +45,7 @@ func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secr
 		keyring: keyring,
 		pages:   map[string]*template.Template{},
 		mux:     http.NewServeMux(),
+		guards:  map[string]string{},
 	}
 	if err := s.parseTemplates(); err != nil {
 		return nil, err
@@ -60,80 +73,113 @@ func (s *Server) parseTemplates() error {
 	return nil
 }
 
+// public registers a route reachable without a session.
+func (s *Server) public(pattern string, h http.HandlerFunc) {
+	s.guards[pattern] = accessPublic
+	s.mux.HandleFunc(pattern, h)
+}
+
+// viewer registers a route any signed-in user may reach, viewers included.
+// Only for reads and for actions on one's own account.
+func (s *Server) viewer(pattern string, h http.HandlerFunc) {
+	s.guards[pattern] = accessSelf
+	s.mux.Handle(pattern, s.requireAuth(h))
+}
+
+// admin registers a route that changes the platform, or that hands over power
+// equivalent to changing it.
+func (s *Server) admin(pattern string, h http.HandlerFunc) {
+	s.guards[pattern] = accessAdmin
+	s.mux.Handle(pattern, s.requireAdmin(h))
+}
+
 func (s *Server) routes() {
 	static, _ := fs.Sub(web.Files, "static")
 	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
+	s.guards["GET /static/"] = accessPublic
 
-	s.mux.HandleFunc("GET /login", s.handleLoginPage)
-	s.mux.HandleFunc("POST /login", s.handleLogin)
-	s.mux.HandleFunc("GET /2fa", s.handle2FAPage)
-	s.mux.HandleFunc("POST /2fa", s.handle2FAVerify)
-	s.mux.HandleFunc("POST /logout", s.handleLogout)
-
-	s.mux.Handle("GET /{$}", s.requireAuth(s.handleDashboard))
-	s.mux.Handle("GET /settings", s.requireAuth(s.handleSettings))
-	s.mux.Handle("POST /settings/password", s.requireAuth(s.handlePasswordChange))
-	s.mux.Handle("POST /settings/sessions/clear", s.requireAuth(s.handleSessionsClear))
-	s.mux.Handle("POST /settings/registries", s.requireAuth(s.handleRegistryAdd))
-	s.mux.Handle("POST /settings/registries/{id}/delete", s.requireAuth(s.handleRegistryDelete))
-	s.mux.Handle("POST /settings/integrations", s.requireAuth(s.handleIntegrationsSave))
-	s.mux.Handle("POST /settings/2fa/begin", s.requireAuth(s.handle2FASetupBegin))
-	s.mux.Handle("POST /settings/2fa/enable", s.requireAuth(s.handle2FAEnable))
-	s.mux.Handle("POST /settings/2fa/disable", s.requireAuth(s.handle2FADisable))
-	s.mux.Handle("POST /theme", s.requireAuth(s.handleThemeSet))
-
-	s.mux.Handle("GET /logs", s.requireAuth(s.handleLogsPage))
-	s.mux.Handle("GET /audit", s.requireAuth(s.handleAuditPage))
-	s.mux.Handle("GET /partials/logs", s.requireAuth(s.handleLogsSearchPartial))
-
-	s.mux.Handle("GET /system", s.requireAuth(s.handleSystem))
-	s.mux.Handle("POST /system/prune", s.requireAuth(s.handlePrune))
-	s.mux.Handle("POST /system/backup", s.requireAuth(s.handleBackupNow))
-	s.mux.Handle("GET /system/backups/{name}", s.requireAuth(s.handleBackupDownload))
-	s.mux.Handle("POST /system/backups/{name}/delete", s.requireAuth(s.handleBackupDelete))
-	s.mux.Handle("POST /system/backups/{name}/restore", s.requireAuth(s.handleBackupRestore))
-	s.mux.Handle("POST /system/backup-settings", s.requireAuth(s.handleBackupSettings))
-	s.mux.Handle("GET /system/master-key", s.requireAuth(s.handleMasterKeyDownload))
-	s.mux.Handle("POST /system/update/check", s.requireAuth(s.handleUpdateCheck))
-	s.mux.Handle("POST /system/update/apply", s.requireAuth(s.handleUpdateApply))
-	s.mux.Handle("GET /system/containers/{name}", s.requireAuth(s.handleSystemContainerDetail))
-	s.mux.Handle("GET /system/containers/{name}/logs", s.requireAuth(s.handleSystemContainerLogs))
-
+	s.public("GET /login", s.handleLoginPage)
+	s.public("POST /login", s.handleLogin)
+	s.public("GET /2fa", s.handle2FAPage)
+	s.public("POST /2fa", s.handle2FAVerify)
+	s.public("POST /logout", s.handleLogout)
 	// Deploy webhooks are authenticated by their per-app secret, not a session.
-	s.mux.HandleFunc("POST /hooks/{id}/{secret}", s.handleWebhook)
-	s.mux.Handle("GET /apps/new", s.requireAuth(s.handleAppNew))
-	s.mux.Handle("POST /apps", s.requireAuth(s.handleAppCreate))
-	s.mux.Handle("GET /apps/{id}", s.requireAuth(s.handleAppDetail))
-	s.mux.Handle("POST /apps/{id}/move", s.requireAuth(s.handleAppMove))
-	s.mux.Handle("POST /apps/{id}/start", s.requireAuth(s.appAction("start")))
-	s.mux.Handle("POST /apps/{id}/stop", s.requireAuth(s.appAction("stop")))
-	s.mux.Handle("POST /apps/{id}/restart", s.requireAuth(s.appAction("restart")))
-	s.mux.Handle("POST /apps/{id}/redeploy", s.requireAuth(s.handleAppRedeploy))
-	s.mux.Handle("POST /apps/{id}/rollback", s.requireAuth(s.handleAppRollback))
-	s.mux.Handle("POST /apps/{id}/delete", s.requireAuth(s.handleAppDelete))
-	s.mux.Handle("POST /apps/{id}/env", s.requireAuth(s.handleAppEnvSave))
-	s.mux.Handle("POST /apps/{id}/domains", s.requireAuth(s.handleAppDomains))
-	s.mux.Handle("POST /apps/{id}/health", s.requireAuth(s.handleAppHealth))
-	s.mux.Handle("POST /apps/{id}/pre-backup", s.requireAuth(s.handleAppPreBackup))
-	s.mux.Handle("POST /apps/{id}/basic-auth", s.requireAuth(s.handleAppBasicAuth))
-	s.mux.Handle("GET /apps/{id}/logs", s.requireAuth(s.handleAppLogs))
-	s.mux.Handle("GET /apps/{id}/terminal", s.requireAuth(s.handleTerminalPage))
-	s.mux.Handle("GET /apps/{id}/terminal/ws", s.requireAuth(s.handleTerminalWS))
-	s.mux.Handle("GET /partials/apps/{id}/tasks", s.requireAuth(s.handleTasksPartial))
-	s.mux.Handle("POST /apps/{id}/tasks", s.requireAuth(s.handleTaskAdd))
-	s.mux.Handle("POST /apps/{id}/tasks/{task}/run", s.requireAuth(s.handleTaskRun))
-	s.mux.Handle("POST /apps/{id}/tasks/{task}/delete", s.requireAuth(s.handleTaskDelete))
+	s.public("POST /hooks/{id}/{secret}", s.handleWebhook)
 
-	s.mux.Handle("GET /partials/system", s.requireAuth(s.handleSystemPartial))
-	s.mux.Handle("GET /partials/system-containers", s.requireAuth(s.handleSystemContainersPartial))
-	s.mux.Handle("GET /partials/system/containers/{name}/stats", s.requireAuth(s.handleSystemContainerStatsPartial))
-	s.mux.Handle("GET /partials/apps", s.requireAuth(s.handleAppsPartial))
-	s.mux.Handle("GET /partials/deploy-fields", s.requireAuth(s.handleDeployFields))
-	s.mux.Handle("GET /partials/apps/{id}/stats", s.requireAuth(s.handleAppStatsPartial))
-	s.mux.Handle("GET /partials/apps/{id}/status", s.requireAuth(s.handleAppStatusPartial))
-	s.mux.Handle("GET /partials/apps/{id}/deployments", s.requireAuth(s.handleAppDeploymentsPartial))
-	s.mux.Handle("GET /partials/metrics", s.requireAuth(s.handleServerMetricsPartial))
-	s.mux.Handle("GET /partials/apps/{id}/metrics", s.requireAuth(s.handleAppMetricsPartial))
+	s.viewer("GET /{$}", s.handleDashboard)
+	s.viewer("GET /settings", s.handleSettings)
+	s.viewer("POST /theme", s.handleThemeSet)
+	// Own-account actions: a viewer has to be able to secure their own login.
+	s.viewer("POST /settings/password", s.handlePasswordChange)
+	s.viewer("POST /settings/2fa/begin", s.handle2FASetupBegin)
+	s.viewer("POST /settings/2fa/enable", s.handle2FAEnable)
+	s.viewer("POST /settings/2fa/disable", s.handle2FADisable)
+
+	s.admin("POST /settings/sessions/clear", s.handleSessionsClear)
+	s.admin("POST /settings/registries", s.handleRegistryAdd)
+	s.admin("POST /settings/registries/{id}/delete", s.handleRegistryDelete)
+	s.admin("POST /settings/integrations", s.handleIntegrationsSave)
+	s.admin("POST /settings/users", s.handleUserCreate)
+	s.admin("POST /settings/users/{id}/role", s.handleUserRole)
+	s.admin("POST /settings/users/{id}/password", s.handleUserPassword)
+	s.admin("POST /settings/users/{id}/delete", s.handleUserDelete)
+
+	s.viewer("GET /logs", s.handleLogsPage)
+	s.viewer("GET /audit", s.handleAuditPage)
+	s.viewer("GET /partials/logs", s.handleLogsSearchPartial)
+
+	s.viewer("GET /system", s.handleSystem)
+	s.viewer("GET /system/containers/{name}", s.handleSystemContainerDetail)
+	s.viewer("GET /system/containers/{name}/logs", s.handleSystemContainerLogs)
+	s.admin("POST /system/prune", s.handlePrune)
+	s.admin("POST /system/backup", s.handleBackupNow)
+	// An archive contains every app's data and .env: a read, but not one a
+	// viewer gets.
+	s.admin("GET /system/backups/{name}", s.handleBackupDownload)
+	s.admin("POST /system/backups/{name}/delete", s.handleBackupDelete)
+	s.admin("POST /system/backups/{name}/restore", s.handleBackupRestore)
+	s.admin("POST /system/backup-settings", s.handleBackupSettings)
+	// Opens every encrypted value on the platform.
+	s.admin("GET /system/master-key", s.handleMasterKeyDownload)
+	s.admin("POST /system/update/check", s.handleUpdateCheck)
+	s.admin("POST /system/update/apply", s.handleUpdateApply)
+
+	s.viewer("GET /apps/{id}", s.handleAppDetail)
+	s.viewer("GET /apps/{id}/logs", s.handleAppLogs)
+	s.admin("GET /apps/new", s.handleAppNew)
+	s.admin("POST /apps", s.handleAppCreate)
+	s.admin("POST /apps/{id}/move", s.handleAppMove)
+	s.admin("POST /apps/{id}/start", s.appAction("start"))
+	s.admin("POST /apps/{id}/stop", s.appAction("stop"))
+	s.admin("POST /apps/{id}/restart", s.appAction("restart"))
+	s.admin("POST /apps/{id}/redeploy", s.handleAppRedeploy)
+	s.admin("POST /apps/{id}/rollback", s.handleAppRollback)
+	s.admin("POST /apps/{id}/delete", s.handleAppDelete)
+	s.admin("POST /apps/{id}/env", s.handleAppEnvSave)
+	s.admin("POST /apps/{id}/domains", s.handleAppDomains)
+	s.admin("POST /apps/{id}/health", s.handleAppHealth)
+	s.admin("POST /apps/{id}/pre-backup", s.handleAppPreBackup)
+	s.admin("POST /apps/{id}/basic-auth", s.handleAppBasicAuth)
+	// A shell in the container reads every secret the app has and can change
+	// anything, so it is an admin action however read-only the HTTP verb looks.
+	s.admin("GET /apps/{id}/terminal", s.handleTerminalPage)
+	s.admin("GET /apps/{id}/terminal/ws", s.handleTerminalWS)
+	s.viewer("GET /partials/apps/{id}/tasks", s.handleTasksPartial)
+	s.admin("POST /apps/{id}/tasks", s.handleTaskAdd)
+	// Runs an arbitrary command in the container.
+	s.admin("POST /apps/{id}/tasks/{task}/run", s.handleTaskRun)
+	s.admin("POST /apps/{id}/tasks/{task}/delete", s.handleTaskDelete)
+
+	s.viewer("GET /partials/system", s.handleSystemPartial)
+	s.viewer("GET /partials/system-containers", s.handleSystemContainersPartial)
+	s.viewer("GET /partials/system/containers/{name}/stats", s.handleSystemContainerStatsPartial)
+	s.viewer("GET /partials/apps", s.handleAppsPartial)
+	s.viewer("GET /partials/deploy-fields", s.handleDeployFields)
+	s.viewer("GET /partials/apps/{id}/stats", s.handleAppStatsPartial)
+	s.viewer("GET /partials/apps/{id}/status", s.handleAppStatusPartial)
+	s.viewer("GET /partials/apps/{id}/deployments", s.handleAppDeploymentsPartial)
+	s.viewer("GET /partials/metrics", s.handleServerMetricsPartial)
+	s.viewer("GET /partials/apps/{id}/metrics", s.handleAppMetricsPartial)
 }
 
 func (s *Server) requireAuth(next http.HandlerFunc) http.Handler {
@@ -158,6 +204,19 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.Handler {
 	})
 }
 
+// requireAdmin authenticates and then refuses viewers. The refusal is a plain
+// 403 rather than a redirect: the user is signed in, so sending them to the
+// login page would suggest their session expired.
+func (s *Server) requireAdmin(next http.HandlerFunc) http.Handler {
+	return s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+		if _, _, role, _ := s.currentUser(r); role != auth.RoleAdmin {
+			http.Error(w, "This account has read-only access.", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	})
+}
+
 // render writes a full page (layout + named page template), injecting the
 // active theme from the request cookie.
 func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, data map[string]any) {
@@ -171,6 +230,12 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, dat
 	}
 	data["Theme"] = themeFrom(r)
 	data["Version"] = version.Version
+	// Injected for every page so templates can hide controls a viewer would
+	// only get a 403 from. requireAdmin is what actually enforces it; this is
+	// presentation.
+	_, _, role, _ := s.currentUser(r)
+	data["Role"] = role
+	data["IsAdmin"] = role == auth.RoleAdmin
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := t.ExecuteTemplate(w, "layout", data); err != nil {
 		log.Printf("render %s: %v", page, err)

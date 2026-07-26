@@ -4,6 +4,7 @@
     {{template "status_badge" .Status.State}}
     {{if .Status.Uptime}}<span class="mono muted text-sm">up {{.Status.Uptime}}</span>{{end}}
   </div>
+  {{if .IsAdmin}}
   <div class="flex items-center gap-2">
     <button hx-post="/apps/{{.ID}}/start" hx-target="#status-panel" hx-swap="innerHTML" class="btn">{{template "icon_play"}}Start</button>
     <button hx-post="/apps/{{.ID}}/stop" hx-target="#status-panel" hx-swap="innerHTML" class="btn">{{template "icon_stop"}}Stop</button>
@@ -12,6 +13,9 @@
             hx-confirm="Redeploy {{.Name}}? The container will be replaced."
             class="btn-primary">{{template "icon_deploy"}}Redeploy</button>
   </div>
+  {{else}}
+  <span class="chip">read-only</span>
+  {{end}}
 </div>
 {{if and .Deploy .Deploy.Err}}
 <div class="alert-err mono mt-3 text-xs">

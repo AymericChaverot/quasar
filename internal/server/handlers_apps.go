@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"quasar/internal/auth"
 	"quasar/internal/catalog"
 	"quasar/internal/db"
 	"quasar/internal/docker"
@@ -39,6 +40,9 @@ type AppView struct {
 	Deploy *docker.DeployState
 	First  bool
 	Last   bool
+	// IsAdmin gates the controls inside partials, which are rendered without
+	// the page data map that carries it everywhere else.
+	IsAdmin bool
 }
 
 // Host is the public hostname of the app: "sub.domain", or the bare root
@@ -50,12 +54,14 @@ func (v AppView) Host() string {
 	return v.App.Subdomain + "." + v.Domain
 }
 
-func (s *Server) appView(ctx context.Context, a *db.App) AppView {
+func (s *Server) appView(r *http.Request, a *db.App) AppView {
+	_, _, role, _ := s.currentUser(r)
 	return AppView{
-		App:    a,
-		Status: s.dock.Status(ctx, a),
-		Domain: s.cfg.Domain,
-		Deploy: s.dock.Deploying(a.ID),
+		App:     a,
+		Status:  s.dock.Status(r.Context(), a),
+		Domain:  s.cfg.Domain,
+		Deploy:  s.dock.Deploying(a.ID),
+		IsAdmin: role == auth.RoleAdmin,
 	}
 }
 
@@ -209,7 +215,7 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, r, "app_detail", map[string]any{
 		"Title": a.Name,
-		"App":   s.appView(r.Context(), a),
+		"App":   s.appView(r, a),
 	})
 }
 
@@ -236,7 +242,7 @@ func (s *Server) appAction(action string) http.HandlerFunc {
 			return
 		}
 		s.audit(r, "app."+action, a.Name, "")
-		s.renderPartial(w, "app_status_panel", s.appView(r.Context(), a))
+		s.renderPartial(w, "app_status_panel", s.appView(r, a))
 	}
 }
 
@@ -247,7 +253,7 @@ func (s *Server) handleAppRedeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	s.dock.DeployAsync(a, "manual")
 	s.audit(r, "app.deploy", a.Name, "")
-	s.renderPartial(w, "app_status_panel", s.appView(r.Context(), a))
+	s.renderPartial(w, "app_status_panel", s.appView(r, a))
 }
 
 // handleAppRollback redeploys an image tag from the app's deploy history.
@@ -272,7 +278,7 @@ func (s *Server) handleAppRollback(w http.ResponseWriter, r *http.Request) {
 	}
 	s.dock.RollbackAsync(a, tag)
 	s.audit(r, "app.rollback", a.Name, "to "+tag)
-	s.renderPartial(w, "app_status_panel", s.appView(r.Context(), a))
+	s.renderPartial(w, "app_status_panel", s.appView(r, a))
 }
 
 // handleAppMove shifts an app up or down in the manual order and re-renders

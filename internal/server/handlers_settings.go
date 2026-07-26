@@ -62,24 +62,32 @@ func (s *Server) handleThemeSet(w http.ResponseWriter, r *http.Request) {
 
 // currentUser resolves the logged-in user from the session cookie. requireAuth
 // already validated the session, so failures here are exceptional.
-func (s *Server) currentUser(r *http.Request) (int64, string, string) {
+//
+// An unresolved session yields an empty role, which requireAdmin treats as not
+// an admin — failing closed if this ever returns early.
+func (s *Server) currentUser(r *http.Request) (id int64, username, role, token string) {
 	cookie, _ := r.Cookie(auth.SessionCookie)
 	if cookie == nil {
-		return 0, "", ""
+		return 0, "", "", ""
 	}
-	id, name, err := auth.UserForSession(s.db, cookie.Value)
+	id, username, role, err := auth.UserForSession(s.db, cookie.Value)
 	if err != nil {
-		return 0, "", cookie.Value
+		return 0, "", "", cookie.Value
 	}
-	return id, name, cookie.Value
+	return id, username, role, cookie.Value
 }
 
 func (s *Server) settingsData(r *http.Request) map[string]any {
-	userID, username, _ := s.currentUser(r)
+	userID, username, role, _ := s.currentUser(r)
 	registries, _ := db.ListRegistries(s.db)
+	users, _ := auth.ListUsers(s.db)
 	return map[string]any{
 		"Title":       "Settings",
 		"Username":    username,
+		"Role":        role,
+		"IsAdmin":     role == auth.RoleAdmin,
+		"UserID":      userID,
+		"Users":       users,
 		"Themes":      themes,
 		"Domain":      s.cfg.Domain,
 		"AppsDir":     s.cfg.AppsDir,
@@ -105,7 +113,7 @@ func (s *Server) alertThreshold(key string, fallback int) int {
 
 // handle2FASetupBegin generates a secret and shows the QR code to scan.
 func (s *Server) handle2FASetupBegin(w http.ResponseWriter, r *http.Request) {
-	userID, username, _ := s.currentUser(r)
+	userID, username, _, _ := s.currentUser(r)
 	secret, qr, err := auth.BeginTOTPSetup(s.db, userID, "Quasar ("+s.cfg.Domain+")", username)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -119,7 +127,7 @@ func (s *Server) handle2FASetupBegin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handle2FAEnable(w http.ResponseWriter, r *http.Request) {
-	userID, _, _ := s.currentUser(r)
+	userID, _, _, _ := s.currentUser(r)
 	if err := auth.EnableTOTP(s.db, userID, r.FormValue("code")); err != nil {
 		data := s.settingsData(r)
 		data["Error"] = err.Error() + " — scan the QR code again if needed."
@@ -131,7 +139,7 @@ func (s *Server) handle2FAEnable(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handle2FADisable(w http.ResponseWriter, r *http.Request) {
-	userID, _, _ := s.currentUser(r)
+	userID, _, _, _ := s.currentUser(r)
 	if err := auth.DisableTOTP(s.db, userID, r.FormValue("password")); err != nil {
 		data := s.settingsData(r)
 		data["Error"] = err.Error()
@@ -210,7 +218,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
-	userID, _, token := s.currentUser(r)
+	userID, _, _, token := s.currentUser(r)
 
 	newPassword := r.FormValue("new_password")
 	if newPassword != r.FormValue("confirm_password") {

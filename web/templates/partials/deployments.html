@@ -28,7 +28,7 @@
           {{else}}<span class="badge badge-warn"><span class="dot animate-pulse"></span>running</span>{{end}}
         </td>
         <td>
-          {{if .CanRollback}}
+          {{if and .CanRollback $.IsAdmin}}
           <button hx-post="/apps/{{$appID}}/rollback" hx-vals='{"tag": "{{.ImageTag}}"}'
                   hx-target="#status-panel" hx-swap="innerHTML"
                   hx-confirm="Roll back to {{.ImageTag}}?"

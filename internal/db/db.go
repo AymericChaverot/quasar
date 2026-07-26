@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
 	password_hash TEXT NOT NULL,
 	totp_secret   TEXT NOT NULL DEFAULT '',
 	totp_enabled  INTEGER NOT NULL DEFAULT 0,
+	role          TEXT NOT NULL DEFAULT 'admin',
 	created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -139,6 +140,9 @@ var migrations = []string{
 	"ALTER TABLE sessions ADD COLUMN pending_2fa INTEGER NOT NULL DEFAULT 0",
 	"ALTER TABLE apps ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
 	"ALTER TABLE apps ADD COLUMN pre_backup_cmd TEXT NOT NULL DEFAULT ''",
+	// Existing single-account installs default to admin, so an upgrade does
+	// not lock anyone out of their own dashboard.
+	"ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'",
 }
 
 func Open(path string) (*sql.DB, error) {

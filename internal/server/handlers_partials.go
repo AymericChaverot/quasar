@@ -20,7 +20,7 @@ func (s *Server) handleAppsPartial(w http.ResponseWriter, r *http.Request) {
 	}
 	views := make([]AppView, 0, len(apps))
 	for i, a := range apps {
-		v := s.appView(r.Context(), a)
+		v := s.appView(r, a)
 		v.First = i == 0
 		v.Last = i == len(apps)-1
 		views = append(views, v)
@@ -62,7 +62,7 @@ func (s *Server) handleAppStatusPartial(w http.ResponseWriter, r *http.Request) 
 	if a == nil {
 		return
 	}
-	s.renderPartial(w, "app_status_panel", s.appView(r.Context(), a))
+	s.renderPartial(w, "app_status_panel", s.appView(r, a))
 }
 
 // DeploymentView adds template-friendly context to a deployment row.
@@ -100,5 +100,5 @@ func (s *Server) handleAppDeploymentsPartial(w http.ResponseWriter, r *http.Requ
 		}
 		views = append(views, v)
 	}
-	s.renderPartial(w, "deployments", map[string]any{"AppID": a.ID, "Deployments": views})
+	s.renderPartial(w, "deployments", map[string]any{"AppID": a.ID, "Deployments": views, "IsAdmin": s.isAdmin(r)})
 }

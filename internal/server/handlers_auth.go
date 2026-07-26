@@ -51,7 +51,7 @@ func (s *Server) handle2FAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := auth.Confirm2FA(s.db, cookie.Value, r.FormValue("code")); err != nil {
-		_, username, _ := s.currentUser(r)
+		_, username, _, _ := s.currentUser(r)
 		s.auditAs(r, db.ActorSystem, "2fa.failed", username, "")
 		s.render(w, r, "twofa", map[string]any{
 			"Title": "Two-factor authentication", "HideNav": true,

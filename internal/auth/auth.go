@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -16,6 +18,130 @@ const (
 	SessionCookie   = "quasar_session"
 	sessionLifetime = 7 * 24 * time.Hour
 )
+
+// Roles. A viewer can see everything the dashboard shows but change nothing,
+// which also excludes the two read-only actions that hand over real power: a
+// container shell and the encryption master key.
+const (
+	RoleAdmin  = "admin"
+	RoleViewer = "viewer"
+)
+
+func ValidRole(role string) bool { return role == RoleAdmin || role == RoleViewer }
+
+// User is an account as shown on the settings page.
+type User struct {
+	ID          int64
+	Username    string
+	Role        string
+	TOTPEnabled bool
+	CreatedAt   time.Time
+}
+
+// ListUsers returns every account, oldest first.
+func ListUsers(db *sql.DB) ([]*User, error) {
+	rows, err := db.Query("SELECT id, username, role, totp_enabled, created_at FROM users ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.TOTPEnabled, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, &u)
+	}
+	return out, rows.Err()
+}
+
+// CreateUser adds an account. Usernames are unique, enforced by the schema.
+func CreateUser(db *sql.DB, username, password, role string) error {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return errors.New("username is required")
+	}
+	if len(password) < 8 {
+		return errors.New("password must be at least 8 characters")
+	}
+	if !ValidRole(role) {
+		return errors.New("role must be admin or viewer")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	if _, err := db.Exec("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+		username, string(hash), role); err != nil {
+		return fmt.Errorf("could not create %q (the name may already be taken): %w", username, err)
+	}
+	return nil
+}
+
+// SetRole changes an account's role, refusing to remove the last admin.
+// Locking every human out of a self-hosted dashboard is unrecoverable without
+// SSH and sqlite3, so it is blocked rather than confirmed.
+func SetRole(db *sql.DB, userID int64, role string) error {
+	if !ValidRole(role) {
+		return errors.New("role must be admin or viewer")
+	}
+	if role != RoleAdmin {
+		if err := ensureNotLastAdmin(db, userID); err != nil {
+			return err
+		}
+	}
+	_, err := db.Exec("UPDATE users SET role = ? WHERE id = ?", role, userID)
+	return err
+}
+
+// DeleteUser removes an account and its sessions, refusing to remove the last
+// admin for the same reason as SetRole.
+func DeleteUser(db *sql.DB, userID int64) error {
+	if err := ensureNotLastAdmin(db, userID); err != nil {
+		return err
+	}
+	if _, err := db.Exec("DELETE FROM users WHERE id = ?", userID); err != nil {
+		return err
+	}
+	_, err := db.Exec("DELETE FROM sessions WHERE user_id = ?", userID)
+	return err
+}
+
+// ResetPassword sets another account's password without knowing the old one,
+// and signs that account out everywhere.
+func ResetPassword(db *sql.DB, userID int64, newPassword string) error {
+	if len(newPassword) < 8 {
+		return errors.New("password must be at least 8 characters")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	if _, err := db.Exec("UPDATE users SET password_hash = ? WHERE id = ?", string(hash), userID); err != nil {
+		return err
+	}
+	_, err = db.Exec("DELETE FROM sessions WHERE user_id = ?", userID)
+	return err
+}
+
+func ensureNotLastAdmin(db *sql.DB, userID int64) error {
+	var role string
+	if err := db.QueryRow("SELECT role FROM users WHERE id = ?", userID).Scan(&role); err != nil {
+		return err
+	}
+	if role != RoleAdmin {
+		return nil
+	}
+	var admins int
+	if err := db.QueryRow("SELECT COUNT(*) FROM users WHERE role = ?", RoleAdmin).Scan(&admins); err != nil {
+		return err
+	}
+	if admins <= 1 {
+		return errors.New("this is the last admin account — promote another user first")
+	}
+	return nil
+}
 
 // EnsureAdmin creates the initial admin account on first boot. It only runs
 // when the users table is empty, so the ADMIN_* env vars are ignored afterwards.
@@ -34,7 +160,8 @@ func EnsureAdmin(db *sql.DB, username, password string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := db.Exec("INSERT INTO users (username, password_hash) VALUES (?, ?)", username, string(hash)); err != nil {
+	if _, err := db.Exec("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+		username, string(hash), RoleAdmin); err != nil {
 		return err
 	}
 	log.Printf("created initial admin user %q — you can now remove ADMIN_PASSWORD from .env", username)
@@ -75,14 +202,15 @@ func Logout(db *sql.DB, token string) {
 	db.Exec("DELETE FROM sessions WHERE token = ?", token)
 }
 
-// UserForSession returns the id and username tied to a valid session token.
-func UserForSession(db *sql.DB, token string) (int64, string, error) {
+// UserForSession returns the id, username and role tied to a valid session.
+func UserForSession(db *sql.DB, token string) (int64, string, string, error) {
 	var id int64
-	var username string
-	err := db.QueryRow(`SELECT u.id, u.username FROM sessions s
+	var username, role string
+	err := db.QueryRow(`SELECT u.id, u.username, u.role FROM sessions s
 		JOIN users u ON u.id = s.user_id
-		WHERE s.token = ? AND s.pending_2fa = 0 AND s.expires_at > ?`, token, time.Now()).Scan(&id, &username)
-	return id, username, err
+		WHERE s.token = ? AND s.pending_2fa = 0 AND s.expires_at > ?`, token, time.Now()).
+		Scan(&id, &username, &role)
+	return id, username, role, err
 }
 
 // ChangePassword verifies the current password, stores the new hash and

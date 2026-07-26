@@ -85,6 +85,66 @@
     </div>
   </section>
 
+  {{if .IsAdmin}}
+  <section class="space-y-4">
+    <h2 class="h-label">Users</h2>
+    <div class="card space-y-4 p-4">
+      <ul class="space-y-2">
+        {{range .Users}}
+        <li class="flex flex-wrap items-center justify-between gap-3 rounded p-2" style="background: var(--surface-2)">
+          <div>
+            <span class="mono text-sm">{{.Username}}</span>
+            <span class="chip ml-2">{{.Role}}</span>
+            {{if .TOTPEnabled}}<span class="chip ml-1">2FA</span>{{end}}
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <form method="post" action="/settings/users/{{.ID}}/role" class="flex items-center gap-1">
+              <select name="role" class="input !w-28 !py-1 text-xs">
+                <option value="admin" {{if eq .Role "admin"}}selected{{end}}>admin</option>
+                <option value="viewer" {{if eq .Role "viewer"}}selected{{end}}>viewer</option>
+              </select>
+              <button type="submit" class="btn !py-1 text-xs">Set role</button>
+            </form>
+            <form method="post" action="/settings/users/{{.ID}}/password" class="flex items-center gap-1">
+              <input name="password" type="password" placeholder="new password" class="input !w-40 !py-1 text-xs">
+              <button type="submit" class="btn !py-1 text-xs">Reset</button>
+            </form>
+            {{if ne .ID $.UserID}}
+            <form method="post" action="/settings/users/{{.ID}}/delete"
+                  onsubmit="return confirm('Delete the account {{.Username}}?')">
+              <button type="submit" class="btn-danger !py-1 text-xs">Delete</button>
+            </form>
+            {{end}}
+          </div>
+        </li>
+        {{end}}
+      </ul>
+      <form method="post" action="/settings/users" class="flex flex-wrap items-end gap-3 border-t pt-4" style="border-color: var(--border)">
+        <div>
+          <label for="new_username" class="label !mb-1">New user</label>
+          <input id="new_username" name="username" type="text" placeholder="username" class="input mono !w-40" required>
+        </div>
+        <div>
+          <label for="new_user_password" class="label !mb-1">Password</label>
+          <input id="new_user_password" name="password" type="password" placeholder="min 8 characters" class="input !w-48" required>
+        </div>
+        <div>
+          <label for="new_user_role" class="label !mb-1">Role</label>
+          <select id="new_user_role" name="role" class="input !w-32">
+            <option value="viewer">viewer</option>
+            <option value="admin">admin</option>
+          </select>
+        </div>
+        <button type="submit" class="btn">Add user</button>
+      </form>
+      <p class="help">
+        A viewer sees every application, log, metric and audit entry but cannot change anything.
+        That also excludes container shells, backup archives and the encryption key, which grant
+        far more than the read-only label suggests. The last admin account cannot be demoted or deleted.
+      </p>
+    </div>
+  </section>
+
   <section class="space-y-4">
     <h2 class="h-label">Image registries</h2>
     <div class="card space-y-4 p-4">
@@ -164,6 +224,7 @@
       </form>
     </div>
   </section>
+  {{end}}
 
   <section class="space-y-4">
     <h2 class="h-label">Platform</h2>

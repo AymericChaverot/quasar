@@ -7,7 +7,7 @@
        class="link mono text-sm">{{.Host}}</a>
   </div>
   <div class="flex items-center gap-3">
-    <a href="/apps/{{.ID}}/terminal" class="btn">{{template "icon_terminal"}}Terminal</a>
+    {{if $.IsAdmin}}<a href="/apps/{{.ID}}/terminal" class="btn">{{template "icon_terminal"}}Terminal</a>{{end}}
     <span class="chip">{{.DeployType}}</span>
   </div>
 </div>
@@ -26,6 +26,9 @@
     <div class="mt-4" hx-get="/partials/apps/{{.ID}}/metrics" hx-trigger="load, every 60s" hx-swap="innerHTML"></div>
   </section>
 
+  {{/* Env content and the compose file hold the app's secrets, so a viewer
+       does not get to read them, let alone edit them. */}}
+  {{if $.IsAdmin}}
   <section>
     <h2 class="h-label mb-3">Environment</h2>
     <form hx-post="/apps/{{.ID}}/env" hx-target="#env-feedback" hx-swap="innerHTML" class="space-y-3">
@@ -42,8 +45,10 @@
       </div>
     </form>
   </section>
+  {{end}}
 </div>
 
+{{if $.IsAdmin}}
 <div class="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
   <section>
     <h2 class="h-label mb-3">Custom domains</h2>
@@ -122,6 +127,7 @@
     </form>
   </section>
 </div>
+{{end}}
 
 <section class="mt-8">
   <h2 class="h-label mb-3">Tasks</h2>
@@ -147,6 +153,7 @@
   </div>
 </section>
 
+{{if $.IsAdmin}}
 <section class="mt-10 border-t pt-6" style="border-color: var(--border)">
   <h2 class="h-label mb-3" style="color: var(--err)">Danger zone</h2>
   <button hx-post="/apps/{{.ID}}/delete"
@@ -155,5 +162,6 @@
     {{template "icon_trash"}}Delete application
   </button>
 </section>
+{{end}}
 {{end}}
 {{end}}

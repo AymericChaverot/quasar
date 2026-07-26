@@ -16,7 +16,7 @@ func (s *Server) handleTasksPartial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tasks, _ := db.ListTasks(s.db, a.ID)
-	s.renderPartial(w, "tasks", map[string]any{"AppID": a.ID, "Tasks": tasks})
+	s.renderPartial(w, "tasks", map[string]any{"AppID": a.ID, "Tasks": tasks, "IsAdmin": s.isAdmin(r)})
 }
 
 func (s *Server) handleTaskAdd(w http.ResponseWriter, r *http.Request) {

@@ -1,5 +1,6 @@
 {{define "tasks"}}
 {{$appID := .AppID}}
+{{$isAdmin := .IsAdmin}}
 <div class="space-y-3">
   {{if .Tasks}}
   <div class="table-wrap">
@@ -19,12 +20,14 @@
             {{else}}<span class="faint">–</span>{{end}}
           </td>
           <td>
+            {{if $isAdmin}}
             <div class="flex items-center gap-2">
               <button hx-post="/apps/{{$appID}}/tasks/{{.ID}}/run" hx-target="#tasks-pane" hx-swap="innerHTML"
                       class="btn !py-1 text-xs">Run now</button>
               <button hx-post="/apps/{{$appID}}/tasks/{{.ID}}/delete" hx-target="#tasks-pane" hx-swap="innerHTML"
                       hx-confirm="Delete this task?" class="btn-danger !py-1 text-xs">Delete</button>
             </div>
+            {{end}}
           </td>
         </tr>
         {{if .LastOutput}}
@@ -41,6 +44,7 @@
   {{else}}
   <div class="card muted p-4 text-sm">No tasks yet. Commands run inside the app's container via /bin/sh.</div>
   {{end}}
+  {{if $isAdmin}}
   <form hx-post="/apps/{{$appID}}/tasks" hx-target="#tasks-pane" hx-swap="innerHTML" class="flex flex-wrap items-end gap-3">
     <div class="min-w-64 flex-1">
       <label class="label">Command</label>
@@ -52,5 +56,6 @@
     </div>
     <button type="submit" class="btn">Add task</button>
   </form>
+  {{end}}
 </div>
 {{end}}

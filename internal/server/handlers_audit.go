@@ -6,14 +6,22 @@ import (
 	"strconv"
 	"strings"
 
+	"quasar/internal/auth"
 	"quasar/internal/db"
 )
+
+// isAdmin reports whether the request comes from an admin, for partials that
+// build their own data map instead of going through render.
+func (s *Server) isAdmin(r *http.Request) bool {
+	_, _, role, _ := s.currentUser(r)
+	return role == auth.RoleAdmin
+}
 
 // audit records an action against the logged-in user. Called after the action
 // succeeds, so the trail says what happened rather than what was attempted —
 // failed attempts that matter (a rejected login) are recorded explicitly.
 func (s *Server) audit(r *http.Request, action, target, detail string) {
-	_, username, _ := s.currentUser(r)
+	_, username, _, _ := s.currentUser(r)
 	if username == "" {
 		username = db.ActorSystem
 	}

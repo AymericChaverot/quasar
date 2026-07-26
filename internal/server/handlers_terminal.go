@@ -17,7 +17,7 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, r, "terminal", map[string]any{
 		"Title": a.Name + " terminal",
-		"App":   s.appView(r.Context(), a),
+		"App":   s.appView(r, a),
 	})
 }
 
