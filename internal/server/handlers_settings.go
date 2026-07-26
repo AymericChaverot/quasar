@@ -19,10 +19,15 @@ type Theme struct {
 	Description string
 }
 
+// themes[0] is the default every unset or unrecognised cookie falls back to.
 var themes = []Theme{
 	{"nebula", "Nebula", "Dark developer dashboard (default)"},
+	{"marathon", "Marathon", "Bone and hazard orange, after Bungie's Marathon"},
+	{"nord", "Nord", "Cool arctic blues, low contrast"},
+	{"synthwave", "Synthwave", "Neon magenta on deep violet"},
 	{"terminal", "Terminal", "Brutalist green-on-black CRT"},
 	{"paper", "Paper", "Minimal light"},
+	{"solarized", "Solarized", "Warm light, Solarized palette"},
 }
 
 const themeCookie = "quasar_theme"

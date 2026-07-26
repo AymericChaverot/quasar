@@ -52,6 +52,81 @@
   --font-body: var(--font-mono);
 }
 
+/* After Bungie's Marathon (2026): bone white and hazard orange on near-black,
+   hard corners, everything set in caps. */
+[data-theme="marathon"] {
+  --bg: #0c0c0d;
+  --surface: #141416;
+  --surface-2: #1a1a1d;
+  --border: #2b2b2f;
+  --border-strong: #3f3f45;
+  --text: #ede9e3;
+  --text-muted: #a3a09a;
+  --text-faint: #6e6b66;
+  --accent: #ff4d12;
+  --accent-hover: #ff6a38;
+  --accent-text: #0c0c0d;
+  --ok: #b8f22d;
+  --warn: #ffb200;
+  --err: #ff2e4d;
+  --info: #25e0f5;
+  --chart: #ff4d12; /* series color, validated against the near-black surface */
+  --radius: 0;
+  --radius-badge: 0;
+  --border-w: 1px;
+  --log-bg: #08080a;
+  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, monospace;
+}
+
+/* The Nord palette: low-contrast arctic blues, easy for long sessions. */
+[data-theme="nord"] {
+  --bg: #2e3440;
+  --surface: #3b4252;
+  --surface-2: #434c5e;
+  --border: #434c5e;
+  --border-strong: #4c566a;
+  --text: #eceff4;
+  --text-muted: #d8dee9;
+  --text-faint: #9aa5b6;
+  --accent: #88c0d0;
+  --accent-hover: #8fbcbb;
+  --accent-text: #2e3440;
+  --ok: #a3be8c;
+  --warn: #ebcb8b;
+  --err: #bf616a;
+  --info: #81a1c1;
+  --chart: #88c0d0; /* series color, validated against the slate surface */
+  --radius: 6px;
+  --radius-badge: 9999px;
+  --border-w: 1px;
+  --log-bg: #272c36;
+}
+
+/* Neon on deep violet, 1984 arcade. */
+[data-theme="synthwave"] {
+  --bg: #14082b;
+  --surface: #1e0f3c;
+  --surface-2: #2a1550;
+  --border: #3d2178;
+  --border-strong: #6b35d6;
+  --text: #f5e8ff;
+  --text-muted: #c0a6e8;
+  --text-faint: #8b76b3;
+  --accent: #ff2d95;
+  --accent-hover: #ff5cae;
+  --accent-text: #14082b;
+  --ok: #2bf5c0;
+  --warn: #ffcc4d;
+  --err: #ff4d6d;
+  --info: #4dd6ff;
+  --chart: #ff2d95; /* series color, validated against the violet surface */
+  --radius: 6px;
+  --radius-badge: 9999px;
+  --border-w: 1px;
+  --log-bg: #0d0520;
+}
+
 [data-theme="paper"] {
   --bg: #fafaf9;
   --surface: #ffffff;
@@ -73,6 +148,30 @@
   --radius-badge: 9999px;
   --border-w: 1px;
   --log-bg: #1c1917;
+}
+
+/* Ethan Schoonover's Solarized Light: warm paper, deliberately flat contrast. */
+[data-theme="solarized"] {
+  --bg: #eee8d5;
+  --surface: #fdf6e3;
+  --surface-2: #e8e1cc;
+  --border: #ded7c1;
+  --border-strong: #93a1a1;
+  --text: #073642;
+  --text-muted: #586e75;
+  --text-faint: #93a1a1;
+  --accent: #268bd2;
+  --accent-hover: #1c6fa8;
+  --accent-text: #fdf6e3;
+  --ok: #859900;
+  --warn: #b58900;
+  --err: #dc322f;
+  --info: #2aa198;
+  --chart: #268bd2; /* series color, validated against the warm paper surface */
+  --radius: 4px;
+  --radius-badge: 9999px;
+  --border-w: 1px;
+  --log-bg: #002b36;
 }
 
 /* --- Base ------------------------------------------------------------------ */
@@ -394,4 +493,62 @@ body {
     transparent 4px
   );
   opacity: 0.25;
+}
+
+/* --- Marathon HUD extras --------------------------------------------------- */
+
+[data-theme="marathon"] h1,
+[data-theme="marathon"] .brand,
+[data-theme="marathon"] .h-label,
+[data-theme="marathon"] .btn,
+[data-theme="marathon"] .btn-primary,
+[data-theme="marathon"] .btn-danger,
+[data-theme="marathon"] .chip {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+[data-theme="marathon"] .h-label { color: var(--accent); }
+/* A registration block ahead of every section title, as on the key art. */
+[data-theme="marathon"] .h-label::before {
+  content: "";
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.5rem;
+  background: var(--accent);
+}
+/* Hazard stripe along the bottom edge of the header. */
+[data-theme="marathon"] .site-header {
+  border-bottom-color: var(--accent);
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--accent) 55%, transparent) 0 8px,
+    transparent 8px 16px
+  );
+  background-repeat: no-repeat;
+  background-size: 100% 3px;
+  background-position: bottom;
+}
+[data-theme="marathon"] .chip { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+[data-theme="marathon"] .table-wrap thead { border-bottom-color: var(--accent); }
+[data-theme="marathon"] .input:focus,
+[data-theme="marathon"] .select:focus { border-color: var(--accent); }
+[data-theme="marathon"] .btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+/* --- Synthwave glow -------------------------------------------------------- */
+
+[data-theme="synthwave"] .brand {
+  color: var(--accent);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+[data-theme="synthwave"] .site-header {
+  border-bottom-color: var(--accent);
+  box-shadow: 0 1px 16px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+[data-theme="synthwave"] .badge {
+  box-shadow: 0 0 8px color-mix(in srgb, currentColor 25%, transparent);
 }
