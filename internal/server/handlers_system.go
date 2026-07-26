@@ -84,7 +84,7 @@ func (s *Server) handlePrune(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleBackupNow(w http.ResponseWriter, r *http.Request) {
-	name, err := backup.Run(s.db, s.cfg.AppsDir, s.cfg.BackupsDir)
+	name, err := backup.Run(s.db, s.keyring, s.cfg.AppsDir, s.cfg.BackupsDir, s.dock.DumpForBackup)
 	if err != nil {
 		http.Error(w, "backup failed: "+err.Error(), http.StatusInternalServerError)
 		return

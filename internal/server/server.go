@@ -113,6 +113,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /apps/{id}/env", s.requireAuth(s.handleAppEnvSave))
 	s.mux.Handle("POST /apps/{id}/domains", s.requireAuth(s.handleAppDomains))
 	s.mux.Handle("POST /apps/{id}/health", s.requireAuth(s.handleAppHealth))
+	s.mux.Handle("POST /apps/{id}/pre-backup", s.requireAuth(s.handleAppPreBackup))
 	s.mux.Handle("POST /apps/{id}/basic-auth", s.requireAuth(s.handleAppBasicAuth))
 	s.mux.Handle("GET /apps/{id}/logs", s.requireAuth(s.handleAppLogs))
 	s.mux.Handle("GET /apps/{id}/terminal", s.requireAuth(s.handleTerminalPage))

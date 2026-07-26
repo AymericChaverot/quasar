@@ -20,9 +20,11 @@ type AppStatus struct {
 	Uptime string // human duration, empty unless running
 }
 
-// errNoContainer is returned when an app has never been deployed, or its
-// container was removed outside Quasar.
-var errNoContainer = errors.New("app has no container")
+// ErrNoContainer is returned when an app has never been deployed, is stopped
+// and removed, or had its container removed outside Quasar. Callers that must
+// distinguish "nothing to do" from a real failure check for it — a backup skips
+// dumping an app that isn't running rather than failing the whole run.
+var ErrNoContainer = errors.New("app has no container")
 
 // appContainers lists an app's managed containers, newest first. A deploy
 // keeps the previous container running until the replacement is serving, so
@@ -48,7 +50,7 @@ func (c *Client) appContainers(ctx context.Context, appID string) []container.Su
 func (c *Client) appContainer(ctx context.Context, appID string) (string, error) {
 	list := c.appContainers(ctx, appID)
 	if len(list) == 0 {
-		return "", errNoContainer
+		return "", ErrNoContainer
 	}
 	return list[0].ID, nil
 }

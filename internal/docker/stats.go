@@ -34,7 +34,7 @@ func (c *Client) Stats(ctx context.Context, a *db.App) (ContainerStats, error) {
 func (c *Client) composeStats(ctx context.Context, appID string) (ContainerStats, error) {
 	list := c.composeContainers(ctx, appID)
 	if len(list) == 0 {
-		return ContainerStats{}, errNoContainer
+		return ContainerStats{}, ErrNoContainer
 	}
 	var out ContainerStats
 	var sampled int
@@ -56,7 +56,7 @@ func (c *Client) composeStats(ctx context.Context, appID string) (ContainerStats
 		}
 	}
 	if sampled == 0 {
-		return ContainerStats{}, errNoContainer
+		return ContainerStats{}, ErrNoContainer
 	}
 	if out.MemLimitMB > 0 {
 		out.MemPercent = out.MemUsedMB / out.MemLimitMB * 100

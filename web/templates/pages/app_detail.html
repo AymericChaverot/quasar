@@ -82,6 +82,25 @@
   </section>
 
   <section>
+    <h2 class="h-label mb-3">Backup dump command</h2>
+    <form hx-post="/apps/{{.ID}}/pre-backup" hx-target="#prebackup-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
+      <input name="pre_backup_cmd" type="text" value="{{.PreBackupCmd}}" class="input mono"
+             placeholder="pg_dump -U &quot;$POSTGRES_USER&quot; &quot;$POSTGRES_DB&quot;">
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn">Save</button>
+        <span id="prebackup-feedback"></span>
+      </div>
+      <p class="help !mt-0">
+        Run in the container before each backup; its output is archived as <span class="mono">dump.sql</span>.
+        Set this for anything holding a database: copying a running database's files gives an archive
+        that may not reload. The command runs with the container's own environment, so reference
+        <span class="mono">$POSTGRES_USER</span> and friends instead of hardcoding credentials.
+        A failing command fails the backup. Empty means the data directory is copied as-is.
+      </p>
+    </form>
+  </section>
+
+  <section>
     <h2 class="h-label mb-3">Password protection</h2>
     <form hx-post="/apps/{{.ID}}/basic-auth" hx-target="#ba-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
       {{if .BasicAuthUser}}

@@ -85,6 +85,15 @@ func Restore(database *sql.DB, appsDir, dir, name string, live, archiveKey *secr
 				return err
 			}
 		}
+		// A logical dump is put back beside the data directory rather than
+		// loaded: replaying it into a live database is the operator's call,
+		// and it is the copy to trust over the file-level one next to it.
+		dumpSrc := filepath.Join(appsRoot, appID, "dump.sql")
+		if _, err := os.Stat(dumpSrc); err == nil {
+			if err := copyFile(dumpSrc, filepath.Join(appsDir, appID, "dump.sql"), 0o600); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

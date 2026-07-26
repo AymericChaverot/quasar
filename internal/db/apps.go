@@ -26,6 +26,7 @@ type App struct {
 	MemLimitMB    int64   // MB, 0 = unlimited
 	CustomDomains string  // comma-separated extra domains routed to this app
 	HealthPath    string  // HTTP path probed for health, empty = disabled
+	PreBackupCmd  string  // dumped into the backup archive before archiving, empty = none
 	BasicAuthUser string  // Traefik basic auth username, empty = no protection
 	BasicAuthHash string  // bcrypt hash in htpasswd format
 	SortOrder     int     // manual position in the dashboard list
@@ -46,7 +47,7 @@ func (a *App) CustomDomainList() []string {
 	return out
 }
 
-const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, created_at"
+const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, pre_backup_cmd, created_at"
 
 // scanApp reads one row and decrypts its at-rest-encrypted columns, so every
 // *App leaving the db package carries plaintext EnvContent/ComposeYAML —
@@ -56,7 +57,8 @@ func scanApp(row interface{ Scan(...any) error }, k *secrets.Keyring) (*App, err
 	err := row.Scan(&a.ID, &a.Name, &a.Subdomain, &a.DeployType, &a.ImageRef, &a.GitURL,
 		&a.GitBranch, &a.ComposeYAML, &a.Port, &a.EnvContent, &a.DataMount,
 		&a.WebhookSecret, &a.CPULimit, &a.MemLimitMB, &a.CustomDomains,
-		&a.HealthPath, &a.BasicAuthUser, &a.BasicAuthHash, &a.SortOrder, &a.CreatedAt)
+		&a.HealthPath, &a.BasicAuthUser, &a.BasicAuthHash, &a.SortOrder,
+		&a.PreBackupCmd, &a.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -65,6 +67,11 @@ func scanApp(row interface{ Scan(...any) error }, k *secrets.Keyring) (*App, err
 	}
 	if a.ComposeYAML, err = k.Decrypt(a.ComposeYAML); err != nil {
 		return nil, fmt.Errorf("app %s: decrypt compose yaml: %w", a.ID, err)
+	}
+	// Encrypted like the others: a dump command often carries the credentials
+	// it authenticates with.
+	if a.PreBackupCmd, err = k.Decrypt(a.PreBackupCmd); err != nil {
+		return nil, fmt.Errorf("app %s: decrypt pre-backup command: %w", a.ID, err)
 	}
 	return &a, nil
 }
@@ -78,12 +85,27 @@ func InsertApp(db *sql.DB, k *secrets.Keyring, a *App) error {
 	if err != nil {
 		return fmt.Errorf("encrypt compose yaml: %w", err)
 	}
+	preBackup, err := k.Encrypt(a.PreBackupCmd)
+	if err != nil {
+		return fmt.Errorf("encrypt pre-backup command: %w", err)
+	}
 	// New apps go to the bottom of the manually ordered list.
-	_, err = db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM apps))`,
+	_, err = db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, pre_backup_cmd, sort_order)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM apps))`,
 		a.ID, a.Name, a.Subdomain, a.DeployType, a.ImageRef, a.GitURL, a.GitBranch, composeYAML,
 		a.Port, envContent, a.DataMount, a.WebhookSecret, a.CPULimit, a.MemLimitMB, a.CustomDomains,
-		a.HealthPath, a.BasicAuthUser, a.BasicAuthHash)
+		a.HealthPath, a.BasicAuthUser, a.BasicAuthHash, preBackup)
+	return err
+}
+
+// UpdateAppPreBackup stores the command run inside the container before a
+// backup, whose stdout is archived as the app's dump.
+func UpdateAppPreBackup(db *sql.DB, k *secrets.Keyring, id, command string) error {
+	enc, err := k.Encrypt(command)
+	if err != nil {
+		return fmt.Errorf("encrypt pre-backup command: %w", err)
+	}
+	_, err = db.Exec("UPDATE apps SET pre_backup_cmd = ? WHERE id = ?", enc, id)
 	return err
 }
 
@@ -166,15 +188,15 @@ func SubdomainTaken(db *sql.DB, subdomain string) (bool, error) {
 // already written with it and need a restart — the restored rows are moved onto
 // the live key in place.
 func ResealApps(database *sql.DB, from, to *secrets.Keyring) (int, error) {
-	rows, err := database.Query("SELECT id, env_content, compose_yaml FROM apps")
+	rows, err := database.Query("SELECT id, env_content, compose_yaml, pre_backup_cmd FROM apps")
 	if err != nil {
 		return 0, err
 	}
-	type row struct{ id, env, compose string }
+	type row struct{ id, env, compose, preBackup string }
 	var all []row
 	for rows.Next() {
 		var r row
-		if err := rows.Scan(&r.id, &r.env, &r.compose); err != nil {
+		if err := rows.Scan(&r.id, &r.env, &r.compose, &r.preBackup); err != nil {
 			rows.Close()
 			return 0, err
 		}
@@ -197,14 +219,22 @@ func ResealApps(database *sql.DB, from, to *secrets.Keyring) (int, error) {
 		if err != nil {
 			return resealed, fmt.Errorf("app %s: open compose yaml with the supplied key: %w", r.id, err)
 		}
+		preBackup, err := from.Decrypt(r.preBackup)
+		if err != nil {
+			return resealed, fmt.Errorf("app %s: open pre-backup command with the supplied key: %w", r.id, err)
+		}
 		if env, err = to.Encrypt(env); err != nil {
 			return resealed, fmt.Errorf("app %s: reseal env: %w", r.id, err)
 		}
 		if compose, err = to.Encrypt(compose); err != nil {
 			return resealed, fmt.Errorf("app %s: reseal compose yaml: %w", r.id, err)
 		}
-		if _, err := database.Exec("UPDATE apps SET env_content = ?, compose_yaml = ? WHERE id = ?",
-			env, compose, r.id); err != nil {
+		if preBackup, err = to.Encrypt(preBackup); err != nil {
+			return resealed, fmt.Errorf("app %s: reseal pre-backup command: %w", r.id, err)
+		}
+		if _, err := database.Exec(
+			"UPDATE apps SET env_content = ?, compose_yaml = ?, pre_backup_cmd = ? WHERE id = ?",
+			env, compose, preBackup, r.id); err != nil {
 			return resealed, fmt.Errorf("app %s: %w", r.id, err)
 		}
 		resealed++

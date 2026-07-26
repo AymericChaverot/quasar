@@ -51,7 +51,7 @@ func TestRestoreAcrossHostsWithArchiveKey(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	name, err := Run(source.db, source.appsDir, source.backups)
+	name, err := Run(source.db, source.keyring, source.appsDir, source.backups, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestRestoreAcrossHostsWithoutKeyLeavesSecretsUnreadable(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	name, err := Run(source.db, source.appsDir, source.backups)
+	name, err := Run(source.db, source.keyring, source.appsDir, source.backups, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestRestoreSameHostNeedsNoKey(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	name, err := Run(h.db, h.appsDir, h.backups)
+	name, err := Run(h.db, h.keyring, h.appsDir, h.backups, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestRestoreWithWrongKeyFails(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	name, err := Run(source.db, source.appsDir, source.backups)
+	name, err := Run(source.db, source.keyring, source.appsDir, source.backups, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

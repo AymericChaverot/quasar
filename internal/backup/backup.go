@@ -18,6 +18,7 @@ import (
 
 	"quasar/internal/db"
 	"quasar/internal/notify"
+	"quasar/internal/secrets"
 )
 
 type Info struct {
@@ -26,8 +27,18 @@ type Info struct {
 	Date   time.Time
 }
 
+// Dump runs an app's pre-backup command inside its container and returns what
+// it wrote to stdout. Returning nil output with a nil error means there was
+// nothing to dump (the app is not running), which is not a failure.
+type Dump func(a *db.App) ([]byte, error)
+
 // Run creates a new backup archive in dir and applies the retention policy.
-func Run(database *sql.DB, appsDir, dir string) (string, error) {
+//
+// dump may be nil, in which case pre-backup commands are skipped. Without it
+// the archive holds only a file-level copy of each app's data directory, which
+// for a running database means copying its files mid-write — a snapshot that
+// can be unrecoverable however healthy the archive looks.
+func Run(database *sql.DB, k *secrets.Keyring, appsDir, dir string, dump Dump) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
@@ -59,6 +70,32 @@ func Run(database *sql.DB, appsDir, dir string) (string, error) {
 
 	if err := addFile(tw, snap, "database.sqlite"); err != nil {
 		return fail(err)
+	}
+
+	// Logical dumps first, and before the data directories are walked, so a
+	// database's dump is as close as possible to the rest of the archive.
+	if dump != nil {
+		apps, err := db.ListApps(database, k)
+		if err != nil {
+			return fail(fmt.Errorf("list apps for pre-backup commands: %w", err))
+		}
+		for _, a := range apps {
+			if a.PreBackupCmd == "" {
+				continue
+			}
+			out, err := dump(a)
+			if err != nil {
+				// Failing loudly is the point: a backup that quietly skipped
+				// the one command that makes it restorable is worse than none.
+				return fail(fmt.Errorf("pre-backup command for %s: %w", a.Name, err))
+			}
+			if len(out) == 0 {
+				continue // app not running, nothing to dump
+			}
+			if err := addBytes(tw, out, "apps/"+a.ID+"/dump.sql"); err != nil {
+				return fail(err)
+			}
+		}
 	}
 
 	// Include every app's data/ and .env (not source/ — that's rebuildable).
@@ -131,14 +168,14 @@ func ValidName(name string) bool {
 }
 
 // StartScheduler runs a daily backup when the auto-backup setting is enabled.
-func StartScheduler(database *sql.DB, appsDir, dir string) {
+func StartScheduler(database *sql.DB, k *secrets.Keyring, appsDir, dir string, dump Dump) {
 	go func() {
 		for {
 			time.Sleep(24 * time.Hour)
 			if db.GetSetting(database, db.SettingBackupAuto) != "true" {
 				continue
 			}
-			if name, err := Run(database, appsDir, dir); err != nil {
+			if name, err := Run(database, k, appsDir, dir, dump); err != nil {
 				log.Printf("scheduled backup: %v", err)
 				notify.Send(database, "Quasar: scheduled backup FAILED: "+err.Error())
 			} else {
@@ -157,6 +194,21 @@ func applyRetention(database *sql.DB, dir string) {
 	for i := keep; i < len(backups); i++ {
 		os.Remove(filepath.Join(dir, backups[i].Name))
 	}
+}
+
+// addBytes writes in-memory content as an archive entry, for artifacts that
+// never touch the host's disk (a dump streamed out of a container).
+func addBytes(tw *tar.Writer, content []byte, name string) error {
+	if err := tw.WriteHeader(&tar.Header{
+		Name:    name,
+		Mode:    0o600, // a dump is as sensitive as the database it came from
+		Size:    int64(len(content)),
+		ModTime: time.Now(),
+	}); err != nil {
+		return err
+	}
+	_, err := tw.Write(content)
+	return err
 }
 
 func addFile(tw *tar.Writer, path, name string) error {

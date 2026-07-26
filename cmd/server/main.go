@@ -48,7 +48,7 @@ func main() {
 	}
 
 	monitor.Start(database, dock, cfg.HostRootPath, keyring)
-	backup.StartScheduler(database, cfg.AppsDir, cfg.BackupsDir)
+	backup.StartScheduler(database, keyring, cfg.AppsDir, cfg.BackupsDir, dock.DumpForBackup)
 	updater.StartChecker(database, cfg.GitHubRepo)
 
 	srv, err := server.New(cfg, database, dock, keyring)

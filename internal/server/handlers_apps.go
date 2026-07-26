@@ -310,6 +310,20 @@ func (s *Server) handleAppMove(w http.ResponseWriter, r *http.Request) {
 	s.handleAppsPartial(w, r)
 }
 
+// handleAppPreBackup saves the command run in the container before a backup,
+// whose stdout is archived as the app's dump.
+func (s *Server) handleAppPreBackup(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	if err := db.UpdateAppPreBackup(s.db, s.keyring, a.ID, strings.TrimSpace(r.FormValue("pre_backup_cmd"))); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.renderPartial(w, "env_saved", nil)
+}
+
 // handleAppHealth saves the HTTP health check path (empty disables checks).
 func (s *Server) handleAppHealth(w http.ResponseWriter, r *http.Request) {
 	a := s.getApp(w, r)

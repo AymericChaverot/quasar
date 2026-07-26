@@ -3,9 +3,11 @@ package docker
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -13,6 +15,10 @@ import (
 
 	"quasar/internal/db"
 )
+
+// dumpTimeout bounds a pre-backup command. Generous, because dumping a large
+// database is slow, but bounded so a hung command cannot stall backups forever.
+const dumpTimeout = 30 * time.Minute
 
 // containerFor resolves the container ID to target for an app: the container
 // currently serving it, or the first container of a compose project.
@@ -64,6 +70,64 @@ func (c *Client) RunCommand(ctx context.Context, a *db.App, command string) (str
 		return buf.String(), fmt.Errorf("exit code %d", inspect.ExitCode)
 	}
 	return buf.String(), nil
+}
+
+// CaptureCommand runs a command in the app's container and returns its stdout
+// alone, keeping stderr for the error message.
+//
+// RunCommand merges the two, which is right for a task's log but ruins a dump:
+// pg_dump and mysqldump write progress and warnings to stderr, and mixing that
+// into the SQL produces an archive that will not reload.
+func (c *Client) CaptureCommand(ctx context.Context, a *db.App, command string) ([]byte, error) {
+	target, err := c.containerFor(ctx, a)
+	if err != nil {
+		return nil, err
+	}
+	exec, err := c.api.ContainerExecCreate(ctx, target, container.ExecOptions{
+		Cmd:          []string{"/bin/sh", "-c", command},
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("exec create: %w", err)
+	}
+	resp, err := c.api.ContainerExecAttach(ctx, exec.ID, container.ExecStartOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("exec attach: %w", err)
+	}
+	defer resp.Close()
+
+	var stdout, stderr bytes.Buffer
+	if _, err := stdcopy.StdCopy(&stdout, &stderr, resp.Reader); err != nil {
+		return nil, fmt.Errorf("read command output: %w", err)
+	}
+
+	inspect, err := c.api.ContainerExecInspect(ctx, exec.ID)
+	if err != nil {
+		return nil, err
+	}
+	if inspect.ExitCode != 0 {
+		return nil, fmt.Errorf("exit code %d: %s", inspect.ExitCode, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.Bytes(), nil
+}
+
+// DumpForBackup runs an app's pre-backup command, returning nil output when the
+// app has no running container. A stopped database is not writing, so its data
+// directory is already consistent in the archive and there is nothing to fail
+// the backup over.
+func (c *Client) DumpForBackup(a *db.App) ([]byte, error) {
+	if a.PreBackupCmd == "" {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), dumpTimeout)
+	defer cancel()
+
+	out, err := c.CaptureCommand(ctx, a, a.PreBackupCmd)
+	if errors.Is(err, ErrNoContainer) {
+		return nil, nil
+	}
+	return out, err
 }
 
 // InteractiveShell opens a TTY /bin/sh inside the app's container and returns

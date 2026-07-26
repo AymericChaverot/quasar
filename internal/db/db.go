@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS apps (
 	basic_auth_user TEXT NOT NULL DEFAULT '',
 	basic_auth_hash TEXT NOT NULL DEFAULT '',
 	sort_order     INTEGER NOT NULL DEFAULT 0,
+	pre_backup_cmd TEXT NOT NULL DEFAULT '',
 	created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -126,6 +127,7 @@ var migrations = []string{
 	"ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0",
 	"ALTER TABLE sessions ADD COLUMN pending_2fa INTEGER NOT NULL DEFAULT 0",
 	"ALTER TABLE apps ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
+	"ALTER TABLE apps ADD COLUMN pre_backup_cmd TEXT NOT NULL DEFAULT ''",
 }
 
 func Open(path string) (*sql.DB, error) {
