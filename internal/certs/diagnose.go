@@ -84,10 +84,21 @@ func explain(host, rootDomain string, hostIPs, serverIPs []string) string {
 		}
 		return msg
 	}
-	if len(serverIPs) > 0 && !overlap(hostIPs, serverIPs) {
-		return host + " resolves to " + strings.Join(hostIPs, ", ") +
-			", but this server answers on " + strings.Join(serverIPs, ", ") +
-			". Let's Encrypt validates against the address DNS returns."
+	if len(serverIPs) > 0 {
+		switch stray := except(hostIPs, serverIPs); {
+		case len(stray) == len(hostIPs):
+			return host + " resolves to " + strings.Join(hostIPs, ", ") +
+				", but this server answers on " + strings.Join(serverIPs, ", ") +
+				". Let's Encrypt validates against the address DNS returns."
+		case len(stray) > 0:
+			// The nasty one, because the site loads: the browser happens to
+			// pick this server while Let's Encrypt picks the other address and
+			// gets whatever answers there.
+			return host + " resolves to this server and also to " + strings.Join(stray, ", ") +
+				". Let's Encrypt is served by whichever address it is handed, so issuance keeps" +
+				" failing while the extra record exists — on a root domain this is usually the" +
+				" registrar's own parking or web-hosting record, left behind in the zone."
+		}
 	}
 	return "DNS is correct but no certificate has been issued yet. Traefik requests one right after a deploy; if it does not appear within a minute, its logs carry the ACME error."
 }
@@ -134,13 +145,17 @@ func lookup(ctx context.Context, host string) []string {
 	return addrs
 }
 
-func overlap(a, b []string) bool {
+// except returns the addresses in a that are not in b.
+func except(a, b []string) []string {
+	var out []string
 	for _, x := range a {
+		found := false
 		for _, y := range b {
-			if x == y {
-				return true
-			}
+			found = found || x == y
+		}
+		if !found {
+			out = append(out, x)
 		}
 	}
-	return false
+	return out
 }

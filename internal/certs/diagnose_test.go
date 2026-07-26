@@ -78,3 +78,32 @@ func TestExplainWrongAddress(t *testing.T) {
 		t.Errorf("explain() = %q, want no DNS complaint when the address matches", ok)
 	}
 }
+
+// The apex still carrying the registrar's parking record alongside the VPS:
+// the browser reaches this server, Let's Encrypt reaches the parking page, and
+// nothing about the site looks wrong. Reporting only "no overlap" would call
+// this DNS correct.
+func TestExplainLeftoverRecordBesideTheServer(t *testing.T) {
+	msg := explain("example.com", "example.com",
+		[]string{"203.0.113.7", "213.186.33.5"}, []string{"203.0.113.7"})
+
+	if !strings.Contains(msg, "213.186.33.5") {
+		t.Errorf("explain() = %q, want the stray address named", msg)
+	}
+	if strings.Contains(msg, "203.0.113.7,") {
+		t.Errorf("explain() = %q, want this server's own address left out of the stray list", msg)
+	}
+	if !strings.Contains(msg, "also") {
+		t.Errorf("explain() = %q, want it to say the name resolves to both", msg)
+	}
+}
+
+func TestExcept(t *testing.T) {
+	got := except([]string{"1.1.1.1", "2.2.2.2", "3.3.3.3"}, []string{"2.2.2.2"})
+	if len(got) != 2 || got[0] != "1.1.1.1" || got[1] != "3.3.3.3" {
+		t.Errorf("except() = %v, want [1.1.1.1 3.3.3.3]", got)
+	}
+	if got := except([]string{"1.1.1.1"}, []string{"1.1.1.1"}); len(got) != 0 {
+		t.Errorf("except() = %v, want empty", got)
+	}
+}
