@@ -136,6 +136,7 @@ func TestExecuteTemplates(t *testing.T) {
 		}},
 		{"status_badge", "running"},
 		{"status_badge", "not deployed"},
+		{"log_pane", "/apps/abcd1234/logs"},
 		{"tls_status", TLSView{
 			AppID: "abcd1234", Missing: true, IsAdmin: true,
 			Checks: []certs.HostCheck{

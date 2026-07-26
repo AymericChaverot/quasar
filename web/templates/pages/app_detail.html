@@ -183,9 +183,7 @@
     <h2 class="h-label !mb-0">Live logs</h2>
     <a href="/logs?app={{.ID}}" class="link text-sm">Search history</a>
   </div>
-  <div hx-ext="sse" sse-connect="/apps/{{.ID}}/logs">
-    <div id="log-pane" sse-swap="message" hx-swap="beforeend scroll:bottom" class="log-pane"></div>
-  </div>
+  {{template "log_pane" (printf "/apps/%s/logs" .ID)}}
 </section>
 
 {{if $.IsAdmin}}

@@ -30,9 +30,7 @@
 
 <section class="mt-8">
   <h2 class="h-label mb-3">Live logs</h2>
-  <div hx-ext="sse" sse-connect="/system/containers/{{.Name}}/logs">
-    <div id="log-pane" sse-swap="message" hx-swap="beforeend scroll:bottom" class="log-pane"></div>
-  </div>
+  {{template "log_pane" (printf "/system/containers/%s/logs" .Name)}}
 </section>
 {{end}}
 {{end}}
