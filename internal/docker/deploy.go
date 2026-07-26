@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -132,8 +131,13 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 		if err != nil {
 			return fmt.Errorf("pull %s: %w", imageRef, err)
 		}
-		io.Copy(io.Discard, rc) // wait for the pull to finish
-		rc.Close()
+		// The daemon accepts the request before it knows whether the pull can
+		// succeed and reports a bad tag or a rejected credential inside the
+		// stream, so draining it without reading is how a deploy ended up
+		// failing later with a confusing "No such image".
+		if err := drainPull(rc); err != nil {
+			return fmt.Errorf("pull %s: %w", imageRef, err)
+		}
 	}
 
 	previous := c.appContainers(ctx, a.ID)
