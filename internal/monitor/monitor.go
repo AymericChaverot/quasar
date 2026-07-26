@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -155,6 +156,10 @@ func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyri
 		}
 		if time.Since(lastPrune) > time.Hour {
 			db.PruneTimeSeries(database, time.Now().Add(-retention))
+			db.PruneLogs(database)
+			if freed := db.Reclaim(database); freed > 0 {
+				log.Printf("reclaimed %d MB of database space", freed>>20)
+			}
 			lastPrune = time.Now()
 		}
 	}

@@ -81,6 +81,35 @@ func PruneTimeSeries(db *sql.DB, olderThan time.Time) {
 	db.Exec("DELETE FROM app_logs WHERE ts < ?", olderThan)
 }
 
+// Reclaim gives the disk back the space deleted rows left behind, returning
+// how many bytes were recovered (0 when it chose not to run).
+//
+// Deleting rows only moves their pages onto SQLite's free list for reuse, so a
+// rolling retention window never shrinks the file: it grows to its high-water
+// mark and stays there. VACUUM rewrites the database to compact it, which
+// needs room for a second copy and blocks other queries, so it only runs once
+// there is a worthwhile amount to recover.
+func Reclaim(db *sql.DB) int64 {
+	var pages, free, pageSize int64
+	if db.QueryRow("PRAGMA page_count").Scan(&pages) != nil || pages == 0 {
+		return 0
+	}
+	if db.QueryRow("PRAGMA freelist_count").Scan(&free) != nil {
+		return 0
+	}
+	if db.QueryRow("PRAGMA page_size").Scan(&pageSize) != nil {
+		return 0
+	}
+	recoverable := free * pageSize
+	if free*100/pages < 20 || recoverable < 16<<20 {
+		return 0
+	}
+	if _, err := db.Exec("VACUUM"); err != nil {
+		return 0
+	}
+	return recoverable
+}
+
 func DeleteAppTimeSeries(db *sql.DB, appID string) {
 	db.Exec("DELETE FROM app_metrics WHERE app_id = ?", appID)
 	db.Exec("DELETE FROM health_history WHERE app_id = ?", appID)

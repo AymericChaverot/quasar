@@ -75,3 +75,38 @@ func SearchLogs(database *sql.DB, appID, query string, limit int) ([]LogLine, er
 func DeleteAppLogs(database *sql.DB, appID string) {
 	database.Exec("DELETE FROM app_logs WHERE app_id = ?", appID)
 }
+
+// MaxLogRowsPerApp caps stored output per app on top of the time-based
+// retention. A chatty container writes millions of lines well within the
+// retention window, and this database sits on the same small disk as the
+// images, the build cache and the backups.
+const MaxLogRowsPerApp = 50_000
+
+// PruneLogs enforces the per-app row cap, keeping the newest lines.
+func PruneLogs(database *sql.DB) {
+	// The app IDs are collected before any delete runs: the pool is limited to
+	// a single connection, so writing while a query is still open would
+	// deadlock against the reader holding it.
+	rows, err := database.Query("SELECT DISTINCT app_id FROM app_logs")
+	if err != nil {
+		return
+	}
+	var appIDs []string
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			appIDs = append(appIDs, id)
+		}
+	}
+	rows.Close()
+
+	for _, id := range appIDs {
+		database.Exec(`
+			DELETE FROM app_logs WHERE id IN (
+				SELECT id FROM app_logs
+				WHERE app_id = ?
+				ORDER BY ts DESC, id DESC
+				LIMIT -1 OFFSET ?
+			)`, id, MaxLogRowsPerApp)
+	}
+}
