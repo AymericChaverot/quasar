@@ -184,6 +184,7 @@ func (s *Server) routes() {
 	s.admin("POST /apps/{id}/stop", s.appAction("stop"))
 	s.admin("POST /apps/{id}/restart", s.appAction("restart"))
 	s.admin("POST /apps/{id}/redeploy", s.handleAppRedeploy)
+	s.admin("POST /apps/{id}/update", s.handleAppUpdate)
 	s.admin("POST /apps/{id}/rollback", s.handleAppRollback)
 	s.admin("POST /apps/{id}/delete", s.handleAppDelete)
 	s.admin("POST /apps/{id}/env", s.handleAppEnvSave)

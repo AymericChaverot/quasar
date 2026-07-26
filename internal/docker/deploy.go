@@ -40,11 +40,25 @@ const (
 
 var readyClient = &http.Client{Timeout: 5 * time.Second}
 
-// DeployAsync launches a deploy in the background, records it in the
-// deployment history and notifies on failure. The UI polls Deploying().
+// DeployAsync rebuilds the app's containers from what is already on the
+// server: the image already pulled, the source already cloned. It is what
+// applies a configuration change — new env vars, new limits, new Traefik
+// middlewares — without also moving the app onto code nobody has reviewed.
+//
+// It runs in the background, is recorded in the deployment history and
+// notifies on failure. The UI polls Deploying().
 func (c *Client) DeployAsync(a *db.App, source string) {
 	c.runAsync(a, source, func(ctx context.Context) (string, error) {
-		return c.deploy(ctx, a)
+		return c.deploy(ctx, a, false)
+	})
+}
+
+// UpdateAsync fetches the newest version of the app first — a git pull, an
+// image pull, a compose pull — and then deploys it. This is the one that
+// changes what the app runs.
+func (c *Client) UpdateAsync(a *db.App, source string) {
+	c.runAsync(a, source, func(ctx context.Context) (string, error) {
+		return c.deploy(ctx, a, true)
 	})
 }
 
@@ -79,27 +93,30 @@ func (c *Client) runAsync(a *db.App, source string, fn func(ctx context.Context)
 	}()
 }
 
-// deploy runs the full deployment for the app's type and returns the image
-// tag that ended up running (empty for compose apps).
-func (c *Client) deploy(ctx context.Context, a *db.App) (string, error) {
+// deploy runs the full deployment for the app's type and returns the image tag
+// that ended up running (empty for compose apps). fetch decides whether it
+// first goes and gets the newest version from the registry or the repository.
+func (c *Client) deploy(ctx context.Context, a *db.App, fetch bool) (string, error) {
 	if err := c.EnsureAppDirs(a); err != nil {
 		return "", fmt.Errorf("app dirs: %w", err)
 	}
 	switch a.DeployType {
 	case "image":
-		return a.ImageRef, c.deployImage(ctx, a, a.ImageRef, true)
+		return a.ImageRef, c.deployImage(ctx, a, a.ImageRef, fetch)
 	case "git":
-		tag, err := c.buildFromGit(ctx, a)
+		tag, err := c.buildFromGit(ctx, a, fetch)
 		if err != nil {
 			return "", err
 		}
+		// The image was just built from the local source, so there is nothing
+		// to pull for it either way.
 		if err := c.deployImage(ctx, a, tag, false); err != nil {
 			return tag, err
 		}
 		c.pruneBuilds(ctx, a.ID)
 		return tag, nil
 	case "compose":
-		return "", c.deployCompose(ctx, a)
+		return "", c.deployCompose(ctx, a, fetch)
 	default:
 		return "", fmt.Errorf("unknown deploy type %q", a.DeployType)
 	}
@@ -126,6 +143,14 @@ func (c *Client) registryAuth(ref string) string {
 // or a container that died on startup left the app with no container at all
 // and nothing to roll back to.
 func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pull bool) error {
+	// A deploy that was told not to fetch still cannot run an image that is not
+	// there: a first deploy, an image pruned for disk, a restored install. The
+	// alternative is the daemon failing later with "No such image".
+	if !pull {
+		if _, err := c.api.ImageInspect(ctx, imageRef); err != nil {
+			pull = true
+		}
+	}
 	if pull {
 		rc, err := c.api.ImagePull(ctx, imageRef, image.PullOptions{RegistryAuth: c.registryAuth(imageRef)})
 		if err != nil {
@@ -283,23 +308,29 @@ func probeOnce(url string) error {
 // gitURLWithToken injects the platform git token into https clone URLs so
 // private repositories work without per-app configuration.
 func (c *Client) gitURLWithToken(url string) string {
+	// Checked before the lookup: an ssh remote or one that already carries
+	// credentials has no use for the token, and no reason to query for it.
+	if !strings.HasPrefix(url, "https://") || strings.Contains(url, "@") {
+		return url
+	}
 	token := db.GetSetting(c.dbc, db.SettingGitToken)
-	if token == "" || !strings.HasPrefix(url, "https://") || strings.Contains(url, "@") {
+	if token == "" {
 		return url
 	}
 	return "https://oauth2:" + token + "@" + strings.TrimPrefix(url, "https://")
 }
 
-// buildFromGit clones (or updates) the repo into apps/<id>/source and builds
-// a timestamped image from its Dockerfile, so past builds stay available for
-// rollback until pruneBuilds trims them.
-func (c *Client) buildFromGit(ctx context.Context, a *db.App) (string, error) {
+// syncSource makes apps/<id>/source hold the code to build and returns its
+// path: a clone when there is nothing checked out, a fast-forward to the
+// branch head when pull is set, and otherwise the commit already on disk.
+func (c *Client) syncSource(ctx context.Context, a *db.App, pull bool) (string, error) {
 	src := filepath.Join(c.AppDir(a.ID), "source")
 
 	var cmd *exec.Cmd
-	if _, err := os.Stat(filepath.Join(src, ".git")); err == nil {
-		cmd = exec.CommandContext(ctx, "git", "-C", src, "pull", "--ff-only")
-	} else {
+	switch _, err := os.Stat(filepath.Join(src, ".git")); {
+	case err != nil:
+		// No checkout to build from, so this clones whether or not an update
+		// was asked for.
 		os.RemoveAll(src)
 		args := []string{"clone", "--depth", "1"}
 		if a.GitBranch != "" {
@@ -307,9 +338,29 @@ func (c *Client) buildFromGit(ctx context.Context, a *db.App) (string, error) {
 		}
 		args = append(args, c.gitURLWithToken(a.GitURL), src)
 		cmd = exec.CommandContext(ctx, "git", args...)
+	case pull:
+		cmd = exec.CommandContext(ctx, "git", "-C", src, "pull", "--ff-only")
+	default:
+		return src, nil // rebuild the commit already there
 	}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return src, nil
+}
+
+// buildFromGit clones (or updates) the repo into apps/<id>/source and builds
+// a timestamped image from its Dockerfile, so past builds stay available for
+// rollback until pruneBuilds trims them.
+//
+// pull decides whether the existing checkout is advanced to the branch head
+// first. Without it the image is rebuilt from the commit already on disk,
+// which is what makes a redeploy repeatable: the same code, with whatever
+// configuration changed around it.
+func (c *Client) buildFromGit(ctx context.Context, a *db.App, pull bool) (string, error) {
+	src, err := c.syncSource(ctx, a, pull)
+	if err != nil {
+		return "", err
 	}
 
 	buildCtx, err := archive.TarWithOptions(src, &archive.TarOptions{})
@@ -368,10 +419,21 @@ func (c *Client) BuildTags(ctx context.Context, appID string) []string {
 
 // deployCompose writes the compose file and shells out to the docker compose
 // CLI (installed in the dashboard image, pointed at the socket proxy).
-func (c *Client) deployCompose(ctx context.Context, a *db.App) error {
+//
+// `up` only pulls an image it does not already have, so a compose app pinned
+// to a moving tag would otherwise keep running the copy it was first deployed
+// with, forever. pull is what makes it advance.
+func (c *Client) deployCompose(ctx context.Context, a *db.App, pull bool) error {
 	dir := c.AppDir(a.ID)
 	if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte(a.ComposeYAML), 0o644); err != nil {
 		return err
+	}
+	if pull {
+		// --ignore-buildable: a service with a build context has no image to
+		// pull, and its absence from the registry is not an error.
+		if err := c.compose(ctx, a.ID, "pull", "--ignore-buildable"); err != nil {
+			return err
+		}
 	}
 	return c.compose(ctx, a.ID, "up", "-d", "--build", "--remove-orphans")
 }

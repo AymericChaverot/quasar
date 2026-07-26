@@ -145,7 +145,9 @@ func (s *Server) handleAppCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.dock.DeployAsync(a, "manual")
+	// A first deploy has nothing local to reuse: it has to pull the image or
+	// clone the repository.
+	s.dock.UpdateAsync(a, "create")
 	s.audit(r, "app.create", a.Name, a.Subdomain+" ("+a.DeployType+")")
 	http.Redirect(w, r, "/apps/"+a.ID, http.StatusSeeOther)
 }
@@ -251,6 +253,9 @@ func (s *Server) appAction(action string) http.HandlerFunc {
 	}
 }
 
+// handleAppRedeploy re-creates the container from what is already on the
+// server, which is how a configuration change is applied without also picking
+// up whatever has been pushed since.
 func (s *Server) handleAppRedeploy(w http.ResponseWriter, r *http.Request) {
 	a := s.getApp(w, r)
 	if a == nil {
@@ -258,6 +263,18 @@ func (s *Server) handleAppRedeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	s.dock.DeployAsync(a, "manual")
 	s.audit(r, "app.deploy", a.Name, "")
+	s.renderPartial(w, "app_status_panel", s.appView(r, a))
+}
+
+// handleAppUpdate goes and gets the newest version first: a git pull and
+// rebuild, a fresh image pull, or a compose pull.
+func (s *Server) handleAppUpdate(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	s.dock.UpdateAsync(a, "update")
+	s.audit(r, "app.update", a.Name, a.DeployType)
 	s.renderPartial(w, "app_status_panel", s.appView(r, a))
 }
 

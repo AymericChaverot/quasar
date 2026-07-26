@@ -133,6 +133,9 @@ func (s *Server) handleAPIApp(w http.ResponseWriter, r *http.Request) {
 
 // handleAPIDeploy triggers a deploy and returns immediately: a deploy outlives
 // any sensible request timeout, so the caller polls the app for its state.
+//
+// It fetches first, like the webhook: what calls this is a pipeline that has
+// just pushed something and expects to see it live.
 func (s *Server) handleAPIDeploy(w http.ResponseWriter, r *http.Request) {
 	a, err := db.GetApp(s.db, s.keyring, r.PathValue("id"))
 	if err != nil {
@@ -143,7 +146,7 @@ func (s *Server) handleAPIDeploy(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusConflict, "a deploy is already in progress")
 		return
 	}
-	s.dock.DeployAsync(a, "api")
+	s.dock.UpdateAsync(a, "api")
 	s.auditAPI(r, "app.deploy", a.Name, "triggered by API token")
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "deploying", "app": a.ID})
 }

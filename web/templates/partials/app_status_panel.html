@@ -9,9 +9,15 @@
     <button hx-post="/apps/{{.ID}}/start" hx-target="#status-panel" hx-swap="innerHTML" class="btn">{{template "icon_play"}}Start</button>
     <button hx-post="/apps/{{.ID}}/stop" hx-target="#status-panel" hx-swap="innerHTML" class="btn">{{template "icon_stop"}}Stop</button>
     <button hx-post="/apps/{{.ID}}/restart" hx-target="#status-panel" hx-swap="innerHTML" class="btn">{{template "icon_restart"}}Restart</button>
+    {{/* Redeploy re-runs what is already on the server; Update goes and gets
+         the newest version first. Two buttons because the second one is the
+         only way to change what the app runs, and should be a deliberate act. */}}
     <button hx-post="/apps/{{.ID}}/redeploy" hx-target="#status-panel" hx-swap="innerHTML"
-            hx-confirm="Redeploy {{.Name}}? The container will be replaced."
-            class="btn-primary">{{template "icon_deploy"}}Redeploy</button>
+            hx-confirm="Redeploy {{.Name}}? The container is replaced, running the same {{if eq .DeployType "git"}}commit{{else}}image{{end}} as now."
+            class="btn">{{template "icon_deploy"}}Redeploy</button>
+    <button hx-post="/apps/{{.ID}}/update" hx-target="#status-panel" hx-swap="innerHTML"
+            hx-confirm="Update {{.Name}}? {{if eq .DeployType "git"}}The repository is pulled and the image rebuilt from the branch head.{{else if eq .DeployType "compose"}}Every image in the compose file is pulled again.{{else}}The image {{.ImageRef}} is pulled again.{{end}} Roll back from the deployment history if it goes wrong."
+            class="btn-primary">{{template "icon_deploy"}}Update</button>
   </div>
   {{else}}
   <span class="chip">read-only</span>

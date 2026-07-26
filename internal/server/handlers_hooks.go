@@ -27,7 +27,8 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "a deploy is already in progress", http.StatusTooManyRequests)
 		return
 	}
-	s.dock.DeployAsync(a, "webhook")
+	// A push webhook exists to bring the new commit live, so it fetches.
+	s.dock.UpdateAsync(a, "webhook")
 	s.auditAs(r, db.ActorWebhook, "app.deploy", a.Name, "triggered by webhook")
 	w.WriteHeader(http.StatusAccepted)
 	w.Write([]byte("deploy triggered\n"))
