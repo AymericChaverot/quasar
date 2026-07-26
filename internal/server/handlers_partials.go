@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 
+	"quasar/internal/certs"
 	"quasar/internal/db"
 	"quasar/internal/vps"
 )
@@ -63,6 +64,18 @@ func (s *Server) handleAppStatusPartial(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	s.renderPartial(w, "app_status_panel", s.appView(r, a))
+}
+
+// handleAppTLSPartial reports the certificate state of every hostname the app
+// is routed on, and diagnoses the ones without. Loaded lazily, since it makes
+// DNS queries a page render should not block on.
+func (s *Server) handleAppTLSPartial(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	hosts := append([]string{s.appView(r, a).Host()}, a.CustomDomainList()...)
+	s.renderPartial(w, "tls_status", certs.Diagnose(r.Context(), s.heldCerts(), s.cfg.Domain, hosts))
 }
 
 // DeploymentView adds template-friendly context to a deployment row.

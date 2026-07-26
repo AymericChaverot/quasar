@@ -208,6 +208,7 @@ func (s *Server) routes() {
 	s.viewer("GET /partials/apps/{id}/stats", s.handleAppStatsPartial)
 	s.viewer("GET /partials/apps/{id}/status", s.handleAppStatusPartial)
 	s.viewer("GET /partials/apps/{id}/deployments", s.handleAppDeploymentsPartial)
+	s.viewer("GET /partials/apps/{id}/tls", s.handleAppTLSPartial)
 	s.viewer("GET /partials/metrics", s.handleServerMetricsPartial)
 	s.viewer("GET /partials/apps/{id}/metrics", s.handleAppMetricsPartial)
 }

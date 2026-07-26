@@ -51,10 +51,7 @@ func (s *Server) systemData(r *http.Request) map[string]any {
 	if du, err := s.dock.DiskUsage(r.Context()); err == nil {
 		data["Disk"] = du
 	}
-	acmePath := filepath.Join(s.cfg.HostRootPath, filepath.Dir(s.cfg.AppsDir), "traefik", "acme.json")
-	if list, err := certs.Collect(acmePath); err == nil {
-		data["Certs"] = list
-	}
+	data["Certs"] = s.heldCerts()
 	if apps, err := db.ListApps(s.db, s.keyring); err == nil {
 		var sizes []AppSize
 		for _, a := range apps {
@@ -67,6 +64,20 @@ func (s *Server) systemData(r *http.Request) map[string]any {
 		data["AppSizes"] = sizes
 	}
 	return data
+}
+
+// acmePath is Traefik's ACME store as the dashboard container sees it, through
+// the read-only mount of the host filesystem.
+func (s *Server) acmePath() string {
+	return filepath.Join(s.cfg.HostRootPath, filepath.Dir(s.cfg.AppsDir), "traefik", "acme.json")
+}
+
+// heldCerts is what Traefik has actually obtained. An unreadable store yields
+// nothing rather than an error: it just means no certificate exists yet, which
+// is exactly what the pages using this need to show.
+func (s *Server) heldCerts() []certs.Cert {
+	list, _ := certs.Collect(s.acmePath())
+	return list
 }
 
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {

@@ -1,0 +1,15 @@
+{{define "tls_status"}}
+<div class="card">
+  {{range .}}
+  <div class="env-row !flex-wrap">
+    <span class="mono flex-1 text-sm">{{.Host}}</span>
+    {{if .HasCert}}
+    <span class="badge badge-ok"><span class="dot"></span>certificate valid, {{.DaysLeft}}d left</span>
+    {{else}}
+    <span class="badge badge-err"><span class="dot"></span>no certificate</span>
+    {{end}}
+    {{if .Problem}}<p class="help !mt-0 w-full">{{.Problem}}</p>{{end}}
+  </div>
+  {{end}}
+</div>
+{{end}}

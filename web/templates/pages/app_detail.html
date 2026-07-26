@@ -17,6 +17,13 @@
   {{template "app_status_panel" .}}
 </div>
 
+<section class="mt-8">
+  <h2 class="h-label mb-3">TLS</h2>
+  <div hx-get="/partials/apps/{{.ID}}/tls" hx-trigger="load" hx-swap="innerHTML">
+    <div class="card h-14 animate-pulse"></div>
+  </div>
+</section>
+
 <div class="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
   <section>
     <h2 class="h-label mb-3">Container resources</h2>
