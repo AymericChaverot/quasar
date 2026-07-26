@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS apps (
 	basic_auth_hash TEXT NOT NULL DEFAULT '',
 	sort_order     INTEGER NOT NULL DEFAULT 0,
 	pre_backup_cmd TEXT NOT NULL DEFAULT '',
+	rate_limit     INTEGER NOT NULL DEFAULT 0,
+	ip_allow_cidrs TEXT NOT NULL DEFAULT '',
+	security_headers INTEGER NOT NULL DEFAULT 0,
 	created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -140,6 +143,9 @@ var migrations = []string{
 	"ALTER TABLE sessions ADD COLUMN pending_2fa INTEGER NOT NULL DEFAULT 0",
 	"ALTER TABLE apps ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
 	"ALTER TABLE apps ADD COLUMN pre_backup_cmd TEXT NOT NULL DEFAULT ''",
+	"ALTER TABLE apps ADD COLUMN rate_limit INTEGER NOT NULL DEFAULT 0",
+	"ALTER TABLE apps ADD COLUMN ip_allow_cidrs TEXT NOT NULL DEFAULT ''",
+	"ALTER TABLE apps ADD COLUMN security_headers INTEGER NOT NULL DEFAULT 0",
 	// Existing single-account installs default to admin, so an upgrade does
 	// not lock anyone out of their own dashboard.
 	"ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'",

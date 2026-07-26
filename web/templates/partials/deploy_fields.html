@@ -36,3 +36,9 @@
 {{define "env_saved"}}
 <span class="text-xs" style="color: var(--ok)">Saved.</span>
 {{end}}
+
+{{/* Traefik reads these from the container's labels, which are fixed when the
+     container is created, so saving alone changes nothing. */}}
+{{define "protection_saved"}}
+<span class="text-xs" style="color: var(--warn)">Saved — redeploy to apply.</span>
+{{end}}

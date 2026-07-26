@@ -159,6 +159,7 @@ func (s *Server) routes() {
 	s.admin("POST /apps/{id}/domains", s.handleAppDomains)
 	s.admin("POST /apps/{id}/health", s.handleAppHealth)
 	s.admin("POST /apps/{id}/pre-backup", s.handleAppPreBackup)
+	s.admin("POST /apps/{id}/protection", s.handleAppProtection)
 	s.admin("POST /apps/{id}/basic-auth", s.handleAppBasicAuth)
 	// A shell in the container reads every secret the app has and can change
 	// anything, so it is an admin action however read-only the HTTP verb looks.

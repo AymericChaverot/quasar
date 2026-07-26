@@ -106,6 +106,34 @@
   </section>
 
   <section>
+    <h2 class="h-label mb-3">Edge protection</h2>
+    <form hx-post="/apps/{{.ID}}/protection" hx-target="#protection-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
+      <div>
+        <label class="label !mb-1">Rate limit (requests/second per client)</label>
+        <input name="rate_limit" type="number" min="0" value="{{.RateLimit}}" class="input mono !w-32">
+        <p class="help">0 disables it. Bursts of three times this value are allowed, so a single page load does not trip its own limit.</p>
+      </div>
+      <div>
+        <label class="label !mb-1">Allowed addresses</label>
+        <input name="ip_allow_cidrs" type="text" value="{{.IPAllowCIDRs}}" class="input mono"
+               placeholder="203.0.113.4, 10.0.0.0/8">
+        <p class="help">Comma-separated addresses or CIDR blocks; a bare address is treated as a single host. Empty allows everyone. Traefik compares against the address connecting to it, so another proxy in front of it (Cloudflare) would need its own configuration.</p>
+      </div>
+      <label class="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="security_headers" {{if .SecurityHeaders}}checked{{end}} class="mt-1">
+        <span>
+          Security headers
+          <span class="help !mt-0 block">HSTS for one year including subdomains, no MIME sniffing, no framing, and a strict referrer policy. Leave off if the app sets its own.</span>
+        </span>
+      </label>
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn">Save</button>
+        <span id="protection-feedback"></span>
+      </div>
+    </form>
+  </section>
+
+  <section>
     <h2 class="h-label mb-3">Password protection</h2>
     <form hx-post="/apps/{{.ID}}/basic-auth" hx-target="#ba-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
       {{if .BasicAuthUser}}

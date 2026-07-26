@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -318,6 +319,67 @@ func (s *Server) handleAppMove(w http.ResponseWriter, r *http.Request) {
 		db.SetAppOrder(s.db, other.ID, i+1)
 	}
 	s.handleAppsPartial(w, r)
+}
+
+// handleAppProtection saves the edge protections Traefik applies in front of
+// the app: a per-client rate limit, an address allowlist and browser hardening
+// headers.
+func (s *Server) handleAppProtection(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+
+	rate := 0
+	if v := strings.TrimSpace(r.FormValue("rate_limit")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			http.Error(w, "the rate limit must be a positive number of requests per second, or 0", http.StatusBadRequest)
+			return
+		}
+		rate = n
+	}
+
+	// Validated here rather than left to Traefik: a malformed CIDR makes
+	// Traefik drop the whole middleware, which fails open and would silently
+	// leave the app exposed to everyone.
+	var cidrs []string
+	for _, entry := range strings.Split(r.FormValue("ip_allow_cidrs"), ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		normalized, err := normalizeCIDR(entry)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		cidrs = append(cidrs, normalized)
+	}
+
+	headers := r.FormValue("security_headers") == "on"
+	if err := db.UpdateAppProtection(s.db, a.ID, rate, strings.Join(cidrs, ","), headers); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.audit(r, "app.protection", a.Name, fmt.Sprintf("rate=%d allow=%q headers=%v", rate, strings.Join(cidrs, ","), headers))
+	s.renderPartial(w, "protection_saved", nil)
+}
+
+// normalizeCIDR accepts either a bare address or a CIDR block and returns the
+// CIDR form Traefik expects, so "1.2.3.4" does not have to be written /32.
+func normalizeCIDR(entry string) (string, error) {
+	if _, _, err := net.ParseCIDR(entry); err == nil {
+		return entry, nil
+	}
+	ip := net.ParseIP(entry)
+	if ip == nil {
+		return "", fmt.Errorf("%q is not an IP address or CIDR block (e.g. 203.0.113.4 or 203.0.113.0/24)", entry)
+	}
+	if ip.To4() != nil {
+		return entry + "/32", nil
+	}
+	return entry + "/128", nil
 }
 
 // handleAppPreBackup saves the command run in the container before a backup,

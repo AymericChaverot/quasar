@@ -10,27 +10,41 @@ import (
 )
 
 type App struct {
-	ID            string
-	Name          string
-	Subdomain     string
-	DeployType    string // "image", "git" or "compose"
-	ImageRef      string
-	GitURL        string
-	GitBranch     string
-	ComposeYAML   string
-	Port          int
-	EnvContent    string
-	DataMount     string // container path bound to apps/<id>/data, empty = no volume
-	WebhookSecret string
-	CPULimit      float64 // CPUs, 0 = unlimited
-	MemLimitMB    int64   // MB, 0 = unlimited
-	CustomDomains string  // comma-separated extra domains routed to this app
-	HealthPath    string  // HTTP path probed for health, empty = disabled
-	PreBackupCmd  string  // dumped into the backup archive before archiving, empty = none
-	BasicAuthUser string  // Traefik basic auth username, empty = no protection
-	BasicAuthHash string  // bcrypt hash in htpasswd format
-	SortOrder     int     // manual position in the dashboard list
-	CreatedAt     time.Time
+	ID              string
+	Name            string
+	Subdomain       string
+	DeployType      string // "image", "git" or "compose"
+	ImageRef        string
+	GitURL          string
+	GitBranch       string
+	ComposeYAML     string
+	Port            int
+	EnvContent      string
+	DataMount       string // container path bound to apps/<id>/data, empty = no volume
+	WebhookSecret   string
+	CPULimit        float64 // CPUs, 0 = unlimited
+	MemLimitMB      int64   // MB, 0 = unlimited
+	CustomDomains   string  // comma-separated extra domains routed to this app
+	HealthPath      string  // HTTP path probed for health, empty = disabled
+	PreBackupCmd    string  // dumped into the backup archive before archiving, empty = none
+	RateLimit       int     // requests per second per client IP, 0 = unlimited
+	IPAllowCIDRs    string  // comma-separated CIDRs allowed to reach the app, empty = all
+	SecurityHeaders bool    // HSTS and the usual browser hardening headers
+	BasicAuthUser   string  // Traefik basic auth username, empty = no protection
+	BasicAuthHash   string  // bcrypt hash in htpasswd format
+	SortOrder       int     // manual position in the dashboard list
+	CreatedAt       time.Time
+}
+
+// IPAllowList splits IPAllowCIDRs into entries for the Traefik middleware.
+func (a *App) IPAllowList() []string {
+	var out []string
+	for _, c := range strings.Split(a.IPAllowCIDRs, ",") {
+		if c = strings.TrimSpace(c); c != "" {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // CustomDomainList splits CustomDomains for templates and Traefik rules.
@@ -47,7 +61,7 @@ func (a *App) CustomDomainList() []string {
 	return out
 }
 
-const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, pre_backup_cmd, created_at"
+const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, created_at"
 
 // scanApp reads one row and decrypts its at-rest-encrypted columns, so every
 // *App leaving the db package carries plaintext EnvContent/ComposeYAML —
@@ -58,7 +72,7 @@ func scanApp(row interface{ Scan(...any) error }, k *secrets.Keyring) (*App, err
 		&a.GitBranch, &a.ComposeYAML, &a.Port, &a.EnvContent, &a.DataMount,
 		&a.WebhookSecret, &a.CPULimit, &a.MemLimitMB, &a.CustomDomains,
 		&a.HealthPath, &a.BasicAuthUser, &a.BasicAuthHash, &a.SortOrder,
-		&a.PreBackupCmd, &a.CreatedAt)
+		&a.PreBackupCmd, &a.RateLimit, &a.IPAllowCIDRs, &a.SecurityHeaders, &a.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -90,11 +104,22 @@ func InsertApp(db *sql.DB, k *secrets.Keyring, a *App) error {
 		return fmt.Errorf("encrypt pre-backup command: %w", err)
 	}
 	// New apps go to the bottom of the manually ordered list.
-	_, err = db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, pre_backup_cmd, sort_order)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM apps))`,
+	_, err = db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, sort_order)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM apps))`,
 		a.ID, a.Name, a.Subdomain, a.DeployType, a.ImageRef, a.GitURL, a.GitBranch, composeYAML,
 		a.Port, envContent, a.DataMount, a.WebhookSecret, a.CPULimit, a.MemLimitMB, a.CustomDomains,
-		a.HealthPath, a.BasicAuthUser, a.BasicAuthHash, preBackup)
+		a.HealthPath, a.BasicAuthUser, a.BasicAuthHash, preBackup,
+		a.RateLimit, a.IPAllowCIDRs, a.SecurityHeaders)
+	return err
+}
+
+// UpdateAppProtection stores the edge protections Traefik applies in front of
+// the app. They take effect on the next deploy, since Docker labels are fixed
+// when a container is created.
+func UpdateAppProtection(db *sql.DB, id string, rateLimit int, ipAllowCIDRs string, securityHeaders bool) error {
+	_, err := db.Exec(
+		"UPDATE apps SET rate_limit = ?, ip_allow_cidrs = ?, security_headers = ? WHERE id = ?",
+		rateLimit, ipAllowCIDRs, securityHeaders, id)
 	return err
 }
 

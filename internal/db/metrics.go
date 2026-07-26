@@ -35,9 +35,9 @@ func ConsecutiveHealthFailures(db *sql.DB, appID string) int {
 // --- Metrics samples ----------------------------------------------------------
 
 type MetricPoint struct {
-	TS   time.Time
-	V1   float64 // cpu %
-	V2   float64 // mem % (server) or mem MB (app)
+	TS time.Time
+	V1 float64 // cpu %
+	V2 float64 // mem % (server) or mem MB (app)
 }
 
 func RecordServerMetric(db *sql.DB, cpu, mem, disk float64) {

@@ -143,9 +143,39 @@ func (c *Client) traefikLabels(a *db.App) map[string]string {
 		labels[fmt.Sprintf("traefik.http.services.%s.loadbalancer.healthcheck.interval", r)] = "5s"
 		labels[fmt.Sprintf("traefik.http.services.%s.loadbalancer.healthcheck.timeout", r)] = "3s"
 	}
+	// Middlewares are collected in order and attached to the router as one
+	// chain. Traefik applies them left to right, so the cheapest rejections
+	// come first: an blocked address never costs a rate-limit slot or a bcrypt
+	// comparison.
+	var chain []string
+
+	if list := a.IPAllowList(); len(list) > 0 {
+		labels[fmt.Sprintf("traefik.http.middlewares.%s-ipallow.ipallowlist.sourcerange", r)] = strings.Join(list, ",")
+		chain = append(chain, r+"-ipallow")
+	}
+	if a.RateLimit > 0 {
+		labels[fmt.Sprintf("traefik.http.middlewares.%s-ratelimit.ratelimit.average", r)] = fmt.Sprintf("%d", a.RateLimit)
+		// Burst absorbs the bunched requests a single page load makes; without
+		// headroom a normal visit trips its own limit.
+		labels[fmt.Sprintf("traefik.http.middlewares.%s-ratelimit.ratelimit.burst", r)] = fmt.Sprintf("%d", a.RateLimit*3)
+		chain = append(chain, r+"-ratelimit")
+	}
 	if a.BasicAuthUser != "" && a.BasicAuthHash != "" {
 		labels[fmt.Sprintf("traefik.http.middlewares.%s-auth.basicauth.users", r)] = a.BasicAuthUser + ":" + a.BasicAuthHash
-		labels[fmt.Sprintf("traefik.http.routers.%s.middlewares", r)] = r + "-auth"
+		chain = append(chain, r+"-auth")
+	}
+	if a.SecurityHeaders {
+		m := fmt.Sprintf("traefik.http.middlewares.%s-headers.headers.", r)
+		labels[m+"stsSeconds"] = "31536000"
+		labels[m+"stsIncludeSubdomains"] = "true"
+		labels[m+"contentTypeNosniff"] = "true"
+		labels[m+"browserXssFilter"] = "true"
+		labels[m+"referrerPolicy"] = "strict-origin-when-cross-origin"
+		labels[m+"frameDeny"] = "true"
+		chain = append(chain, r+"-headers")
+	}
+	if len(chain) > 0 {
+		labels[fmt.Sprintf("traefik.http.routers.%s.middlewares", r)] = strings.Join(chain, ",")
 	}
 	return labels
 }
