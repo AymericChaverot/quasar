@@ -44,8 +44,15 @@ certificats que si le DNS résout déjà vers le serveur.
 **Les deux enregistrements sont nécessaires.** Le wildcard `*.votre-domaine.com`
 couvre `admin.` et tous les sous-domaines d'apps, mais **pas le domaine racine
 lui-même** : une app publiée sur `@` (l'apex) reste sans certificat tant que
-`votre-domaine.com` n'a pas son propre enregistrement A. L'onglet TLS de la page
-d'une application signale ce cas.
+`votre-domaine.com` n'a pas son propre enregistrement A.
+
+**Et supprimez les enregistrements par défaut du registrar.** Beaucoup de zones
+(OVH notamment) arrivent avec un A sur l'apex pointant vers leur hébergement
+mutualisé, plus un `CNAME www`. Si cet enregistrement cohabite avec celui du
+VPS, le navigateur tombe parfois sur le VPS et Let's Encrypt sur la page
+« Site en construction » du registrar — l'émission échoue alors que tout a
+l'air de marcher. La section TLS de la page d'une application signale les deux
+cas.
 
 ### 3. Ouvrir les ports
 
@@ -100,8 +107,12 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
 - **Routage automatique** : sous-domaine + port interne → labels Traefik
   générés, certificat TLS émis à la première requête. Domaines custom
   additionnels par app (`www.monblog.fr`).
+- **Redeploy vs Update** : *Redeploy* recrée le conteneur à partir de ce qui est
+  déjà sur le serveur (même image, même commit) — c'est ce qui applique un
+  changement de config. *Update* va chercher la nouvelle version d'abord :
+  `git pull` + rebuild, `docker pull`, ou `docker compose pull`.
 - **Webhooks auto-deploy** : URL secrète par app — un push GitHub/GitLab
-  déclenche pull + rebuild + redeploy.
+  déclenche pull + rebuild + redeploy (comme *Update*).
 - **Historique + rollback** : journal des déploiements (source, image, durée,
   résultat), rétention des 4 dernières images buildées, rollback en un clic.
 - **Limites ressources** : CPU / RAM max par app (cgroups).
