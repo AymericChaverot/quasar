@@ -82,6 +82,7 @@ func (s *Server) settingsData(r *http.Request) map[string]any {
 	userID, username, role, _ := s.currentUser(r)
 	registries, _ := db.ListRegistries(s.db)
 	users, _ := auth.ListUsers(s.db)
+	tokens, _ := auth.ListTokens(s.db)
 	return map[string]any{
 		"Title":       "Settings",
 		"Username":    username,
@@ -89,6 +90,7 @@ func (s *Server) settingsData(r *http.Request) map[string]any {
 		"IsAdmin":     role == auth.RoleAdmin,
 		"UserID":      userID,
 		"Users":       users,
+		"Tokens":      tokens,
 		"Themes":      themes,
 		"Domain":      s.cfg.Domain,
 		"AppsDir":     s.cfg.AppsDir,

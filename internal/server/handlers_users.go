@@ -78,6 +78,39 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
+// handleTokenCreate issues an API token and shows the secret once. It is not
+// stored, so there is no way to show it again.
+func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.FormValue("name"))
+	role := r.FormValue("role")
+	secret, err := auth.CreateToken(s.db, name, role)
+	if err != nil {
+		s.settingsError(w, r, err.Error())
+		return
+	}
+	s.audit(r, "token.create", name, role)
+
+	data := s.settingsData(r)
+	data["NewToken"] = secret
+	data["Saved"] = "Token created — copy it now, it is not stored and cannot be shown again."
+	s.render(w, r, "settings", data)
+}
+
+func (s *Server) handleTokenDelete(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad token id", http.StatusBadRequest)
+		return
+	}
+	name, err := auth.DeleteToken(s.db, id)
+	if err != nil {
+		s.settingsError(w, r, err.Error())
+		return
+	}
+	s.audit(r, "token.delete", name, "")
+	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+}
+
 // targetUser resolves the {id} of a user-management route, returning the id and
 // the username for the audit trail (looked up before the account is changed).
 func (s *Server) targetUser(w http.ResponseWriter, r *http.Request) (int64, string, bool) {

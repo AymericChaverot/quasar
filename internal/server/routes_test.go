@@ -59,9 +59,11 @@ func TestEveryMutatingRouteRequiresAdmin(t *testing.T) {
 		if selfServiceRoutes[pattern] {
 			continue
 		}
-		if level != accessAdmin {
-			t.Errorf("%s is registered as %q; a mutating route must be admin-gated "+
-				"(or added to selfServiceRoutes with a reason)", pattern, level)
+		// accessTokenAdmin is the API's equivalent: a different credential, the
+		// same admin requirement.
+		if level != accessAdmin && level != accessTokenAdmin {
+			t.Errorf("%s is registered as %q; a mutating route must require admin "+
+				"(or be added to selfServiceRoutes with a reason)", pattern, level)
 		}
 	}
 }
@@ -76,6 +78,48 @@ func TestPrivilegedReadsRequireAdmin(t *testing.T) {
 		}
 		if level != accessAdmin {
 			t.Errorf("%s is registered as %q, want %q", pattern, level, accessAdmin)
+		}
+	}
+}
+
+// The API must never be reachable with a session cookie alone, and never
+// without a token: a browser that is merely logged in is not an API client, and
+// a CSRF-able JSON endpoint on the same origin as the dashboard would be.
+func TestAPIRoutesRequireAToken(t *testing.T) {
+	s := newTestServer(t)
+	found := 0
+	for pattern, level := range s.guards {
+		if !strings.Contains(pattern, "/api/") {
+			continue
+		}
+		found++
+		if level != accessTokenRead && level != accessTokenAdmin {
+			t.Errorf("%s is registered as %q, want a token guard", pattern, level)
+		}
+	}
+	if found == 0 {
+		t.Fatal("no API routes were registered")
+	}
+}
+
+// Reads are fine for a viewer token; anything that acts on an app needs admin.
+func TestAPIWriteRoutesNeedAnAdminToken(t *testing.T) {
+	s := newTestServer(t)
+	for _, pattern := range []string{
+		"POST /api/v1/apps/{id}/deploy",
+		"POST /api/v1/apps/{id}/restart",
+	} {
+		if got := s.guards[pattern]; got != accessTokenAdmin {
+			t.Errorf("%s is registered as %q, want %q", pattern, got, accessTokenAdmin)
+		}
+	}
+	for _, pattern := range []string{
+		"GET /api/v1/apps",
+		"GET /api/v1/apps/{id}",
+		"GET /api/v1/system",
+	} {
+		if got := s.guards[pattern]; got != accessTokenRead {
+			t.Errorf("%s is registered as %q, want %q", pattern, got, accessTokenRead)
 		}
 	}
 }

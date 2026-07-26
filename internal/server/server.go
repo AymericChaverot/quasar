@@ -21,6 +21,11 @@ const (
 	accessPublic = "public" // no session needed
 	accessSelf   = "self"   // any signed-in user, including a viewer
 	accessAdmin  = "admin"  // admins only
+
+	// The JSON API authenticates with a Bearer token instead of a session, but
+	// enforces the same two roles.
+	accessTokenRead  = "token-read"
+	accessTokenAdmin = "token-admin"
 )
 
 type Server struct {
@@ -93,6 +98,18 @@ func (s *Server) admin(pattern string, h http.HandlerFunc) {
 	s.mux.Handle(pattern, s.requireAdmin(h))
 }
 
+// apiRead registers a JSON route any valid token may call.
+func (s *Server) apiRead(pattern string, h http.HandlerFunc) {
+	s.guards[pattern] = accessTokenRead
+	s.mux.Handle(pattern, s.requireToken(false, h))
+}
+
+// apiWrite registers a JSON route that needs a token issued as admin.
+func (s *Server) apiWrite(pattern string, h http.HandlerFunc) {
+	s.guards[pattern] = accessTokenAdmin
+	s.mux.Handle(pattern, s.requireToken(true, h))
+}
+
 func (s *Server) routes() {
 	static, _ := fs.Sub(web.Files, "static")
 	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
@@ -124,6 +141,15 @@ func (s *Server) routes() {
 	s.admin("POST /settings/users/{id}/role", s.handleUserRole)
 	s.admin("POST /settings/users/{id}/password", s.handleUserPassword)
 	s.admin("POST /settings/users/{id}/delete", s.handleUserDelete)
+	s.admin("POST /settings/tokens", s.handleTokenCreate)
+	s.admin("POST /settings/tokens/{id}/delete", s.handleTokenDelete)
+
+	// JSON API, authenticated by Bearer token rather than a session.
+	s.apiRead("GET /api/v1/apps", s.handleAPIApps)
+	s.apiRead("GET /api/v1/apps/{id}", s.handleAPIApp)
+	s.apiRead("GET /api/v1/system", s.handleAPISystem)
+	s.apiWrite("POST /api/v1/apps/{id}/deploy", s.handleAPIDeploy)
+	s.apiWrite("POST /api/v1/apps/{id}/restart", s.handleAPIRestart)
 
 	s.viewer("GET /logs", s.handleLogsPage)
 	s.viewer("GET /audit", s.handleAuditPage)
