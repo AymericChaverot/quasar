@@ -204,6 +204,63 @@
         <button type="submit" class="btn">Save</button>
       </form>
       <div class="border-t pt-4" style="border-color: var(--border)">
+        <p class="text-sm font-medium">Offsite copy (S3-compatible)</p>
+        <p class="help mb-3">
+          Backups written here sit on the same disk as everything they protect: the VPS that dies
+          takes them with it. Works with AWS S3, Cloudflare R2, Backblaze B2, Wasabi, Hetzner and
+          MinIO. Uploaded after each backup; a failed upload never fails the backup, it notifies.
+        </p>
+        <form method="post" action="/system/offsite-settings" class="space-y-3">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label class="text-sm">
+              <span class="muted">Endpoint</span>
+              <input name="offsite_endpoint" type="text" value="{{.Offsite.Endpoint}}"
+                     placeholder="s3.eu-central-1.amazonaws.com" class="input mono">
+            </label>
+            <label class="text-sm">
+              <span class="muted">Bucket</span>
+              <input name="offsite_bucket" type="text" value="{{.Offsite.Bucket}}" class="input mono">
+            </label>
+            <label class="text-sm">
+              <span class="muted">Region</span>
+              <input name="offsite_region" type="text" value="{{.Offsite.Region}}"
+                     placeholder="us-east-1" class="input mono">
+            </label>
+            <label class="text-sm">
+              <span class="muted">Key prefix (optional)</span>
+              <input name="offsite_prefix" type="text" value="{{.Offsite.Prefix}}"
+                     placeholder="quasar/prod" class="input mono">
+            </label>
+            <label class="text-sm">
+              <span class="muted">Access key ID</span>
+              <input name="offsite_access_key" type="text" value="{{.Offsite.AccessKey}}" class="input mono">
+            </label>
+            <label class="text-sm">
+              <span class="muted">Secret access key</span>
+              <input name="offsite_secret_key" type="password" class="input mono"
+                     placeholder="{{if .Offsite.SecretSet}}configured — enter a new value to replace{{else}}required{{end}}">
+            </label>
+          </div>
+          {{if .Offsite.SecretSet}}
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="clear_offsite_secret_key">
+            <span class="muted">Remove the stored secret key (disables offsite copies)</span>
+          </label>
+          {{end}}
+          <div class="flex items-center gap-2">
+            <button type="submit" class="btn">Save offsite settings</button>
+          </div>
+        </form>
+        <form method="post" action="/system/offsite-test" class="mt-2">
+          <button type="submit" class="btn">Send test upload</button>
+          <span class="help !mt-0 ml-2">
+            Writes a small probe object. A wrong endpoint or a missing PutObject permission is
+            otherwise discovered the night you need the backup.
+          </span>
+        </form>
+      </div>
+
+      <div class="border-t pt-4" style="border-color: var(--border)">
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="text-sm font-medium">Encryption master key</p>

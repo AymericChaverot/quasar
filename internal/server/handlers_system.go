@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"quasar/internal/certs"
 	"quasar/internal/db"
 	"quasar/internal/docker"
+	"quasar/internal/offsite"
 	"quasar/internal/secrets"
 	"quasar/internal/updater"
 	"quasar/internal/version"
@@ -42,6 +44,7 @@ func (s *Server) systemData(r *http.Request) map[string]any {
 		"UpdateAvail": updater.IsNewer(version.Version, latest),
 		"Repo":        s.cfg.GitHubRepo,
 		"Host":        vps.CollectHost(),
+		"Offsite":     offsiteView(s.db),
 		"Engine":      s.dock.EngineInfo(r.Context()),
 		"GoRuntime":   runtime.Version(),
 	}
@@ -177,6 +180,68 @@ func (s *Server) handleMasterKeyDownload(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="quasar-master.key"`)
 	w.Write(key)
+}
+
+// offsiteView is the object-storage configuration as the form shows it. The
+// secret key is reported only as present or absent, never echoed back.
+func offsiteView(database *sql.DB) map[string]any {
+	return map[string]any{
+		"Endpoint":  db.GetSetting(database, db.SettingOffsiteEndpoint),
+		"Region":    db.GetSetting(database, db.SettingOffsiteRegion),
+		"Bucket":    db.GetSetting(database, db.SettingOffsiteBucket),
+		"Prefix":    db.GetSetting(database, db.SettingOffsitePrefix),
+		"AccessKey": db.GetSetting(database, db.SettingOffsiteAccessKey),
+		"SecretSet": db.GetSetting(database, db.SettingOffsiteSecretKey) != "",
+	}
+}
+
+// handleOffsiteSettings stores the object-storage destination for backups.
+func (s *Server) handleOffsiteSettings(w http.ResponseWriter, r *http.Request) {
+	for field, key := range map[string]string{
+		"offsite_endpoint":   db.SettingOffsiteEndpoint,
+		"offsite_region":     db.SettingOffsiteRegion,
+		"offsite_bucket":     db.SettingOffsiteBucket,
+		"offsite_prefix":     db.SettingOffsitePrefix,
+		"offsite_access_key": db.SettingOffsiteAccessKey,
+	} {
+		db.SetSetting(s.db, key, strings.TrimSpace(r.FormValue(field)))
+	}
+
+	// Encrypted at rest like an app's env content: this key can read and delete
+	// every archive in the bucket.
+	if raw := strings.TrimSpace(r.FormValue("offsite_secret_key")); raw != "" {
+		enc, err := s.keyring.Encrypt(raw)
+		if err != nil {
+			http.Error(w, "could not store the secret key: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		db.SetSetting(s.db, db.SettingOffsiteSecretKey, enc)
+	}
+	if r.FormValue("clear_offsite_secret_key") == "on" {
+		db.SetSetting(s.db, db.SettingOffsiteSecretKey, "")
+	}
+
+	s.audit(r, "settings.offsite", db.GetSetting(s.db, db.SettingOffsiteBucket), "")
+	http.Redirect(w, r, "/system?msg="+url.QueryEscape("Offsite settings saved."), http.StatusSeeOther)
+}
+
+// handleOffsiteTest uploads a small probe object, which is the only way to know
+// the endpoint, credentials and bucket policy actually work together. A wrong
+// signature or a missing PutObject permission is otherwise discovered on the
+// night the VPS dies.
+func (s *Server) handleOffsiteTest(w http.ResponseWriter, r *http.Request) {
+	cfg, err := offsite.Load(s.db, s.keyring)
+	if err != nil {
+		http.Redirect(w, r, "/system?msg="+url.QueryEscape("Offsite test failed: "+err.Error()), http.StatusSeeOther)
+		return
+	}
+	s.audit(r, "offsite.test", cfg.Bucket, "")
+
+	msg := "Offsite test upload succeeded — the credentials and bucket work."
+	if err := offsite.UploadProbe(cfg); err != nil {
+		msg = "Offsite test failed: " + err.Error()
+	}
+	http.Redirect(w, r, "/system?msg="+url.QueryEscape(msg), http.StatusSeeOther)
 }
 
 // handleUpdateCheck queries GitHub for the latest release right now.

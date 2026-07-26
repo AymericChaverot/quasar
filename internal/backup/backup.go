@@ -18,6 +18,7 @@ import (
 
 	"quasar/internal/db"
 	"quasar/internal/notify"
+	"quasar/internal/offsite"
 	"quasar/internal/secrets"
 )
 
@@ -127,8 +128,38 @@ func Run(database *sql.DB, k *secrets.Keyring, appsDir, dir string, dump Dump) (
 		return fail(err)
 	}
 
+	// The offsite copy is attempted after the archive is complete on disk, and
+	// its failure does not fail the backup: a local archive that exists is
+	// strictly better than none, and the operator is told separately so the
+	// gap is not silent.
+	pushOffsite(database, k, path, name)
+
 	applyRetention(database, dir)
 	return name, nil
+}
+
+// pushOffsite uploads a finished archive to object storage when one is
+// configured, reporting failures through notifications and the audit trail.
+func pushOffsite(database *sql.DB, k *secrets.Keyring, path, name string) {
+	cfg, err := offsite.Load(database, k)
+	if err == nil && !cfg.Configured() {
+		return // no destination set up
+	}
+	if err == nil {
+		err = offsite.Upload(cfg, path)
+	}
+	if err != nil {
+		log.Printf("offsite upload of %s: %v", name, err)
+		notify.Send(database, fmt.Sprintf("Quasar: backup %s was written locally but the offsite upload FAILED: %v", name, err))
+		db.RecordAudit(database, db.AuditEntry{
+			Actor: db.ActorSystem, Action: "offsite.failed", Target: name, Detail: err.Error(),
+		})
+		return
+	}
+	db.RecordAudit(database, db.AuditEntry{
+		Actor: db.ActorSystem, Action: "offsite.upload", Target: name,
+		Detail: cfg.Bucket,
+	})
 }
 
 // List returns existing backups, newest first.

@@ -166,6 +166,8 @@ func (s *Server) routes() {
 	s.admin("POST /system/backups/{name}/delete", s.handleBackupDelete)
 	s.admin("POST /system/backups/{name}/restore", s.handleBackupRestore)
 	s.admin("POST /system/backup-settings", s.handleBackupSettings)
+	s.admin("POST /system/offsite-settings", s.handleOffsiteSettings)
+	s.admin("POST /system/offsite-test", s.handleOffsiteTest)
 	// Opens every encrypted value on the platform.
 	s.admin("GET /system/master-key", s.handleMasterKeyDownload)
 	s.admin("POST /system/update/check", s.handleUpdateCheck)

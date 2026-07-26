@@ -134,6 +134,15 @@ const (
 	SettingSMTPPassword = "smtp_password"
 	SettingSMTPFrom     = "smtp_from"
 	SettingSMTPTo       = "smtp_to"
+
+	// S3-compatible destination for backup archives. The secret key is stored
+	// encrypted with the master key, like an app's env content.
+	SettingOffsiteEndpoint  = "offsite_endpoint"
+	SettingOffsiteRegion    = "offsite_region"
+	SettingOffsiteBucket    = "offsite_bucket"
+	SettingOffsitePrefix    = "offsite_prefix"
+	SettingOffsiteAccessKey = "offsite_access_key"
+	SettingOffsiteSecretKey = "offsite_secret_key"
 )
 
 func GetSetting(db *sql.DB, key string) string {
