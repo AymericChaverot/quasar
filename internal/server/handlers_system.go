@@ -1,11 +1,13 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"quasar/internal/backup"
 	"quasar/internal/certs"
@@ -132,7 +134,13 @@ func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	imageRef := "ghcr.io/" + strings.ToLower(s.cfg.GitHubRepo) + ":" + latest
-	if err := s.dock.SelfUpdate(r.Context(), imageRef, s.cfg.SocketNetwork); err != nil {
+	// SelfUpdate pulls the whole image before it can hand off to the updater
+	// container, which takes minutes on a modest VPS with no feedback in the
+	// browser. Detached from the request context so a reload, a closed tab or
+	// an impatient proxy cannot cancel the pull half-way through.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 20*time.Minute)
+	defer cancel()
+	if err := s.dock.SelfUpdate(ctx, imageRef, s.cfg.SocketNetwork); err != nil {
 		http.Error(w, "update failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
