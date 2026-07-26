@@ -120,6 +120,16 @@ func (c *Client) EngineInfo(ctx context.Context) EngineInfo {
 	return out
 }
 
+// RestartTraefik restarts the edge router.
+//
+// Traefik reads its ACME store once at startup and keeps the certificates in
+// memory, so this is what makes a change to that file on disk take effect —
+// without it, the next save writes the old contents straight back. It costs a
+// few seconds during which nothing is served.
+func (c *Client) RestartTraefik(ctx context.Context) error {
+	return c.api.ContainerRestart(ctx, "quasar-traefik", container.StopOptions{})
+}
+
 // PruneImages removes dangling images and reports the space reclaimed in MB.
 func (c *Client) PruneImages(ctx context.Context) (float64, error) {
 	report, err := c.api.ImagesPrune(ctx, filters.NewArgs(filters.Arg("dangling", "true")))

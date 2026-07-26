@@ -101,7 +101,7 @@
     {{if .Certs}}
     <div class="table-wrap max-w-2xl">
       <table>
-        <thead><tr><th>Domain</th><th>Issuer</th><th>Expires</th><th></th></tr></thead>
+        <thead><tr><th>Domain</th><th>Issuer</th><th>Expires</th><th></th><th>Routed by</th></tr></thead>
         <tbody>
           {{range .Certs}}
           {{$domain := .Domain}}
@@ -117,11 +117,32 @@
               {{else if eq .Status "warning"}}<span class="badge badge-warn">{{.DaysLeft}}d left</span>
               {{else}}<span class="badge badge-ok">{{.DaysLeft}}d left</span>{{end}}
             </td>
+            <td>
+              {{if .UsedBy}}
+              <span class="muted text-sm">{{.UsedBy}}</span>
+              {{else if and $.IsAdmin $.CertsWritable}}
+              <form method="post" action="/system/certs/{{$domain}}/delete"
+                    onsubmit="return confirm('Delete the certificate for {{$domain}}? Traefik restarts, so every site is briefly unavailable.')">
+                <button type="submit" class="btn-danger !py-1 text-xs">{{template "icon_trash"}}Delete</button>
+              </form>
+              {{else}}
+              <span class="faint text-sm">unused</span>
+              {{end}}
+            </td>
           </tr>
           {{end}}
         </tbody>
       </table>
     </div>
+    <p class="help max-w-2xl">
+      A certificate nothing routes is left over from a deleted application or a renamed domain.
+      Deleting one restarts Traefik so it drops the copy it holds in memory — a few seconds during
+      which no site is served.
+      {{if and .IsAdmin (not .CertsWritable)}}
+      Deletion is unavailable because Traefik's store is mounted read-only; bind-mount its directory
+      into the dashboard read-write to enable it.
+      {{end}}
+    </p>
     {{else}}
     <div class="empty max-w-2xl p-6 text-center">
       <p class="muted text-sm">No certificates found — normal if the domain hasn't finished its first Let's Encrypt issuance yet.</p>

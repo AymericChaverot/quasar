@@ -14,6 +14,7 @@ type Config struct {
 	ListenAddr     string
 	DBPath         string
 	AppsDir        string // host path AND in-container path (mounted identically)
+	TraefikDir     string // Traefik's config and ACME store, bind-mounted read-write
 	TraefikNetwork string
 	AdminUser      string
 	AdminPassword  string // only used to bootstrap the first user, then ignored
@@ -29,11 +30,13 @@ func Load() Config {
 	loadDotEnv(getenv("ENV_FILE", ".env"))
 
 	dbPath := absPath(getenv("DB_PATH", "/opt/quasar/storage/database.sqlite"))
+	appsDir := absPath(getenv("APPS_DIR", "/opt/quasar/apps"))
 	return Config{
 		Domain:         getenv("DOMAIN", "localhost"),
 		ListenAddr:     getenv("LISTEN_ADDR", ":8080"),
 		DBPath:         dbPath,
-		AppsDir:        absPath(getenv("APPS_DIR", "/opt/quasar/apps")),
+		AppsDir:        appsDir,
+		TraefikDir:     absPath(getenv("TRAEFIK_DIR", filepath.Join(filepath.Dir(appsDir), "traefik"))),
 		TraefikNetwork: getenv("TRAEFIK_NETWORK", "traefik-net"),
 		AdminUser:      getenv("ADMIN_USER", ""),
 		AdminPassword:  getenv("ADMIN_PASSWORD", ""),

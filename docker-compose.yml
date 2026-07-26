@@ -78,6 +78,9 @@ services:
       - /opt/quasar/apps:/opt/quasar/apps
       - /opt/quasar/storage:/opt/quasar/storage
       - /opt/quasar/backups:/opt/quasar/backups
+      # Read-write so an unused certificate can be deleted from acme.json; the
+      # read-only host mount below is enough to display them, not to edit them.
+      - /opt/quasar/traefik:/opt/quasar/traefik
       - /proc:/host/proc:ro
       - /:/host/root:ro
     labels:

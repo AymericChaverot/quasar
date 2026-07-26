@@ -9,6 +9,7 @@ import (
 
 	"quasar/internal/backup"
 	"quasar/internal/catalog"
+	"quasar/internal/certs"
 	"quasar/internal/db"
 	"quasar/internal/docker"
 	"quasar/internal/vps"
@@ -75,6 +76,12 @@ func TestExecuteTemplates(t *testing.T) {
 			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64", Uptime: "3d 4h"},
 			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44", OSType: "linux/amd64", TraefikImage: "traefik:v3.7"},
 			"GoRuntime": "go1.26.5",
+			"IsAdmin":   true, "CertsWritable": true,
+			"Certs": []CertView{
+				{Cert: certs.Cert{Domain: "admin.example.com", Issuer: "R3", NotAfter: time.Now().Add(60 * 24 * time.Hour), DaysLeft: 60, Status: "ok"}, UsedBy: "this dashboard"},
+				{Cert: certs.Cert{Domain: "gone.example.com", SANs: []string{"gone.example.com", "www.gone.example.com"},
+					Issuer: "R3", NotAfter: time.Now().Add(5 * 24 * time.Hour), DaysLeft: 5, Status: "critical"}},
+			},
 		}},
 	}
 	for _, c := range cases {
@@ -129,6 +136,10 @@ func TestExecuteTemplates(t *testing.T) {
 		}},
 		{"status_badge", "running"},
 		{"status_badge", "not deployed"},
+		{"tls_status", []certs.HostCheck{
+			{Host: "blog.example.com", HasCert: true, DaysLeft: 60},
+			{Host: "example.com", IPs: nil, Problem: "example.com does not resolve."},
+		}},
 	}
 	host := s.pages["dashboard"]
 	for _, p := range partials {

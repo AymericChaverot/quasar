@@ -170,6 +170,8 @@ func (s *Server) routes() {
 	s.admin("POST /system/offsite-test", s.handleOffsiteTest)
 	// Opens every encrypted value on the platform.
 	s.admin("GET /system/master-key", s.handleMasterKeyDownload)
+	// Deleting a certificate restarts Traefik, so it briefly stops every site.
+	s.admin("POST /system/certs/{domain}/delete", s.handleCertDelete)
 	s.admin("POST /system/update/check", s.handleUpdateCheck)
 	s.admin("POST /system/update/apply", s.handleUpdateApply)
 

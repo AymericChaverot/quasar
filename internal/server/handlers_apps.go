@@ -48,11 +48,15 @@ type AppView struct {
 
 // Host is the public hostname of the app: "sub.domain", or the bare root
 // domain when the app claims the apex via the "@" subdomain.
-func (v AppView) Host() string {
-	if v.App.Subdomain == "@" {
-		return v.Domain
+func (v AppView) Host() string { return appHost(v.App, v.Domain) }
+
+// appHost is Host for callers that have an app and the root domain but no view
+// to wrap them in.
+func appHost(a *db.App, domain string) string {
+	if a.Subdomain == "@" {
+		return domain
 	}
-	return v.App.Subdomain + "." + v.Domain
+	return a.Subdomain + "." + domain
 }
 
 func (s *Server) appView(r *http.Request, a *db.App) AppView {

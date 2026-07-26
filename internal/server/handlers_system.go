@@ -51,7 +51,9 @@ func (s *Server) systemData(r *http.Request) map[string]any {
 	if du, err := s.dock.DiskUsage(r.Context()); err == nil {
 		data["Disk"] = du
 	}
-	data["Certs"] = s.heldCerts()
+	_, certsWritable := s.acmePath()
+	data["Certs"] = s.certViews()
+	data["CertsWritable"] = certsWritable
 	if apps, err := db.ListApps(s.db, s.keyring); err == nil {
 		var sizes []AppSize
 		for _, a := range apps {
@@ -66,18 +68,118 @@ func (s *Server) systemData(r *http.Request) map[string]any {
 	return data
 }
 
-// acmePath is Traefik's ACME store as the dashboard container sees it, through
-// the read-only mount of the host filesystem.
-func (s *Server) acmePath() string {
-	return filepath.Join(s.cfg.HostRootPath, filepath.Dir(s.cfg.AppsDir), "traefik", "acme.json")
+// acmePath resolves Traefik's ACME store and reports whether it can be written
+// to. Its directory is bind-mounted read-write into the dashboard on current
+// installs; an install predating that mount only reaches the file through the
+// read-only mount of the host filesystem, which is enough to list certificates
+// but not to delete one.
+func (s *Server) acmePath() (path string, writable bool) {
+	direct := filepath.Join(s.cfg.TraefikDir, "acme.json")
+	if _, err := os.Stat(direct); err == nil {
+		return direct, true
+	}
+	return filepath.Join(s.cfg.HostRootPath, filepath.Dir(s.cfg.AppsDir), "traefik", "acme.json"), false
 }
 
 // heldCerts is what Traefik has actually obtained. An unreadable store yields
 // nothing rather than an error: it just means no certificate exists yet, which
 // is exactly what the pages using this need to show.
 func (s *Server) heldCerts() []certs.Cert {
-	list, _ := certs.Collect(s.acmePath())
+	path, _ := s.acmePath()
+	list, _ := certs.Collect(path)
 	return list
+}
+
+// CertView pairs a certificate with whatever still claims one of its names,
+// which is what decides whether it may be deleted.
+type CertView struct {
+	certs.Cert
+	UsedBy string // application name, or "this dashboard"; empty when nothing routes it
+}
+
+// certViews matches every stored certificate against the hostnames the
+// platform currently routes. A certificate no host maps to is left over from a
+// deleted app or a renamed domain, and only costs space and renewal attempts.
+func (s *Server) certViews() []CertView {
+	apps, _ := db.ListApps(s.db, s.keyring)
+	return matchCerts(s.heldCerts(), s.routedHosts(apps))
+}
+
+// routedHosts maps every hostname the platform answers on to what claims it.
+func (s *Server) routedHosts(apps []*db.App) map[string]string {
+	routed := map[string]string{strings.ToLower("admin." + s.cfg.Domain): "this dashboard"}
+	for _, a := range apps {
+		for _, host := range append([]string{appHost(a, s.cfg.Domain)}, a.CustomDomainList()...) {
+			routed[strings.ToLower(host)] = a.Name
+		}
+	}
+	return routed
+}
+
+func matchCerts(held []certs.Cert, routed map[string]string) []CertView {
+	views := make([]CertView, 0, len(held))
+	for _, c := range held {
+		v := CertView{Cert: c}
+		// A SAN counts as much as the main domain: the certificate is what a
+		// live host is being served with either way.
+		for _, name := range append([]string{c.Domain}, c.SANs...) {
+			if who, ok := routed[strings.ToLower(name)]; ok {
+				v.UsedBy = who
+				break
+			}
+		}
+		views = append(views, v)
+	}
+	return views
+}
+
+// handleCertDelete drops a certificate from Traefik's ACME store.
+//
+// It refuses while something still routes one of the certificate's names:
+// deleting one of those would serve that site with Traefik's self-signed
+// default until a new certificate arrives, and spend a Let's Encrypt issuance
+// getting back to where it started.
+func (s *Server) handleCertDelete(w http.ResponseWriter, r *http.Request) {
+	domain := r.PathValue("domain")
+	var target *CertView
+	for _, v := range s.certViews() {
+		if strings.EqualFold(v.Domain, domain) {
+			target = &v
+			break
+		}
+	}
+	if target == nil {
+		redirectSystem(w, r, "No certificate for "+domain+" in the store.")
+		return
+	}
+	if target.UsedBy != "" {
+		redirectSystem(w, r, "The certificate for "+target.Domain+" is still routed by "+target.UsedBy+" — delete the application first.")
+		return
+	}
+	path, writable := s.acmePath()
+	if !writable {
+		redirectSystem(w, r, "Traefik's certificate store is mounted read-only. Update docker-compose.yml to bind-mount "+s.cfg.TraefikDir+" into the dashboard, then restart the stack.")
+		return
+	}
+	if err := certs.Delete(path, target.Domain); err != nil {
+		redirectSystem(w, r, "Certificate deletion failed: "+err.Error())
+		return
+	}
+
+	// The file is only half of it: Traefik holds the certificates in memory and
+	// would write this one back on its next save.
+	s.audit(r, "cert.delete", target.Domain, "")
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 60*time.Second)
+	defer cancel()
+	if err := s.dock.RestartTraefik(ctx); err != nil {
+		redirectSystem(w, r, "Certificate for "+target.Domain+" removed, but Traefik could not be restarted ("+err.Error()+") — restart it by hand or it will write the certificate back.")
+		return
+	}
+	redirectSystem(w, r, "Certificate for "+target.Domain+" deleted and Traefik restarted.")
+}
+
+func redirectSystem(w http.ResponseWriter, r *http.Request, msg string) {
+	http.Redirect(w, r, "/system?msg="+url.QueryEscape(msg), http.StatusSeeOther)
 }
 
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
