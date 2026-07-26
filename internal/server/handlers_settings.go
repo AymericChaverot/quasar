@@ -8,6 +8,7 @@ import (
 
 	"quasar/internal/auth"
 	"quasar/internal/db"
+	"quasar/internal/monitor"
 )
 
 // Theme describes a selectable UI theme, rendered on the settings page.
@@ -87,7 +88,19 @@ func (s *Server) settingsData(r *http.Request) map[string]any {
 		"GitTokenSet": db.GetSetting(s.db, db.SettingGitToken) != "",
 		"NotifyURL":   db.GetSetting(s.db, db.SettingNotifyURL),
 		"TOTPEnabled": auth.TOTPEnabled(s.db, userID),
+		"AlertDisk":   s.alertThreshold(db.SettingAlertDisk, monitor.AlertDefaultDisk),
+		"AlertMem":    s.alertThreshold(db.SettingAlertMem, monitor.AlertDefaultMem),
+		"AlertCPU":    s.alertThreshold(db.SettingAlertCPU, monitor.AlertDefaultCPU),
 	}
+}
+
+// alertThreshold shows the value the monitor will actually use, so the form
+// reflects the effective default rather than an empty box.
+func (s *Server) alertThreshold(key string, fallback int) int {
+	if v, err := strconv.Atoi(db.GetSetting(s.db, key)); err == nil {
+		return v
+	}
+	return fallback
 }
 
 // handle2FASetupBegin generates a secret and shows the QR code to scan.
@@ -163,6 +176,22 @@ func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) 
 		db.SetSetting(s.db, db.SettingGitToken, token)
 	}
 	db.SetSetting(s.db, db.SettingNotifyURL, strings.TrimSpace(r.FormValue("notify_url")))
+
+	// Thresholds are stored as typed, so an unparseable or out-of-range value
+	// is dropped rather than silently disabling the alert (0 means "off").
+	for field, key := range map[string]string{
+		"alert_disk": db.SettingAlertDisk,
+		"alert_mem":  db.SettingAlertMem,
+		"alert_cpu":  db.SettingAlertCPU,
+	} {
+		raw := strings.TrimSpace(r.FormValue(field))
+		if raw == "" {
+			continue
+		}
+		if v, err := strconv.Atoi(raw); err == nil && v >= 0 && v <= 100 {
+			db.SetSetting(s.db, key, strconv.Itoa(v))
+		}
+	}
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 

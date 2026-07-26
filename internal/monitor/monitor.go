@@ -137,10 +137,12 @@ func probe(url string) bool {
 // sampleMetrics stores server and per-app usage samples, pruning old data.
 func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyring *secrets.Keyring) {
 	lastPrune := time.Now()
+	alerts := newAlerter()
 	for {
 		time.Sleep(metricsInterval)
 		if s, err := vps.Collect(hostRoot); err == nil {
 			db.RecordServerMetric(database, s.CPUPercent, s.MemPercent, s.DiskPercent)
+			alerts.check(database, s)
 		}
 		apps, err := db.ListApps(database, keyring)
 		if err == nil {

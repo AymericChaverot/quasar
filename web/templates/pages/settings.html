@@ -133,6 +133,24 @@
                placeholder="https://discord.com/api/webhooks/…" class="input mono">
         <p class="help">Discord and Slack-compatible. Receives deploy failures, app crashes and backup errors. Empty disables notifications.</p>
       </div>
+      <div>
+        <span class="label">Server usage alerts</span>
+        <div class="grid grid-cols-3 gap-3">
+          <label class="text-sm">
+            <span class="muted">Disk %</span>
+            <input name="alert_disk" type="number" min="0" max="100" value="{{.AlertDisk}}" class="input mono">
+          </label>
+          <label class="text-sm">
+            <span class="muted">Memory %</span>
+            <input name="alert_mem" type="number" min="0" max="100" value="{{.AlertMem}}" class="input mono">
+          </label>
+          <label class="text-sm">
+            <span class="muted">CPU %</span>
+            <input name="alert_cpu" type="number" min="0" max="100" value="{{.AlertCPU}}" class="input mono">
+          </label>
+        </div>
+        <p class="help">Notifies once when the server crosses a threshold, and again when it recovers. A full disk is the most common way a VPS goes down, so disk warns earliest. Set one to 0 to turn it off.</p>
+      </div>
       <button type="submit" class="btn">Save integrations</button>
     </form>
   </section>

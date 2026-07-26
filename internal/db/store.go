@@ -119,6 +119,11 @@ const (
 	SettingNotifyURL       = "notify_url"       // Discord/Slack-compatible webhook
 	SettingBackupRetention = "backup_retention" // how many backup archives to keep
 	SettingBackupAuto      = "backup_auto"      // "true" to run a daily backup
+
+	// Host usage percentages that trigger a notification; 0 turns one off.
+	SettingAlertDisk = "alert_disk_percent"
+	SettingAlertMem  = "alert_mem_percent"
+	SettingAlertCPU  = "alert_cpu_percent"
 )
 
 func GetSetting(db *sql.DB, key string) string {
