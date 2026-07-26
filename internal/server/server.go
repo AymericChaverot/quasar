@@ -83,6 +83,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /theme", s.requireAuth(s.handleThemeSet))
 
 	s.mux.Handle("GET /logs", s.requireAuth(s.handleLogsPage))
+	s.mux.Handle("GET /audit", s.requireAuth(s.handleAuditPage))
 	s.mux.Handle("GET /partials/logs", s.requireAuth(s.handleLogsSearchPartial))
 
 	s.mux.Handle("GET /system", s.requireAuth(s.handleSystem))

@@ -111,6 +111,17 @@ CREATE TABLE IF NOT EXISTS settings (
 	key   TEXT PRIMARY KEY,
 	value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS audit_log (
+	id     INTEGER PRIMARY KEY AUTOINCREMENT,
+	ts     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	actor  TEXT NOT NULL,
+	action TEXT NOT NULL,
+	target TEXT NOT NULL DEFAULT '',
+	detail TEXT NOT NULL DEFAULT '',
+	ip     TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts);
 `
 
 // migrations are applied best-effort on top of the base schema so existing

@@ -89,6 +89,7 @@ func (s *Server) handleBackupNow(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "backup failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.audit(r, "backup.create", name, "")
 	http.Redirect(w, r, "/system?msg=Backup created: "+name, http.StatusSeeOther)
 }
 
@@ -107,6 +108,7 @@ func (s *Server) handleBackupDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.audit(r, "backup.delete", r.PathValue("name"), "")
 	http.Redirect(w, r, "/system?msg=Backup deleted.", http.StatusSeeOther)
 }
 
@@ -127,9 +129,12 @@ func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	msg := "Backup restored. Redeploy applications to apply their restored configuration."
+	detail := ""
 	if archiveKey != nil {
 		msg = "Backup restored and re-encrypted with this server's key. Redeploy applications to apply their restored configuration."
+		detail = "with an uploaded master key"
 	}
+	s.audit(r, "backup.restore", r.PathValue("name"), detail)
 	http.Redirect(w, r, "/system?msg="+url.QueryEscape(msg), http.StatusSeeOther)
 }
 
@@ -166,6 +171,9 @@ func (s *Server) handleMasterKeyDownload(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "master key unavailable: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Handing out the key that opens every stored secret is the single most
+	// sensitive thing this dashboard can do, so it is always on the record.
+	s.audit(r, "master-key.download", "", "")
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="quasar-master.key"`)
 	w.Write(key)
@@ -199,6 +207,7 @@ func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "update failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.audit(r, "platform.update", latest, imageRef)
 	http.Redirect(w, r, "/system?msg=Update to "+latest+" started — the dashboard will restart in a few seconds.", http.StatusSeeOther)
 }
 

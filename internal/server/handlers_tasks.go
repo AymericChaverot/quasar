@@ -39,6 +39,7 @@ func (s *Server) handleTaskAdd(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.audit(r, "task.add", a.Name, command)
 	s.handleTasksPartial(w, r)
 }
 
@@ -48,7 +49,10 @@ func (s *Server) handleTaskDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if id, err := strconv.ParseInt(r.PathValue("task"), 10, 64); err == nil {
-		db.DeleteTask(s.db, id)
+		if t, err := db.GetTask(s.db, id); err == nil && t.AppID == a.ID {
+			db.DeleteTask(s.db, id)
+			s.audit(r, "task.delete", a.Name, t.Command)
+		}
 	}
 	s.handleTasksPartial(w, r)
 }
@@ -72,10 +76,13 @@ func (s *Server) handleTaskRun(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
 	out, runErr := s.dock.RunCommand(ctx, a, t.Command)
+	status := "success"
 	if runErr != nil {
-		db.RecordTaskRun(s.db, t.ID, "failed", out+"\n"+runErr.Error())
+		status = "failed"
+		db.RecordTaskRun(s.db, t.ID, status, out+"\n"+runErr.Error())
 	} else {
-		db.RecordTaskRun(s.db, t.ID, "success", out)
+		db.RecordTaskRun(s.db, t.ID, status, out)
 	}
+	s.audit(r, "task.run", a.Name, t.Command+" ("+status+")")
 	s.handleTasksPartial(w, r)
 }

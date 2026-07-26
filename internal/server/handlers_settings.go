@@ -126,6 +126,7 @@ func (s *Server) handle2FAEnable(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, "settings", data)
 		return
 	}
+	s.audit(r, "2fa.enable", "", "")
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
@@ -137,6 +138,7 @@ func (s *Server) handle2FADisable(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, "settings", data)
 		return
 	}
+	s.audit(r, "2fa.disable", "", "")
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
@@ -155,6 +157,7 @@ func (s *Server) handleRegistryAdd(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.audit(r, "registry.add", server, username)
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
@@ -165,6 +168,7 @@ func (s *Server) handleRegistryDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	db.DeleteRegistry(s.db, id)
+	s.audit(r, "registry.delete", strconv.FormatInt(id, 10), "")
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
@@ -192,6 +196,8 @@ func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) 
 			db.SetSetting(s.db, key, strconv.Itoa(v))
 		}
 	}
+	// No values in the detail: this form carries a git access token.
+	s.audit(r, "settings.integrations", "", "")
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
@@ -219,6 +225,7 @@ func (s *Server) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, "settings", data)
 		return
 	}
+	s.audit(r, "password.change", "", "")
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
@@ -227,6 +234,7 @@ func (s *Server) handleSessionsClear(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.audit(r, "sessions.clear", "", "every session invalidated")
 	auth.ClearCookie(w, s.cfg.CookieSecure)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }

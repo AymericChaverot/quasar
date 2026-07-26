@@ -53,6 +53,9 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer shell.Close()
+	// A root shell in the container can read every secret the app holds, so
+	// opening one is worth recording even though nothing was changed.
+	s.audit(r, "terminal.open", a.Name, "")
 
 	// Container output -> websocket.
 	go func() {

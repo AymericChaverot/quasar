@@ -135,6 +135,7 @@ func (s *Server) handleAppCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.dock.DeployAsync(a, "manual")
+	s.audit(r, "app.create", a.Name, a.Subdomain+" ("+a.DeployType+")")
 	http.Redirect(w, r, "/apps/"+a.ID, http.StatusSeeOther)
 }
 
@@ -234,6 +235,7 @@ func (s *Server) appAction(action string) http.HandlerFunc {
 			http.Error(w, fmt.Sprintf("%s failed: %v", action, err), http.StatusInternalServerError)
 			return
 		}
+		s.audit(r, "app."+action, a.Name, "")
 		s.renderPartial(w, "app_status_panel", s.appView(r.Context(), a))
 	}
 }
@@ -244,6 +246,7 @@ func (s *Server) handleAppRedeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.dock.DeployAsync(a, "manual")
+	s.audit(r, "app.deploy", a.Name, "")
 	s.renderPartial(w, "app_status_panel", s.appView(r.Context(), a))
 }
 
@@ -268,6 +271,7 @@ func (s *Server) handleAppRollback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.dock.RollbackAsync(a, tag)
+	s.audit(r, "app.rollback", a.Name, "to "+tag)
 	s.renderPartial(w, "app_status_panel", s.appView(r.Context(), a))
 }
 
@@ -414,6 +418,9 @@ func (s *Server) handleAppDelete(w http.ResponseWriter, r *http.Request) {
 	db.DeleteTasksForApp(s.db, a.ID)
 	db.DeleteAppTimeSeries(s.db, a.ID)
 	db.DeleteAppLogs(s.db, a.ID)
+	// Recorded after the fact and deliberately outside DeleteAppLogs' reach:
+	// deleting an app must not also erase the record of who deleted it.
+	s.audit(r, "app.delete", a.Name, a.Subdomain+" ("+a.DeployType+")")
 	w.Header().Set("HX-Redirect", "/")
 	w.WriteHeader(http.StatusOK)
 }
@@ -438,5 +445,8 @@ func (s *Server) handleAppEnvSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "write .env failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// The values themselves are never recorded — that would put every secret
+	// in plaintext in a table the encryption exists to keep them out of.
+	s.audit(r, "app.env-change", a.Name, "")
 	s.renderPartial(w, "env_saved", nil)
 }

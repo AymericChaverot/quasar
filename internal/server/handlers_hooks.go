@@ -28,6 +28,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.dock.DeployAsync(a, "webhook")
+	s.auditAs(r, db.ActorWebhook, "app.deploy", a.Name, "triggered by webhook")
 	w.WriteHeader(http.StatusAccepted)
 	w.Write([]byte("deploy triggered\n"))
 }
