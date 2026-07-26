@@ -3,12 +3,14 @@
 package docker
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/docker/docker/client"
 
@@ -48,8 +50,28 @@ func New(cfg config.Config, database *sql.DB) (*Client, error) {
 	}, nil
 }
 
-// ContainerName returns the managed container name for a single-container app.
+// appLabel marks a container as the managed container of a single-container
+// app. Container names carry a per-deploy suffix so a new container can be
+// started before the old one is retired, so this label — not the name — is
+// what identifies an app's container.
+const appLabel = "quasar.app"
+
+// ContainerName returns the stable network alias every one of an app's
+// containers answers to, whichever deploy created it. Anything addressing an
+// app over the Docker network (the health checker, other apps) uses this name;
+// during a deploy Docker's DNS round-robins it across old and new.
 func ContainerName(appID string) string { return "qs-" + appID }
+
+// deployContainerName returns the actual container name for one deploy. The
+// suffix is what lets the replacement container exist alongside the container
+// it replaces, since Docker names are unique. It carries a timestamp to stay
+// readable in `docker ps` plus random bytes for the uniqueness, because clock
+// resolution alone is not fine enough to separate two quick deploys.
+func deployContainerName(appID string) string {
+	var b [4]byte
+	rand.Read(b[:])
+	return fmt.Sprintf("qs-%s-%d-%x", appID, time.Now().Unix(), b)
+}
 
 // composeProject returns the docker compose project name for a compose app.
 func composeProject(appID string) string { return "qs-" + appID }
@@ -106,12 +128,20 @@ func (c *Client) traefikLabels(a *db.App) map[string]string {
 		rule += fmt.Sprintf(" || Host(`%s`)", d)
 	}
 	labels := map[string]string{
-		"quasar.app":     a.ID,
+		appLabel:         a.ID,
 		"traefik.enable": "true",
 		fmt.Sprintf("traefik.http.routers.%s.rule", r):                      rule,
 		fmt.Sprintf("traefik.http.routers.%s.entrypoints", r):               "websecure",
 		fmt.Sprintf("traefik.http.routers.%s.tls.certresolver", r):          "letsencrypt",
 		fmt.Sprintf("traefik.http.services.%s.loadbalancer.server.port", r): fmt.Sprintf("%d", a.Port),
+	}
+	// Old and new containers share this router for the few seconds a deploy
+	// overlaps them, so Traefik sees one service with two servers. Its own
+	// health check is what keeps requests off the one that isn't serving yet.
+	if a.HealthPath != "" {
+		labels[fmt.Sprintf("traefik.http.services.%s.loadbalancer.healthcheck.path", r)] = a.HealthPath
+		labels[fmt.Sprintf("traefik.http.services.%s.loadbalancer.healthcheck.interval", r)] = "5s"
+		labels[fmt.Sprintf("traefik.http.services.%s.loadbalancer.healthcheck.timeout", r)] = "3s"
 	}
 	if a.BasicAuthUser != "" && a.BasicAuthHash != "" {
 		labels[fmt.Sprintf("traefik.http.middlewares.%s-auth.basicauth.users", r)] = a.BasicAuthUser + ":" + a.BasicAuthHash

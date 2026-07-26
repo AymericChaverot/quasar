@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,7 +30,16 @@ import (
 const (
 	deployTimeout = 15 * time.Minute
 	keepBuilds    = 4 // git-built images kept per app for rollback
+
+	// readyTimeout bounds how long a new container gets to start serving
+	// before the deploy is failed and the previous container kept.
+	readyTimeout = 90 * time.Second
+	// settleDelay is how long a container with no health path must stay up to
+	// count as deployed — enough to catch an image that exits immediately.
+	settleDelay = 5 * time.Second
 )
+
+var readyClient = &http.Client{Timeout: 5 * time.Second}
 
 // DeployAsync launches a deploy in the background, records it in the
 // deployment history and notifies on failure. The UI polls Deploying().
@@ -111,7 +121,11 @@ func (c *Client) registryAuth(ref string) string {
 	return base64.URLEncoding.EncodeToString(buf)
 }
 
-// deployImage replaces the app container with a fresh one from the given image.
+// deployImage brings up a new container for the app and retires the one it
+// replaces only once the new one is serving. Removing the old container first
+// — as this used to — meant every redeploy dropped requests, and a bad image
+// or a container that died on startup left the app with no container at all
+// and nothing to roll back to.
 func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pull bool) error {
 	if pull {
 		rc, err := c.api.ImagePull(ctx, imageRef, image.PullOptions{RegistryAuth: c.registryAuth(imageRef)})
@@ -122,8 +136,34 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 		rc.Close()
 	}
 
-	name := ContainerName(a.ID)
-	c.removeContainer(ctx, name)
+	previous := c.appContainers(ctx, a.ID)
+
+	// Two containers writing one data directory at the same time can corrupt
+	// it, so an app with a data mount has its old container stopped before the
+	// replacement starts: a few seconds of downtime, but the old container is
+	// still there to bring back. Only stateless apps truly overlap.
+	overlap := a.DataMount == ""
+	var stopped []string
+	if !overlap {
+		for _, ct := range previous {
+			if ct.State == "running" {
+				stopped = append(stopped, ct.ID)
+			}
+		}
+		for _, id := range stopped {
+			c.api.ContainerStop(ctx, id, container.StopOptions{})
+		}
+	}
+
+	// Cleanup must not inherit a cancelled deploy context, or a timed-out
+	// deploy would leave the app down — the exact failure this rewrite exists
+	// to prevent.
+	rollback := func() {
+		undo := context.WithoutCancel(ctx)
+		for _, id := range stopped {
+			c.api.ContainerStart(undo, id, container.StartOptions{})
+		}
+	}
 
 	hostCfg := &container.HostConfig{
 		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
@@ -136,6 +176,7 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 		hostCfg.Binds = []string{c.hostDataDir(a.ID) + ":" + a.DataMount}
 	}
 
+	name := deployContainerName(a.ID)
 	created, err := c.api.ContainerCreate(ctx,
 		&container.Config{
 			Image:  imageRef,
@@ -144,14 +185,93 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 		},
 		hostCfg,
 		&network.NetworkingConfig{
-			EndpointsConfig: map[string]*network.EndpointSettings{c.network: {}},
+			EndpointsConfig: map[string]*network.EndpointSettings{
+				// The alias is how anything on the network keeps addressing
+				// the app by one stable name across deploys.
+				c.network: {Aliases: []string{ContainerName(a.ID)}},
+			},
 		},
 		nil, name)
 	if err != nil {
+		rollback()
 		return fmt.Errorf("create container: %w", err)
 	}
 	if err := c.api.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
+		c.removeContainer(context.WithoutCancel(ctx), created.ID)
+		rollback()
 		return fmt.Errorf("start container: %w", err)
+	}
+	if err := c.waitServing(ctx, a, name, created.ID); err != nil {
+		c.removeContainer(context.WithoutCancel(ctx), created.ID)
+		rollback()
+		return err
+	}
+
+	// The new container is serving; everything older can go, including any
+	// leftovers from an interrupted deploy.
+	done := context.WithoutCancel(ctx)
+	for _, ct := range previous {
+		c.removeContainer(done, ct.ID)
+	}
+	return nil
+}
+
+// waitServing blocks until a freshly started container is actually serving, so
+// deployImage knows whether it is safe to retire the container it replaces.
+//
+// An app with a health path is probed directly by its per-deploy container
+// name — not by the shared alias, which would round-robin onto the container
+// being replaced and pass even if the new one is broken. Without a health path
+// the most we can verify is that it did not exit on startup.
+func (c *Client) waitServing(ctx context.Context, a *db.App, name, id string) error {
+	probeURL := ""
+	if a.HealthPath != "" && a.Port > 0 {
+		probeURL = fmt.Sprintf("http://%s:%d%s", name, a.Port, a.HealthPath)
+	}
+
+	deadline := time.Now().Add(readyTimeout)
+	var lastErr error
+	for {
+		info, err := c.api.ContainerInspect(ctx, id)
+		if err != nil {
+			return fmt.Errorf("inspect new container: %w", err)
+		}
+		if !info.State.Running {
+			return fmt.Errorf("new container exited on startup with code %d, previous version kept", info.State.ExitCode)
+		}
+
+		if probeURL == "" {
+			startedAt, _ := time.Parse(time.RFC3339Nano, info.State.StartedAt)
+			if time.Since(startedAt) >= settleDelay {
+				return nil
+			}
+		} else if lastErr = probeOnce(probeURL); lastErr == nil {
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			if lastErr != nil {
+				return fmt.Errorf("new container never served %s within %s (%v), previous version kept",
+					a.HealthPath, readyTimeout, lastErr)
+			}
+			return fmt.Errorf("new container did not stay up for %s, previous version kept", settleDelay)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
+}
+
+func probeOnce(url string) error {
+	resp, err := readyClient.Get(url)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("status %s", resp.Status)
 	}
 	return nil
 }

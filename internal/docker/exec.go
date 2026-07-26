@@ -12,11 +12,11 @@ import (
 	"quasar/internal/db"
 )
 
-// containerFor resolves the container name/ID to target for an app: the
-// managed container, or the first container of a compose project.
+// containerFor resolves the container ID to target for an app: the container
+// currently serving it, or the first container of a compose project.
 func (c *Client) containerFor(ctx context.Context, a *db.App) (string, error) {
 	if a.DeployType != "compose" {
-		return ContainerName(a.ID), nil
+		return c.appContainer(ctx, a.ID)
 	}
 	list, err := c.api.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {

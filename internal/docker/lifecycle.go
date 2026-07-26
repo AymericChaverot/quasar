@@ -2,7 +2,9 @@ package docker
 
 import (
 	"context"
+	"errors"
 	"os"
+	"sort"
 	"strconv"
 	"time"
 
@@ -16,6 +18,39 @@ import (
 type AppStatus struct {
 	State  string // "running", "stopped", "error", "deploying", "not deployed"
 	Uptime string // human duration, empty unless running
+}
+
+// errNoContainer is returned when an app has never been deployed, or its
+// container was removed outside Quasar.
+var errNoContainer = errors.New("app has no container")
+
+// appContainers lists an app's managed containers, newest first. A deploy
+// keeps the previous container running until the replacement is serving, so
+// two can exist at once; everything that acts on "the" container acts on the
+// newest, and only the deploy itself looks at the rest.
+//
+// Resolution goes through the label rather than the container name because
+// names carry a per-deploy suffix. Containers created before that suffix
+// existed are named qs-<id> but carry the same label, so they resolve too.
+func (c *Client) appContainers(ctx context.Context, appID string) []container.Summary {
+	list, err := c.api.ContainerList(ctx, container.ListOptions{
+		All:     true,
+		Filters: filters.NewArgs(filters.Arg("label", appLabel+"="+appID)),
+	})
+	if err != nil {
+		return nil
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].Created > list[j].Created })
+	return list
+}
+
+// appContainer resolves the container currently serving an app.
+func (c *Client) appContainer(ctx context.Context, appID string) (string, error) {
+	list := c.appContainers(ctx, appID)
+	if len(list) == 0 {
+		return "", errNoContainer
+	}
+	return list[0].ID, nil
 }
 
 // Status inspects the app's container(s) and reports a UI-friendly state.
@@ -33,7 +68,11 @@ func (c *Client) Status(ctx context.Context, a *db.App) AppStatus {
 		return c.composeStatus(ctx, a.ID)
 	}
 
-	info, err := c.api.ContainerInspect(ctx, ContainerName(a.ID))
+	id, err := c.appContainer(ctx, a.ID)
+	if err != nil {
+		return AppStatus{State: "not deployed"}
+	}
+	info, err := c.api.ContainerInspect(ctx, id)
 	if err != nil {
 		return AppStatus{State: "not deployed"}
 	}
@@ -88,21 +127,33 @@ func (c *Client) Start(ctx context.Context, a *db.App) error {
 	if a.DeployType == "compose" {
 		return c.compose(ctx, a.ID, "start")
 	}
-	return c.api.ContainerStart(ctx, ContainerName(a.ID), container.StartOptions{})
+	id, err := c.appContainer(ctx, a.ID)
+	if err != nil {
+		return err
+	}
+	return c.api.ContainerStart(ctx, id, container.StartOptions{})
 }
 
 func (c *Client) Stop(ctx context.Context, a *db.App) error {
 	if a.DeployType == "compose" {
 		return c.compose(ctx, a.ID, "stop")
 	}
-	return c.api.ContainerStop(ctx, ContainerName(a.ID), container.StopOptions{})
+	id, err := c.appContainer(ctx, a.ID)
+	if err != nil {
+		return err
+	}
+	return c.api.ContainerStop(ctx, id, container.StopOptions{})
 }
 
 func (c *Client) Restart(ctx context.Context, a *db.App) error {
 	if a.DeployType == "compose" {
 		return c.compose(ctx, a.ID, "restart")
 	}
-	return c.api.ContainerRestart(ctx, ContainerName(a.ID), container.StopOptions{})
+	id, err := c.appContainer(ctx, a.ID)
+	if err != nil {
+		return err
+	}
+	return c.api.ContainerRestart(ctx, id, container.StopOptions{})
 }
 
 // Remove tears down the app's containers and deletes its directory on disk.
@@ -110,7 +161,11 @@ func (c *Client) Remove(ctx context.Context, a *db.App) error {
 	if a.DeployType == "compose" {
 		c.compose(ctx, a.ID, "down", "--volumes") // best effort
 	} else {
-		c.removeContainer(ctx, ContainerName(a.ID))
+		// Every container, not just the newest: an interrupted deploy can
+		// leave a replacement behind that must go too.
+		for _, ct := range c.appContainers(ctx, a.ID) {
+			c.removeContainer(ctx, ct.ID)
+		}
 	}
 	c.forgetDeploy(a.ID)
 	return os.RemoveAll(c.AppDir(a.ID))

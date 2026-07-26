@@ -19,7 +19,11 @@ type ContainerStats struct {
 
 // Stats reads a single (non-streamed) stats sample for the app container.
 func (c *Client) Stats(ctx context.Context, a *db.App) (ContainerStats, error) {
-	return c.StatsByName(ctx, ContainerName(a.ID))
+	target, err := c.containerFor(ctx, a)
+	if err != nil {
+		return ContainerStats{}, err
+	}
+	return c.StatsByName(ctx, target)
 }
 
 // StatsByName reads a single (non-streamed) stats sample for any container by
