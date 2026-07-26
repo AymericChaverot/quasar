@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"net/http"
-	"path/filepath"
 
 	"quasar/internal/auth"
 	"quasar/internal/backup"
@@ -31,8 +30,9 @@ func main() {
 
 	// The master key lives alongside the database (persisted, mounted volume)
 	// but — deliberately — outside anything backup.Run archives, so a leaked
-	// backup or a copied-out database file alone can't be decrypted.
-	keyring, err := secrets.LoadOrCreateKey(filepath.Join(filepath.Dir(cfg.DBPath), "master.key"))
+	// backup or a copied-out database file alone can't be decrypted. Which is
+	// also why it has to be kept somewhere safe: see /system's key download.
+	keyring, err := secrets.LoadOrCreateKey(cfg.KeyPath)
 	if err != nil {
 		log.Fatalf("encryption key: %v", err)
 	}

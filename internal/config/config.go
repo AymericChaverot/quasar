@@ -22,15 +22,17 @@ type Config struct {
 	CookieSecure   bool   // set COOKIE_SECURE=false for local dev over plain HTTP
 	GitHubRepo     string // "owner/name", used for release checks and update images
 	SocketNetwork  string // Docker network where the socket proxy lives
+	KeyPath        string // at-rest encryption master key, next to the database
 }
 
 func Load() Config {
 	loadDotEnv(getenv("ENV_FILE", ".env"))
 
+	dbPath := absPath(getenv("DB_PATH", "/opt/quasar/storage/database.sqlite"))
 	return Config{
 		Domain:         getenv("DOMAIN", "localhost"),
 		ListenAddr:     getenv("LISTEN_ADDR", ":8080"),
-		DBPath:         absPath(getenv("DB_PATH", "/opt/quasar/storage/database.sqlite")),
+		DBPath:         dbPath,
 		AppsDir:        absPath(getenv("APPS_DIR", "/opt/quasar/apps")),
 		TraefikNetwork: getenv("TRAEFIK_NETWORK", "traefik-net"),
 		AdminUser:      getenv("ADMIN_USER", ""),
@@ -40,6 +42,9 @@ func Load() Config {
 		CookieSecure:   getenv("COOKIE_SECURE", "true") != "false",
 		GitHubRepo:     getenv("GITHUB_REPO", "AymericChaverot/quasar"),
 		SocketNetwork:  getenv("SOCKET_NETWORK", "quasar-socket-net"),
+		// Beside the database, on the same persisted volume, but deliberately
+		// outside anything backup.Run archives.
+		KeyPath: filepath.Join(filepath.Dir(dbPath), "master.key"),
 	}
 }
 

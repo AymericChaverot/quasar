@@ -3,7 +3,10 @@ package server
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -13,6 +16,7 @@ import (
 	"quasar/internal/certs"
 	"quasar/internal/db"
 	"quasar/internal/docker"
+	"quasar/internal/secrets"
 	"quasar/internal/updater"
 	"quasar/internal/version"
 	"quasar/internal/vps"
@@ -108,12 +112,63 @@ func (s *Server) handleBackupDelete(w http.ResponseWriter, r *http.Request) {
 
 // handleBackupRestore puts a backup's database tables, data directories and
 // .env files back in place. Apps must be redeployed to pick up the state.
+//
+// An archive from another install carries rows sealed with that install's
+// master key, so its key file can be uploaded alongside; without it every
+// restored app's env and compose data would be unreadable.
 func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
-	if err := backup.Restore(s.db, s.cfg.AppsDir, s.cfg.BackupsDir, r.PathValue("name")); err != nil {
+	archiveKey, err := s.uploadedKey(r)
+	if err != nil {
+		http.Error(w, "restore failed: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := backup.Restore(s.db, s.cfg.AppsDir, s.cfg.BackupsDir, r.PathValue("name"), s.keyring, archiveKey); err != nil {
 		http.Error(w, "restore failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/system?msg=Backup restored. Redeploy applications to apply their restored configuration.", http.StatusSeeOther)
+	msg := "Backup restored. Redeploy applications to apply their restored configuration."
+	if archiveKey != nil {
+		msg = "Backup restored and re-encrypted with this server's key. Redeploy applications to apply their restored configuration."
+	}
+	http.Redirect(w, r, "/system?msg="+url.QueryEscape(msg), http.StatusSeeOther)
+}
+
+// uploadedKey reads the optional master_key file from a restore submission,
+// returning nil when the operator did not attach one.
+func (s *Server) uploadedKey(r *http.Request) (*secrets.Keyring, error) {
+	file, _, err := r.FormFile("master_key")
+	if err != nil {
+		return nil, nil // no file attached: same-install restore
+	}
+	defer file.Close()
+	// A master key is 32 bytes; the cap is only there so a misselected file
+	// can't be read into memory wholesale.
+	raw, err := io.ReadAll(io.LimitReader(file, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read master key: %w", err)
+	}
+	keyring, err := secrets.KeyringFrom(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%w — upload the master.key file downloaded from the source server", err)
+	}
+	return keyring, nil
+}
+
+// handleMasterKeyDownload serves the at-rest encryption key so it can be kept
+// somewhere other than this server.
+//
+// Backups deliberately exclude this key, which is what makes a leaked archive
+// useless on its own — and equally what makes an archive useless on a rebuilt
+// server unless the key was saved separately.
+func (s *Server) handleMasterKeyDownload(w http.ResponseWriter, r *http.Request) {
+	key, err := os.ReadFile(s.cfg.KeyPath)
+	if err != nil {
+		http.Error(w, "master key unavailable: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", `attachment; filename="quasar-master.key"`)
+	w.Write(key)
 }
 
 // handleUpdateCheck queries GitHub for the latest release right now.

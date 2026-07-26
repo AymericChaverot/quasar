@@ -196,6 +196,20 @@
         </div>
         <button type="submit" class="btn">Save</button>
       </form>
+      <div class="border-t pt-4" style="border-color: var(--border)">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-sm font-medium">Encryption master key</p>
+            <p class="help">
+              App environment variables and compose files are encrypted with a key that is
+              <strong>never included in a backup</strong> — that is what makes a stolen archive useless.
+              It also means an archive alone cannot be restored onto a rebuilt server.
+              Download this key and keep it somewhere other than this VPS and its backups.
+            </p>
+          </div>
+          <a href="/system/master-key" class="btn shrink-0">Download key</a>
+        </div>
+      </div>
     </div>
 
     {{if .Backups}}
@@ -210,9 +224,13 @@
             <td class="mono muted">{{printf "%.1f" .SizeMB}} MB</td>
             <td class="flex items-center gap-2">
               <a href="/system/backups/{{.Name}}" class="btn !py-1 text-xs">Download</a>
-              <form method="post" action="/system/backups/{{.Name}}/restore"
+              <form method="post" action="/system/backups/{{.Name}}/restore" enctype="multipart/form-data"
                     onsubmit="return confirm('Restore this backup? Current app configuration and data will be overwritten; redeploy applications afterwards.')">
-                <button type="submit" class="btn !py-1 text-xs">Restore</button>
+                <label class="btn !py-1 cursor-pointer text-xs" title="Only needed for an archive from another server: its master.key file">
+                  Key…
+                  <input type="file" name="master_key" class="hidden" onchange="this.form.querySelector('[data-restore]').textContent = this.files.length ? 'Restore with key' : 'Restore'">
+                </label>
+                <button type="submit" data-restore class="btn !py-1 text-xs">Restore</button>
               </form>
               <form method="post" action="/system/backups/{{.Name}}/delete"
                     onsubmit="return confirm('Delete this backup?')">

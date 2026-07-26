@@ -55,7 +55,16 @@ func LoadOrCreateKey(path string) (*Keyring, error) {
 	case len(key) != keySize:
 		return nil, fmt.Errorf("master key at %s is %d bytes, want %d — delete it to regenerate (existing encrypted values become unreadable)", path, len(key), keySize)
 	}
+	return KeyringFrom(key)
+}
 
+// KeyringFrom builds a keyring from raw key bytes, for opening values sealed by
+// a key other than this install's — restoring a backup taken on another host,
+// where the archive's rows were sealed with that host's key.
+func KeyringFrom(key []byte) (*Keyring, error) {
+	if len(key) != keySize {
+		return nil, fmt.Errorf("master key is %d bytes, want %d", len(key), keySize)
+	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err

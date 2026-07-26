@@ -92,6 +92,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /system/backups/{name}/delete", s.requireAuth(s.handleBackupDelete))
 	s.mux.Handle("POST /system/backups/{name}/restore", s.requireAuth(s.handleBackupRestore))
 	s.mux.Handle("POST /system/backup-settings", s.requireAuth(s.handleBackupSettings))
+	s.mux.Handle("GET /system/master-key", s.requireAuth(s.handleMasterKeyDownload))
 	s.mux.Handle("POST /system/update/check", s.requireAuth(s.handleUpdateCheck))
 	s.mux.Handle("POST /system/update/apply", s.requireAuth(s.handleUpdateApply))
 	s.mux.Handle("GET /system/containers/{name}", s.requireAuth(s.handleSystemContainerDetail))

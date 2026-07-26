@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"quasar/internal/db"
+	"quasar/internal/secrets"
 )
 
 // restoredTables are copied from the archive into the live database.
@@ -20,7 +23,12 @@ var restoredTables = []string{"users", "apps", "registries", "settings", "deploy
 // put back in place, and database tables are copied from the snapshot into
 // the live database via ATTACH (the server keeps running throughout).
 // Apps must be redeployed afterwards to pick up restored state.
-func Restore(database *sql.DB, appsDir, dir, name string) error {
+//
+// Archives never contain the master key, so rows from an archive taken on
+// another host are sealed with a key this install does not have. Pass that key
+// as archiveKey and the restored rows are moved onto the live key; pass nil
+// when restoring an archive from this same install.
+func Restore(database *sql.DB, appsDir, dir, name string, live, archiveKey *secrets.Keyring) error {
 	if !ValidName(name) {
 		return fmt.Errorf("invalid backup name")
 	}
@@ -40,6 +48,13 @@ func Restore(database *sql.DB, appsDir, dir, name string) error {
 	if _, err := os.Stat(snap); err == nil {
 		if err := restoreTables(database, snap); err != nil {
 			return fmt.Errorf("restore database: %w", err)
+		}
+		// The rows just landed sealed with the archive's key; without this
+		// step every restored app's env and compose data is unreadable.
+		if archiveKey != nil {
+			if _, err := db.ResealApps(database, archiveKey, live); err != nil {
+				return fmt.Errorf("the supplied master key does not open this archive: %w", err)
+			}
 		}
 	}
 

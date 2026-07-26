@@ -157,6 +157,61 @@ func SubdomainTaken(db *sql.DB, subdomain string) (bool, error) {
 	return n > 0, err
 }
 
+// ResealApps re-seals every app's env and compose data from one key to
+// another, returning how many rows changed.
+//
+// It exists for restores: an archive taken on another host has its rows sealed
+// with that host's master key, so on a rebuilt VPS the live key cannot open
+// them. Rather than swapping this install's key — which would orphan anything
+// already written with it and need a restart — the restored rows are moved onto
+// the live key in place.
+func ResealApps(database *sql.DB, from, to *secrets.Keyring) (int, error) {
+	rows, err := database.Query("SELECT id, env_content, compose_yaml FROM apps")
+	if err != nil {
+		return 0, err
+	}
+	type row struct{ id, env, compose string }
+	var all []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.env, &r.compose); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		all = append(all, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	resealed := 0
+	for _, r := range all {
+		// Values with no encryption marker pass through Decrypt untouched, so
+		// plaintext rows from an old archive are simply encrypted on the way in.
+		env, err := from.Decrypt(r.env)
+		if err != nil {
+			return resealed, fmt.Errorf("app %s: open env with the supplied key: %w", r.id, err)
+		}
+		compose, err := from.Decrypt(r.compose)
+		if err != nil {
+			return resealed, fmt.Errorf("app %s: open compose yaml with the supplied key: %w", r.id, err)
+		}
+		if env, err = to.Encrypt(env); err != nil {
+			return resealed, fmt.Errorf("app %s: reseal env: %w", r.id, err)
+		}
+		if compose, err = to.Encrypt(compose); err != nil {
+			return resealed, fmt.Errorf("app %s: reseal compose yaml: %w", r.id, err)
+		}
+		if _, err := database.Exec("UPDATE apps SET env_content = ?, compose_yaml = ? WHERE id = ?",
+			env, compose, r.id); err != nil {
+			return resealed, fmt.Errorf("app %s: %w", r.id, err)
+		}
+		resealed++
+	}
+	return resealed, nil
+}
+
 // EncryptLegacyApps re-encrypts any apps.env_content/compose_yaml columns
 // still holding plaintext from before at-rest encryption existed, and
 // returns how many rows it touched. Meant to run once at startup so
