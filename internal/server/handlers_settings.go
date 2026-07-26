@@ -9,6 +9,7 @@ import (
 	"quasar/internal/auth"
 	"quasar/internal/db"
 	"quasar/internal/monitor"
+	"quasar/internal/notify"
 )
 
 // Theme describes a selectable UI theme, rendered on the settings page.
@@ -95,6 +96,13 @@ func (s *Server) settingsData(r *http.Request) map[string]any {
 		"Registries":  registries,
 		"GitTokenSet": db.GetSetting(s.db, db.SettingGitToken) != "",
 		"NotifyURL":   db.GetSetting(s.db, db.SettingNotifyURL),
+		"NtfyURL":     db.GetSetting(s.db, db.SettingNtfyURL),
+		"SMTPHost":    db.GetSetting(s.db, db.SettingSMTPHost),
+		"SMTPPort":    db.GetSetting(s.db, db.SettingSMTPPort),
+		"SMTPUser":    db.GetSetting(s.db, db.SettingSMTPUser),
+		"SMTPFrom":    db.GetSetting(s.db, db.SettingSMTPFrom),
+		"SMTPTo":      db.GetSetting(s.db, db.SettingSMTPTo),
+		"SMTPPassSet": db.GetSetting(s.db, db.SettingSMTPPassword) != "",
 		"TOTPEnabled": auth.TOTPEnabled(s.db, userID),
 		"AlertDisk":   s.alertThreshold(db.SettingAlertDisk, monitor.AlertDefaultDisk),
 		"AlertMem":    s.alertThreshold(db.SettingAlertMem, monitor.AlertDefaultMem),
@@ -204,9 +212,43 @@ func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) 
 			db.SetSetting(s.db, key, strconv.Itoa(v))
 		}
 	}
-	// No values in the detail: this form carries a git access token.
+	db.SetSetting(s.db, db.SettingNtfyURL, strings.TrimSpace(r.FormValue("ntfy_url")))
+	db.SetSetting(s.db, db.SettingSMTPHost, strings.TrimSpace(r.FormValue("smtp_host")))
+	db.SetSetting(s.db, db.SettingSMTPFrom, strings.TrimSpace(r.FormValue("smtp_from")))
+	db.SetSetting(s.db, db.SettingSMTPTo, strings.TrimSpace(r.FormValue("smtp_to")))
+	db.SetSetting(s.db, db.SettingSMTPUser, strings.TrimSpace(r.FormValue("smtp_user")))
+	if port := strings.TrimSpace(r.FormValue("smtp_port")); port != "" {
+		if v, err := strconv.Atoi(port); err == nil && v > 0 && v <= 65535 {
+			db.SetSetting(s.db, db.SettingSMTPPort, strconv.Itoa(v))
+		}
+	}
+	// Blank means "keep the stored password", so saving the rest of the form
+	// does not silently wipe a credential the field never displays.
+	if pw := r.FormValue("smtp_password"); pw != "" {
+		db.SetSetting(s.db, db.SettingSMTPPassword, pw)
+	}
+	if r.FormValue("clear_smtp_password") == "on" {
+		db.SetSetting(s.db, db.SettingSMTPPassword, "")
+	}
+
+	// No values in the detail: this form carries a git access token and an SMTP
+	// password.
 	s.audit(r, "settings.integrations", "", "")
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+}
+
+// handleNotifyTest sends a probe through every configured channel. A webhook
+// that has quietly been broken for weeks is indistinguishable from a healthy
+// platform, so this is the only way to know delivery works.
+func (s *Server) handleNotifyTest(w http.ResponseWriter, r *http.Request) {
+	s.audit(r, "notify.test", "", "")
+	if err := notify.Test(s.db); err != nil {
+		s.settingsError(w, r, "Test notification failed — "+err.Error())
+		return
+	}
+	data := s.settingsData(r)
+	data["Saved"] = "Test notification sent to every configured channel."
+	s.render(w, r, "settings", data)
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {

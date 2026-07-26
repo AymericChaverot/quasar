@@ -211,7 +211,62 @@
         </div>
         <p class="help">Notifies once when the server crosses a threshold, and again when it recovers. A full disk is the most common way a VPS goes down, so disk warns earliest. Set one to 0 to turn it off.</p>
       </div>
-      <button type="submit" class="btn">Save integrations</button>
+
+      <div class="border-t pt-4" style="border-color: var(--border)">
+        <label for="ntfy_url" class="label">ntfy topic URL</label>
+        <input id="ntfy_url" name="ntfy_url" type="text" value="{{.NtfyURL}}"
+               placeholder="https://ntfy.sh/my-quasar-topic" class="input mono">
+        <p class="help">Push notifications to a phone without running a chat service. Empty disables it.</p>
+      </div>
+
+      <div>
+        <span class="label">Email (SMTP)</span>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label class="text-sm">
+            <span class="muted">Host</span>
+            <input name="smtp_host" type="text" value="{{.SMTPHost}}" placeholder="smtp.example.com" class="input mono">
+          </label>
+          <label class="text-sm">
+            <span class="muted">Port</span>
+            <input name="smtp_port" type="number" min="1" max="65535" value="{{.SMTPPort}}" placeholder="587" class="input mono">
+          </label>
+          <label class="text-sm">
+            <span class="muted">From</span>
+            <input name="smtp_from" type="text" value="{{.SMTPFrom}}" placeholder="quasar@example.com" class="input mono">
+          </label>
+          <label class="text-sm">
+            <span class="muted">To</span>
+            <input name="smtp_to" type="text" value="{{.SMTPTo}}" placeholder="me@example.com" class="input mono">
+          </label>
+          <label class="text-sm">
+            <span class="muted">Username (optional)</span>
+            <input name="smtp_user" type="text" value="{{.SMTPUser}}" class="input mono">
+          </label>
+          <label class="text-sm">
+            <span class="muted">Password</span>
+            <input name="smtp_password" type="password" class="input mono"
+                   placeholder="{{if .SMTPPassSet}}configured — enter a new value to replace{{else}}optional{{end}}">
+          </label>
+        </div>
+        {{if .SMTPPassSet}}
+        <label class="mt-2 flex items-center gap-2 text-sm">
+          <input type="checkbox" name="clear_smtp_password">
+          <span class="muted">Remove the stored SMTP password</span>
+        </label>
+        {{end}}
+        <p class="help">Multiple recipients can be comma-separated. Leave the username and password empty for a relay that accepts unauthenticated mail.</p>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn">Save integrations</button>
+      </div>
+    </form>
+    <form method="post" action="/settings/notify-test" class="card flex items-center justify-between gap-4 p-4">
+      <p class="help !mt-0">
+        Send a test message through every configured channel. A webhook that broke weeks ago looks
+        exactly like a platform with nothing to report, so this is worth doing after any change.
+      </p>
+      <button type="submit" class="btn shrink-0">Send test</button>
     </form>
   </section>
 

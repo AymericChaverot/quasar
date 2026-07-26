@@ -124,6 +124,16 @@ const (
 	SettingAlertDisk = "alert_disk_percent"
 	SettingAlertMem  = "alert_mem_percent"
 	SettingAlertCPU  = "alert_cpu_percent"
+
+	// Additional notification channels. Each is independent of the others, so
+	// one broken destination cannot silence the platform.
+	SettingNtfyURL      = "ntfy_url" // full topic URL, e.g. https://ntfy.sh/my-topic
+	SettingSMTPHost     = "smtp_host"
+	SettingSMTPPort     = "smtp_port"
+	SettingSMTPUser     = "smtp_user"
+	SettingSMTPPassword = "smtp_password"
+	SettingSMTPFrom     = "smtp_from"
+	SettingSMTPTo       = "smtp_to"
 )
 
 func GetSetting(db *sql.DB, key string) string {

@@ -119,6 +119,7 @@ func (s *Server) routes() {
 	s.admin("POST /settings/registries", s.handleRegistryAdd)
 	s.admin("POST /settings/registries/{id}/delete", s.handleRegistryDelete)
 	s.admin("POST /settings/integrations", s.handleIntegrationsSave)
+	s.admin("POST /settings/notify-test", s.handleNotifyTest)
 	s.admin("POST /settings/users", s.handleUserCreate)
 	s.admin("POST /settings/users/{id}/role", s.handleUserRole)
 	s.admin("POST /settings/users/{id}/password", s.handleUserPassword)
