@@ -41,6 +41,12 @@ A   *.votre-domaine.com   -> IP du VPS
 Faites-le avant l'installation : Let's Encrypt ne peut émettre les
 certificats que si le DNS résout déjà vers le serveur.
 
+**Les deux enregistrements sont nécessaires.** Le wildcard `*.votre-domaine.com`
+couvre `admin.` et tous les sous-domaines d'apps, mais **pas le domaine racine
+lui-même** : une app publiée sur `@` (l'apex) reste sans certificat tant que
+`votre-domaine.com` n'a pas son propre enregistrement A. L'onglet TLS de la page
+d'une application signale ce cas.
+
 ### 3. Ouvrir les ports
 
 Seuls 22 (SSH), 80 et 443 doivent être accessibles. Par exemple avec ufw :
@@ -112,8 +118,15 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
   depuis le dashboard.
 - **Maintenance disque** : usage Docker (images, conteneurs, volumes), prune
   des images orphelines, taille par app.
-- **Thèmes** : Nebula (sombre, défaut), Terminal (brutalism vert CRT),
-  Paper (clair) — via variables CSS, persisté en cookie.
+- **TLS par app** : état du certificat de chaque hostname servi, et diagnostic
+  quand il manque (nom qui ne résout pas, ou qui pointe ailleurs que sur ce
+  serveur — la cause habituelle d'une app sans HTTPS).
+- **Certificats** : liste des certificats détenus par Traefik avec l'app qui
+  route chacun ; suppression de ceux que plus rien ne route (Traefik redémarre,
+  quelques secondes d'indisponibilité).
+- **Thèmes** : Nebula (sombre, défaut), Marathon (brutalism orange/os, d'après
+  Marathon de Bungie), Nord, Synthwave, Terminal (vert CRT), Paper et Solarized
+  (clairs) — via variables CSS, persisté en cookie.
 - **Catalogue one-click** : PostgreSQL, MySQL, Redis, Uptime Kuma, Ghost, n8n,
   Vaultwarden — formulaire prérempli, secrets générés automatiquement.
 - **Tâches** : commandes exécutées dans le conteneur (`docker exec`), à la
