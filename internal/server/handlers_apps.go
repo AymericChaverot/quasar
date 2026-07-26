@@ -286,6 +286,29 @@ func (s *Server) handleAppRollback(w http.ResponseWriter, r *http.Request) {
 	s.renderPartial(w, "app_status_panel", s.appView(r, a))
 }
 
+// handleAppTLSRetry makes Traefik ask Let's Encrypt again for the app's
+// hostnames, by restarting it.
+//
+// Traefik requests a certificate when a router first appears; if that attempt
+// fails — DNS not propagated yet, port 80 closed, a Let's Encrypt rate limit —
+// it does not try again on its own until its configuration changes. Fixing the
+// cause therefore does not fix the site, which is why this exists. It restarts
+// the shared edge router, so every site is unavailable for a few seconds.
+func (s *Server) handleAppTLSRetry(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 60*time.Second)
+	defer cancel()
+	s.audit(r, "tls.retry", a.Name, appHost(a, s.cfg.Domain))
+	if err := s.dock.RestartTraefik(ctx); err != nil {
+		http.Error(w, "could not restart Traefik: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/apps/"+a.ID, http.StatusSeeOther)
+}
+
 // handleAppMove shifts an app up or down in the manual order and re-renders
 // the list. It rewrites every position, which also heals legacy rows that
 // still share the default sort_order of 0.

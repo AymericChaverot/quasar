@@ -2,9 +2,11 @@ package server
 
 import (
 	"net/http"
+	"strings"
 
 	"quasar/internal/certs"
 	"quasar/internal/db"
+	"quasar/internal/docker"
 	"quasar/internal/vps"
 )
 
@@ -66,16 +68,79 @@ func (s *Server) handleAppStatusPartial(w http.ResponseWriter, r *http.Request) 
 	s.renderPartial(w, "app_status_panel", s.appView(r, a))
 }
 
-// handleAppTLSPartial reports the certificate state of every hostname the app
-// is routed on, and diagnoses the ones without. Loaded lazily, since it makes
-// DNS queries a page render should not block on.
+// TLSView is the certificate state of every hostname an app answers on, next
+// to the route Traefik actually holds for it.
+type TLSView struct {
+	AppID        string
+	Checks       []certs.HostCheck
+	Route        docker.RouteInfo
+	RouteProblem string
+	TraefikNet   string
+	Missing      bool // at least one hostname has no certificate
+	IsAdmin      bool
+}
+
+// handleAppTLSPartial reports why an app is or is not served over HTTPS.
+// Loaded lazily, since it makes DNS queries a page render should not block on.
 func (s *Server) handleAppTLSPartial(w http.ResponseWriter, r *http.Request) {
 	a := s.getApp(w, r)
 	if a == nil {
 		return
 	}
-	hosts := append([]string{s.appView(r, a).Host()}, a.CustomDomainList()...)
-	s.renderPartial(w, "tls_status", certs.Diagnose(r.Context(), s.heldCerts(), s.cfg.Domain, hosts))
+	host := appHost(a, s.cfg.Domain)
+	hosts := append([]string{host}, a.CustomDomainList()...)
+	route := s.dock.Route(r.Context(), a)
+	checks := certs.Diagnose(r.Context(), s.heldCerts(), s.cfg.Domain, hosts)
+
+	missing := false
+	for _, c := range checks {
+		missing = missing || !c.HasCert
+	}
+	s.renderPartial(w, "tls_status", TLSView{
+		AppID:        a.ID,
+		Checks:       checks,
+		Route:        route,
+		RouteProblem: routeProblem(route, a.DeployType, host, s.dock.Network()),
+		TraefikNet:   s.dock.Network(),
+		Missing:      missing,
+		IsAdmin:      s.isAdmin(r),
+	})
+}
+
+// routeProblem explains why Traefik has no working route for the app's
+// hostname.
+//
+// This is the confusing failure: a name Traefik has no router for is still
+// answered — with Traefik's own self-signed certificate, the one the browser
+// reports as TRAEFIK DEFAULT CERT — and the ACME store stays empty because
+// nothing ever asked for a real one. It looks like Let's Encrypt refused when
+// it was never called.
+func routeProblem(r docker.RouteInfo, deployType, host, traefikNet string) string {
+	switch {
+	case !r.HasContainer:
+		return "This application has no container, so Traefik has no route for " + host +
+			" and answers it with its own default certificate. Deploy the application."
+	case !r.Enabled && deployType == "compose":
+		return "No container in this compose project carries traefik.enable=true. Quasar does not write " +
+			"compose files, so the service that serves HTTP has to carry its own Traefik labels: a " +
+			"Host(`" + host + "`) rule, the websecure entrypoint, tls.certresolver=letsencrypt, and " +
+			"membership of the external " + traefikNet + " network."
+	case !r.Enabled:
+		return "The running container carries no Traefik labels, so nothing routes " + host +
+			". Redeploy the application."
+	case len(r.Rules) == 0:
+		return "The container is exposed to Traefik but declares no router rule, so nothing routes " + host + "."
+	case !strings.Contains(r.Rule(), "`"+host+"`"):
+		return "Traefik routes this container on " + r.Rule() + ", which does not cover " + host +
+			". Redeploy the application so its labels are rebuilt."
+	case r.CertResolver == "":
+		return "The router has no tls.certresolver, so Traefik serves " + host +
+			" with its default certificate and never asks Let's Encrypt for a real one."
+	case !r.OnTraefikNet:
+		return "The container is not attached to the " + traefikNet +
+			" network, so Traefik cannot reach it."
+	}
+	return ""
 }
 
 // DeploymentView adds template-friendly context to a deployment row.

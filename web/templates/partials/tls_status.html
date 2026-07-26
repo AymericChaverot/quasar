@@ -1,15 +1,63 @@
 {{define "tls_status"}}
-<div class="card">
-  {{range .}}
-  <div class="env-row !flex-wrap">
-    <span class="mono flex-1 text-sm">{{.Host}}</span>
-    {{if .HasCert}}
-    <span class="badge badge-ok"><span class="dot"></span>certificate valid, {{.DaysLeft}}d left</span>
-    {{else}}
-    <span class="badge badge-err"><span class="dot"></span>no certificate</span>
+<div class="space-y-3">
+  <div class="card">
+    {{range .Checks}}
+    <div class="env-row !flex-wrap">
+      <span class="mono flex-1 text-sm">{{.Host}}</span>
+      {{if .HasCert}}
+      <span class="badge badge-ok"><span class="dot"></span>certificate valid, {{.DaysLeft}}d left</span>
+      {{else}}
+      <span class="badge badge-err"><span class="dot"></span>no certificate</span>
+      {{end}}
+      {{if .Problem}}<p class="help !mt-0 w-full">{{.Problem}}</p>{{end}}
+    </div>
     {{end}}
-    {{if .Problem}}<p class="help !mt-0 w-full">{{.Problem}}</p>{{end}}
   </div>
+
+  {{if .RouteProblem}}
+  <div class="alert-err">{{.RouteProblem}}</div>
   {{end}}
+
+  {{if and .IsAdmin .Missing (not .RouteProblem)}}
+  <form method="post" action="/apps/{{.AppID}}/tls/retry" class="card space-y-2 p-4"
+        onsubmit="return confirm('Restart Traefik to request the certificate again? Every site is unavailable for a few seconds.')">
+    <button type="submit" class="btn">Request the certificate again</button>
+    <p class="help !mt-0">
+      Traefik asks Let's Encrypt once, when the route first appears, and does not retry a failed
+      attempt on its own — so fixing the cause (DNS, a closed port 80) does not fix the site until
+      it restarts. This restarts it, which briefly interrupts every site.
+    </p>
+  </form>
+  {{end}}
+
+  {{/* The labels themselves, because they are the only thing Traefik acts on:
+       a rule that does not name the host explains a default certificate on its
+       own, whatever DNS and Let's Encrypt say. */}}
+  <div class="card space-y-1 p-4 text-xs">
+    <p class="h-label mb-2">What Traefik sees</p>
+    {{if .Route.HasContainer}}
+    <div class="flex gap-3">
+      <span class="faint w-28 shrink-0">Router rule</span>
+      <span class="mono break-all">{{if .Route.Rules}}{{.Route.Rule}}{{else}}<span class="faint">none</span>{{end}}</span>
+    </div>
+    <div class="flex gap-3">
+      <span class="faint w-28 shrink-0">Cert resolver</span>
+      <span class="mono">{{if .Route.CertResolver}}{{.Route.CertResolver}}{{else}}<span class="faint">none</span>{{end}}</span>
+    </div>
+    <div class="flex gap-3">
+      <span class="faint w-28 shrink-0">Service port</span>
+      <span class="mono">{{if .Route.Port}}{{.Route.Port}}{{else}}<span class="faint">unset</span>{{end}}</span>
+    </div>
+    <div class="flex gap-3">
+      <span class="faint w-28 shrink-0">Networks</span>
+      <span class="mono break-all">
+        {{range $i, $n := .Route.Networks}}{{if $i}}, {{end}}{{$n}}{{else}}<span class="faint">none</span>{{end}}
+        {{if not .Route.OnTraefikNet}}<span style="color: var(--err)"> — not on {{.TraefikNet}}</span>{{end}}
+      </span>
+    </div>
+    {{else}}
+    <p class="muted">No container, so nothing is registered with Traefik.</p>
+    {{end}}
+  </div>
 </div>
 {{end}}

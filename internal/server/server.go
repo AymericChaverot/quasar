@@ -192,6 +192,8 @@ func (s *Server) routes() {
 	s.admin("POST /apps/{id}/pre-backup", s.handleAppPreBackup)
 	s.admin("POST /apps/{id}/protection", s.handleAppProtection)
 	s.admin("POST /apps/{id}/basic-auth", s.handleAppBasicAuth)
+	// Restarts the shared edge router, briefly taking every site down.
+	s.admin("POST /apps/{id}/tls/retry", s.handleAppTLSRetry)
 	// A shell in the container reads every secret the app has and can change
 	// anything, so it is an admin action however read-only the HTTP verb looks.
 	s.admin("GET /apps/{id}/terminal", s.handleTerminalPage)

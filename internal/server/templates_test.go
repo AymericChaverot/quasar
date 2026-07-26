@@ -136,9 +136,29 @@ func TestExecuteTemplates(t *testing.T) {
 		}},
 		{"status_badge", "running"},
 		{"status_badge", "not deployed"},
-		{"tls_status", []certs.HostCheck{
-			{Host: "blog.example.com", HasCert: true, DaysLeft: 60},
-			{Host: "example.com", IPs: nil, Problem: "example.com does not resolve."},
+		{"tls_status", TLSView{
+			AppID: "abcd1234", Missing: true, IsAdmin: true,
+			Checks: []certs.HostCheck{
+				{Host: "blog.example.com", HasCert: true, DaysLeft: 60},
+				{Host: "example.com", Problem: "example.com does not resolve."},
+			},
+			Route: docker.RouteInfo{
+				HasContainer: true, Enabled: true,
+				Rules:        []string{"Host(`blog.example.com`)"},
+				Port:         "8080",
+				CertResolver: "letsencrypt",
+				Networks:     []string{"traefik-net"},
+				OnTraefikNet: true,
+			},
+			TraefikNet: "traefik-net",
+		}},
+		// An app Traefik knows nothing about: the branch that explains a
+		// default certificate.
+		{"tls_status", TLSView{
+			Checks:       []certs.HostCheck{{Host: "example.com"}},
+			Route:        docker.RouteInfo{},
+			RouteProblem: "This application has no container.",
+			TraefikNet:   "traefik-net",
 		}},
 	}
 	host := s.pages["dashboard"]
