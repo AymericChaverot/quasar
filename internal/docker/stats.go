@@ -17,13 +17,51 @@ type ContainerStats struct {
 	MemPercent float64
 }
 
-// Stats reads a single (non-streamed) stats sample for the app container.
+// Stats reads a single (non-streamed) stats sample for the app. A compose app
+// is the sum of its project's containers, since a stack's cost is all of it,
+// not whichever service the daemon lists first.
 func (c *Client) Stats(ctx context.Context, a *db.App) (ContainerStats, error) {
-	target, err := c.containerFor(ctx, a)
+	if a.DeployType == "compose" {
+		return c.composeStats(ctx, a.ID)
+	}
+	target, err := c.appContainer(ctx, a.ID)
 	if err != nil {
 		return ContainerStats{}, err
 	}
 	return c.StatsByName(ctx, target)
+}
+
+func (c *Client) composeStats(ctx context.Context, appID string) (ContainerStats, error) {
+	list := c.composeContainers(ctx, appID)
+	if len(list) == 0 {
+		return ContainerStats{}, errNoContainer
+	}
+	var out ContainerStats
+	var sampled int
+	for _, ct := range list {
+		if ct.State != "running" {
+			continue // a stopped container has no stats stream to read
+		}
+		s, err := c.StatsByName(ctx, ct.ID)
+		if err != nil {
+			continue
+		}
+		sampled++
+		out.CPUPercent += s.CPUPercent
+		out.MemUsedMB += s.MemUsedMB
+		// Containers of a project share the host's memory, so the limit is
+		// whatever the most constrained one reports rather than a sum.
+		if s.MemLimitMB > out.MemLimitMB {
+			out.MemLimitMB = s.MemLimitMB
+		}
+	}
+	if sampled == 0 {
+		return ContainerStats{}, errNoContainer
+	}
+	if out.MemLimitMB > 0 {
+		out.MemPercent = out.MemUsedMB / out.MemLimitMB * 100
+	}
+	return out, nil
 }
 
 // StatsByName reads a single (non-streamed) stats sample for any container by

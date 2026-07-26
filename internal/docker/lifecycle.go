@@ -53,6 +53,30 @@ func (c *Client) appContainer(ctx context.Context, appID string) (string, error)
 	return list[0].ID, nil
 }
 
+// composeContainers lists every container of a compose app's project.
+func (c *Client) composeContainers(ctx context.Context, appID string) []container.Summary {
+	list, err := c.api.ContainerList(ctx, container.ListOptions{
+		All:     true,
+		Filters: filters.NewArgs(filters.Arg("label", "com.docker.compose.project="+composeProject(appID))),
+	})
+	if err != nil {
+		return nil
+	}
+	return list
+}
+
+// composeWebContainer picks the container a compose app serves HTTP from: the
+// one its author put the Traefik labels on. Quasar does not write those files,
+// so that label is the only reliable marker of which service is the front end.
+func (c *Client) composeWebContainer(ctx context.Context, appID string) (container.Summary, bool) {
+	for _, ct := range c.composeContainers(ctx, appID) {
+		if ct.Labels["traefik.enable"] == "true" {
+			return ct, true
+		}
+	}
+	return container.Summary{}, false
+}
+
 // Status inspects the app's container(s) and reports a UI-friendly state.
 func (c *Client) Status(ctx context.Context, a *db.App) AppStatus {
 	if d := c.Deploying(a.ID); d != nil {
@@ -80,11 +104,8 @@ func (c *Client) Status(ctx context.Context, a *db.App) AppStatus {
 }
 
 func (c *Client) composeStatus(ctx context.Context, appID string) AppStatus {
-	list, err := c.api.ContainerList(ctx, container.ListOptions{
-		All:     true,
-		Filters: filters.NewArgs(filters.Arg("label", "com.docker.compose.project="+composeProject(appID))),
-	})
-	if err != nil || len(list) == 0 {
+	list := c.composeContainers(ctx, appID)
+	if len(list) == 0 {
 		return AppStatus{State: "not deployed"}
 	}
 	running := 0

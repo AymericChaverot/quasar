@@ -49,10 +49,6 @@ func (s *Server) handleAppStatsPartial(w http.ResponseWriter, r *http.Request) {
 	if a == nil {
 		return
 	}
-	if a.DeployType == "compose" {
-		s.renderPartial(w, "container_stats_unavailable", nil)
-		return
-	}
 	stats, err := s.dock.Stats(r.Context(), a)
 	if err != nil {
 		s.renderPartial(w, "container_stats_unavailable", nil)

@@ -88,17 +88,21 @@ func checkHealth(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring
 			continue
 		}
 		for _, a := range apps {
-			if a.HealthPath == "" || a.DeployType == "compose" {
+			if a.HealthPath == "" {
 				continue
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			running := dock.Status(ctx, a).State == "running"
+			url := dock.HealthURL(ctx, a)
 			cancel()
 			if !running {
 				continue // don't count a deliberately stopped app as unhealthy
 			}
+			if url == "" {
+				continue // nothing to aim at (compose app with no labelled web service)
+			}
 
-			ok := probe(dock.HealthURL(a))
+			ok := probe(url)
 			db.RecordHealth(database, a.ID, ok)
 			if ok {
 				continue
@@ -117,13 +121,16 @@ func checkHealth(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring
 	}
 }
 
+// probe reports whether the app answered its health path. 4xx counts as a
+// failure: a mistyped health path 404s, and accepting that meant the app was
+// reported healthy forever no matter what state it was really in.
 func probe(url string) bool {
 	resp, err := healthClient.Get(url)
 	if err != nil {
 		return false
 	}
 	resp.Body.Close()
-	return resp.StatusCode < 500
+	return resp.StatusCode < 400
 }
 
 // sampleMetrics stores server and per-app usage samples, pruning old data.
@@ -137,10 +144,9 @@ func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyri
 		apps, err := db.ListApps(database, keyring)
 		if err == nil {
 			for _, a := range apps {
-				if a.DeployType == "compose" {
-					continue
-				}
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				// Compose apps included: Stats sums their project, so a stack
+				// is graphed like any other app instead of showing nothing.
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				if st, err := dock.Stats(ctx, a); err == nil {
 					db.RecordAppMetric(database, a.ID, st.CPUPercent, st.MemUsedMB)
 				}
