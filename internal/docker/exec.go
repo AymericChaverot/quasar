@@ -23,7 +23,7 @@ const dumpTimeout = 30 * time.Minute
 // containerFor resolves the container ID to target for an app: the container
 // currently serving it, or the first container of a compose project.
 func (c *Client) containerFor(ctx context.Context, a *db.App) (string, error) {
-	if a.DeployType != "compose" {
+	if !c.UsesCompose(a) {
 		return c.appContainer(ctx, a.ID)
 	}
 	// The web container when its author labelled one, so a shell or a log
@@ -166,7 +166,7 @@ func (c *Client) HealthURL(ctx context.Context, a *db.App) string {
 	if a.HealthPath == "" {
 		return ""
 	}
-	if a.DeployType != "compose" {
+	if !c.UsesCompose(a) {
 		if a.Port <= 0 {
 			return ""
 		}

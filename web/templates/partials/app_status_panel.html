@@ -13,10 +13,10 @@
          the newest version first. Two buttons because the second one is the
          only way to change what the app runs, and should be a deliberate act. */}}
     <button hx-post="/apps/{{.ID}}/redeploy" hx-target="#status-panel" hx-swap="innerHTML"
-            hx-confirm="Redeploy {{.Name}}? The container is replaced, running the same {{if eq .DeployType "git"}}commit{{else}}image{{end}} as now."
+            hx-confirm="Redeploy {{.Name}}? {{if eq .DeployType "git"}}The containers are replaced, running the same commit as now.{{else}}The container is replaced, running the same image as now.{{end}}"
             class="btn">{{template "icon_deploy"}}Redeploy</button>
     <button hx-post="/apps/{{.ID}}/update" hx-target="#status-panel" hx-swap="innerHTML"
-            hx-confirm="Update {{.Name}}? {{if eq .DeployType "git"}}The repository is pulled and the image rebuilt from the branch head.{{else if eq .DeployType "compose"}}Every image in the compose file is pulled again.{{else}}The image {{.ImageRef}} is pulled again.{{end}} Roll back from the deployment history if it goes wrong."
+            hx-confirm="Update {{.Name}}? {{if eq .DeployType "git"}}The repository is pulled and the {{if eq .Build.Mode "compose"}}stack rebuilt{{else}}image rebuilt{{end}} from the branch head.{{else if eq .DeployType "compose"}}Every image in the compose file is pulled again.{{else}}The image {{.ImageRef}} is pulled again.{{end}} Roll back from the deployment history if it goes wrong."
             class="btn-primary">{{template "icon_deploy"}}Update</button>
   </div>
   {{else}}

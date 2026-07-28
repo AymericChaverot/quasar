@@ -104,17 +104,7 @@ func (c *Client) deploy(ctx context.Context, a *db.App, fetch bool) (string, err
 	case "image":
 		return a.ImageRef, c.deployImage(ctx, a, a.ImageRef, fetch)
 	case "git":
-		tag, err := c.buildFromGit(ctx, a, fetch)
-		if err != nil {
-			return "", err
-		}
-		// The image was just built from the local source, so there is nothing
-		// to pull for it either way.
-		if err := c.deployImage(ctx, a, tag, false); err != nil {
-			return tag, err
-		}
-		c.pruneBuilds(ctx, a.ID)
-		return tag, nil
+		return c.deployGit(ctx, a, fetch)
 	case "compose":
 		return "", c.deployCompose(ctx, a, fetch)
 	default:
@@ -324,7 +314,7 @@ func (c *Client) gitURLWithToken(url string) string {
 // path: a clone when there is nothing checked out, a fast-forward to the
 // branch head when pull is set, and otherwise the commit already on disk.
 func (c *Client) syncSource(ctx context.Context, a *db.App, pull bool) (string, error) {
-	src := filepath.Join(c.AppDir(a.ID), "source")
+	src := c.sourceDir(a.ID)
 
 	var cmd *exec.Cmd
 	switch _, err := os.Stat(filepath.Join(src, ".git")); {
@@ -349,20 +339,58 @@ func (c *Client) syncSource(ctx context.Context, a *db.App, pull bool) (string, 
 	return src, nil
 }
 
-// buildFromGit clones (or updates) the repo into apps/<id>/source and builds
-// a timestamped image from its Dockerfile, so past builds stay available for
-// rollback until pruneBuilds trims them.
+// deployGit clones (or updates) the repository and then runs it the way the
+// repository itself asks to be run: as a compose stack when it carries a
+// compose file, otherwise as one container built from its Dockerfile. See
+// GitBuildFor for how that is decided and how an operator overrides it.
 //
 // pull decides whether the existing checkout is advanced to the branch head
-// first. Without it the image is rebuilt from the commit already on disk,
+// first. Without it the app is redeployed from the commit already on disk,
 // which is what makes a redeploy repeatable: the same code, with whatever
 // configuration changed around it.
-func (c *Client) buildFromGit(ctx context.Context, a *db.App, pull bool) (string, error) {
+//
+// The returned tag is empty for a stack, which has no single image to name.
+func (c *Client) deployGit(ctx context.Context, a *db.App, pull bool) (string, error) {
 	src, err := c.syncSource(ctx, a, pull)
 	if err != nil {
 		return "", err
 	}
 
+	// Switching a repository between the two modes moves its containers
+	// somewhere else entirely, so whatever the app ran before has to be
+	// removed here — nothing further down would recognise it as this app's.
+	// Volumes are left alone: a mode switch is not a request to lose data.
+	switch c.GitBuildFor(a).Mode {
+	case db.GitBuildCompose:
+		for _, ct := range c.appContainers(ctx, a.ID) {
+			c.removeContainer(ctx, ct.ID)
+		}
+		return "", c.composeUp(ctx, a, pull)
+
+	case db.GitBuildDockerfile:
+		for _, ct := range c.composeContainers(ctx, a.ID) {
+			c.removeContainer(ctx, ct.ID)
+		}
+		tag, err := c.buildImage(ctx, a, src)
+		if err != nil {
+			return "", err
+		}
+		// The image was just built from the local source, so there is nothing
+		// to pull for it either way.
+		if err := c.deployImage(ctx, a, tag, false); err != nil {
+			return tag, err
+		}
+		c.pruneBuilds(ctx, a.ID)
+		return tag, nil
+
+	default:
+		return "", fmt.Errorf("the repository has neither a Dockerfile nor a compose file at its root")
+	}
+}
+
+// buildImage builds a timestamped image from the checkout's Dockerfile, so
+// past builds stay available for rollback until pruneBuilds trims them.
+func (c *Client) buildImage(ctx context.Context, a *db.App, src string) (string, error) {
 	buildCtx, err := archive.TarWithOptions(src, &archive.TarOptions{})
 	if err != nil {
 		return "", fmt.Errorf("tar build context: %w", err)
@@ -417,33 +445,46 @@ func (c *Client) BuildTags(ctx context.Context, appID string) []string {
 	return tags
 }
 
-// deployCompose writes the compose file and shells out to the docker compose
-// CLI (installed in the dashboard image, pointed at the socket proxy).
-//
-// `up` only pulls an image it does not already have, so a compose app pinned
-// to a moving tag would otherwise keep running the copy it was first deployed
-// with, forever. pull is what makes it advance.
+// deployCompose writes the compose file the operator pasted into Quasar and
+// brings its stack up. A git app skips the writing — its compose file comes
+// from the repository — and goes straight to composeUp.
 func (c *Client) deployCompose(ctx context.Context, a *db.App, pull bool) error {
 	dir := c.AppDir(a.ID)
 	if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte(a.ComposeYAML), 0o644); err != nil {
 		return err
 	}
+	return c.composeUp(ctx, a, pull)
+}
+
+// composeUp brings an app's stack up through the docker compose CLI (installed
+// in the dashboard image, pointed at the socket proxy).
+//
+// `up` only pulls an image it does not already have, so a stack pinned to a
+// moving tag would otherwise keep running the copy it was first deployed with,
+// forever. pull is what makes it advance.
+func (c *Client) composeUp(ctx context.Context, a *db.App, pull bool) error {
 	if pull {
 		// --ignore-buildable: a service with a build context has no image to
 		// pull, and its absence from the registry is not an error.
-		if err := c.compose(ctx, a.ID, "pull", "--ignore-buildable"); err != nil {
+		if err := c.compose(ctx, a, "pull", "--ignore-buildable"); err != nil {
 			return err
 		}
 	}
-	return c.compose(ctx, a.ID, "up", "-d", "--build", "--remove-orphans")
+	return c.compose(ctx, a, "up", "-d", "--build", "--remove-orphans")
 }
 
 // compose runs `docker compose` for an app with its project name and files.
-func (c *Client) compose(ctx context.Context, appID string, args ...string) error {
-	dir := c.AppDir(appID)
-	base := []string{"compose", "-p", composeProject(appID), "-f", filepath.Join(dir, "docker-compose.yml")}
-	if _, err := os.Stat(filepath.Join(dir, ".env")); err == nil {
-		base = append(base, "--env-file", filepath.Join(dir, ".env"))
+func (c *Client) compose(ctx context.Context, a *db.App, args ...string) error {
+	dir, file := c.composeContext(a)
+	if file == "" {
+		return fmt.Errorf("this application has no compose file")
+	}
+	base := []string{"compose", "-p", composeProject(a.ID), "-f", file}
+	// The app's env lives where Quasar put it, which for a git app is beside
+	// the checkout rather than in it.
+	env := filepath.Join(c.AppDir(a.ID), ".env")
+	if _, err := os.Stat(env); err == nil {
+		base = append(base, "--env-file", env)
 	}
 	cmd := exec.CommandContext(ctx, "docker", append(base, args...)...)
 	cmd.Dir = dir

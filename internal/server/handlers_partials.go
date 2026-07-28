@@ -100,7 +100,7 @@ func (s *Server) handleAppTLSPartial(w http.ResponseWriter, r *http.Request) {
 		AppID:        a.ID,
 		Checks:       checks,
 		Route:        route,
-		RouteProblem: routeProblem(route, a.DeployType, host, s.dock.Network()),
+		RouteProblem: routeProblem(route, s.dock.UsesCompose(a), host, s.dock.Network()),
 		TraefikNet:   s.dock.Network(),
 		Missing:      missing,
 		IsAdmin:      s.isAdmin(r),
@@ -115,12 +115,12 @@ func (s *Server) handleAppTLSPartial(w http.ResponseWriter, r *http.Request) {
 // reports as TRAEFIK DEFAULT CERT — and the ACME store stays empty because
 // nothing ever asked for a real one. It looks like Let's Encrypt refused when
 // it was never called.
-func routeProblem(r docker.RouteInfo, deployType, host, traefikNet string) string {
+func routeProblem(r docker.RouteInfo, usesCompose bool, host, traefikNet string) string {
 	switch {
 	case !r.HasContainer:
 		return "This application has no container, so Traefik has no route for " + host +
 			" and answers it with its own default certificate. Deploy the application."
-	case !r.Enabled && deployType == "compose":
+	case !r.Enabled && usesCompose:
 		return "No container in this compose project carries traefik.enable=true. Quasar does not write " +
 			"compose files, so the service that serves HTTP has to carry its own Traefik labels: a " +
 			"Host(`" + host + "`) rule, the websecure entrypoint, tls.certresolver=letsencrypt, and " +
@@ -173,7 +173,7 @@ func (s *Server) handleAppDeploymentsPartial(w http.ResponseWriter, r *http.Requ
 	for _, d := range deps {
 		v := DeploymentView{Deployment: d}
 		if d.Status == "success" && d.ImageTag != "" && d.ImageTag != currentTag && !seen[d.ImageTag] {
-			v.CanRollback = a.DeployType != "compose"
+			v.CanRollback = !s.dock.UsesCompose(a)
 			seen[d.ImageTag] = true
 		}
 		views = append(views, v)

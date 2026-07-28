@@ -1,0 +1,64 @@
+{{/* How a git app's checkout is built, and the choice when the repository
+     offers both ways. Rendered with an AppView; replaces itself on save,
+     because saving changes what the panel says about itself. */}}
+{{define "git_build_panel"}}
+<div id="git-build" class="card space-y-3 p-4">
+  <div class="flex flex-wrap items-center gap-2">
+    {{if eq .Build.Mode "compose"}}
+    <span class="badge badge-ok"><span class="dot"></span>docker compose</span>
+    <span class="mono muted text-sm">{{.Build.ComposeFile}}</span>
+    {{else if eq .Build.Mode "dockerfile"}}
+    <span class="badge badge-ok"><span class="dot"></span>Dockerfile</span>
+    <span class="mono muted text-sm">Dockerfile</span>
+    {{else}}
+    <span class="badge badge-muted"><span class="dot"></span>nothing checked out</span>
+    {{end}}
+    {{if .Build.Both}}<span class="chip">both available</span>{{end}}
+  </div>
+
+  {{if eq .Build.Mode "compose"}}
+  <p class="muted text-sm">
+    The stack in this file is brought up as a whole. Quasar writes no Traefik labels for it:
+    the service that serves HTTP has to carry its own, and join the external network, exactly
+    as for a pasted compose file.
+  </p>
+  {{else if eq .Build.Mode "dockerfile"}}
+  <p class="muted text-sm">
+    One image is built from this Dockerfile and run as a single container, routed by the
+    subdomain and port configured for the app.
+  </p>
+  {{else}}
+  <p class="muted text-sm">
+    The repository is not on disk yet. Deploy the application and this panel will report what
+    it found at the root of the checkout.
+  </p>
+  {{end}}
+
+  {{if .Build.Unavailable}}
+  <p class="text-sm" style="color: var(--warn)">
+    This application is set to build from
+    {{if eq .Build.Choice "compose"}}a compose file{{else}}a Dockerfile{{end}},
+    but the checkout has none — it is being built the other way instead.
+  </p>
+  {{end}}
+
+  {{if .IsAdmin}}
+  <form hx-post="/apps/{{.ID}}/git-build" hx-target="#git-build" hx-swap="outerHTML"
+        class="flex flex-wrap items-center gap-3">
+    <select name="git_build" class="input !w-auto">
+      <option value="" {{if eq .Build.Choice ""}}selected{{end}}>Automatic — compose file when the repository has one</option>
+      <option value="compose" {{if eq .Build.Choice "compose"}}selected{{end}}>docker compose</option>
+      <option value="dockerfile" {{if eq .Build.Choice "dockerfile"}}selected{{end}}>Dockerfile</option>
+    </select>
+    <button type="submit" class="btn">Save</button>
+    <span class="help !mt-0">Redeploy to apply.</span>
+  </form>
+  <p class="help !mt-0">
+    A repository holding a compose file describes a whole stack, and a Dockerfile beside it
+    describes one service of that stack — so compose wins by default. Choose Dockerfile when
+    the compose file is there for local development only. Switching removes the containers the
+    other mode left behind, but keeps their volumes.
+  </p>
+  {{end}}
+</div>
+{{end}}

@@ -189,6 +189,7 @@ func (s *Server) routes() {
 	s.admin("POST /apps/{id}/delete", s.handleAppDelete)
 	s.admin("POST /apps/{id}/env", s.handleAppEnvSave)
 	s.admin("POST /apps/{id}/domains", s.handleAppDomains)
+	s.admin("POST /apps/{id}/git-build", s.handleAppGitBuild)
 	s.admin("POST /apps/{id}/health", s.handleAppHealth)
 	s.admin("POST /apps/{id}/pre-backup", s.handleAppPreBackup)
 	s.admin("POST /apps/{id}/protection", s.handleAppProtection)

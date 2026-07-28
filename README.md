@@ -102,15 +102,20 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
 ## Fonctionnalités
 
 - **3 modes de déploiement** : image Docker (publique ou registre privé),
-  build Git (repo avec `Dockerfile`, token pour les repos privés), ou
-  `docker-compose.yml` injecté.
+  build Git (repo avec `docker-compose.yml` **ou** `Dockerfile`, token pour les
+  repos privés), ou `docker-compose.yml` injecté.
+- **Git : compose détecté automatiquement** : un repo qui porte un fichier
+  compose à sa racine est déployé en stack (`docker compose up`), pas construit
+  depuis son `Dockerfile` — un Dockerfile à côté ne décrit qu'un service de la
+  stack. La page de l'app affiche ce qui a été détecté et permet de basculer
+  explicitement sur `Dockerfile` quand le compose n'est là que pour le dev local.
 - **Routage automatique** : sous-domaine + port interne → labels Traefik
   générés, certificat TLS émis à la première requête. Domaines custom
   additionnels par app (`www.monblog.fr`).
 - **Redeploy vs Update** : *Redeploy* recrée le conteneur à partir de ce qui est
   déjà sur le serveur (même image, même commit) — c'est ce qui applique un
   changement de config. *Update* va chercher la nouvelle version d'abord :
-  `git pull` + rebuild, `docker pull`, ou `docker compose pull`.
+  `git pull` + rebuild (image ou stack), `docker pull`, ou `docker compose pull`.
 - **Webhooks auto-deploy** : URL secrète par app — un push GitHub/GitLab
   déclenche pull + rebuild + redeploy (comme *Update*).
 - **Historique + rollback** : journal des déploiements (source, image, durée,
@@ -169,9 +174,10 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
 │   └── database.sqlite
 ├── backups/                 # Archives quasar-<date>.tar.gz
 └── apps/<app-id>/
-    ├── source/              # Clone Git (mode build)
-    ├── docker-compose.yml   # Mode compose
-    ├── .env
+    ├── source/              # Clone Git (mode build) — son compose éventuel
+    │                        #   est lancé depuis ici
+    ├── docker-compose.yml   # Mode compose injecté
+    ├── .env                 # Passé en --env-file aux stacks compose
     └── data/                # Volumes persistants
 ```
 
@@ -213,5 +219,6 @@ go test ./...
 - Sessions HTTP-only, Secure, SameSite=Lax ; mots de passe bcrypt.
 - `/` de l'hôte est monté **en lecture seule** dans le dashboard uniquement
   pour les métriques disque (`HOST_ROOT`).
-- Mode compose : les services doivent rejoindre le réseau externe
-  `traefik-net` et porter leurs propres labels Traefik pour être routés.
+- Mode compose (injecté ou détecté dans un repo Git) : Quasar n'écrit aucun
+  label, les services doivent rejoindre le réseau externe `traefik-net` et
+  porter leurs propres labels Traefik pour être routés.

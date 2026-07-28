@@ -9,6 +9,16 @@ import (
 	"quasar/internal/secrets"
 )
 
+// How a git app's checkout is built. A repository that carries a compose file
+// describes a whole stack, and a Dockerfile can only ever describe one service
+// of it, so the compose file wins unless the operator says otherwise — hence
+// GitBuildAuto being the default and preferring compose.
+const (
+	GitBuildAuto       = ""
+	GitBuildDockerfile = "dockerfile"
+	GitBuildCompose    = "compose"
+)
+
 type App struct {
 	ID              string
 	Name            string
@@ -17,6 +27,7 @@ type App struct {
 	ImageRef        string
 	GitURL          string
 	GitBranch       string
+	GitBuild        string // git apps: GitBuildAuto/Dockerfile/Compose
 	ComposeYAML     string
 	Port            int
 	EnvContent      string
@@ -61,7 +72,7 @@ func (a *App) CustomDomainList() []string {
 	return out
 }
 
-const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, created_at"
+const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, created_at"
 
 // scanApp reads one row and decrypts its at-rest-encrypted columns, so every
 // *App leaving the db package carries plaintext EnvContent/ComposeYAML —
@@ -69,7 +80,7 @@ const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branc
 func scanApp(row interface{ Scan(...any) error }, k *secrets.Keyring) (*App, error) {
 	var a App
 	err := row.Scan(&a.ID, &a.Name, &a.Subdomain, &a.DeployType, &a.ImageRef, &a.GitURL,
-		&a.GitBranch, &a.ComposeYAML, &a.Port, &a.EnvContent, &a.DataMount,
+		&a.GitBranch, &a.GitBuild, &a.ComposeYAML, &a.Port, &a.EnvContent, &a.DataMount,
 		&a.WebhookSecret, &a.CPULimit, &a.MemLimitMB, &a.CustomDomains,
 		&a.HealthPath, &a.BasicAuthUser, &a.BasicAuthHash, &a.SortOrder,
 		&a.PreBackupCmd, &a.RateLimit, &a.IPAllowCIDRs, &a.SecurityHeaders, &a.CreatedAt)
@@ -104,9 +115,9 @@ func InsertApp(db *sql.DB, k *secrets.Keyring, a *App) error {
 		return fmt.Errorf("encrypt pre-backup command: %w", err)
 	}
 	// New apps go to the bottom of the manually ordered list.
-	_, err = db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, sort_order)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM apps))`,
-		a.ID, a.Name, a.Subdomain, a.DeployType, a.ImageRef, a.GitURL, a.GitBranch, composeYAML,
+	_, err = db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, sort_order)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM apps))`,
+		a.ID, a.Name, a.Subdomain, a.DeployType, a.ImageRef, a.GitURL, a.GitBranch, a.GitBuild, composeYAML,
 		a.Port, envContent, a.DataMount, a.WebhookSecret, a.CPULimit, a.MemLimitMB, a.CustomDomains,
 		a.HealthPath, a.BasicAuthUser, a.BasicAuthHash, preBackup,
 		a.RateLimit, a.IPAllowCIDRs, a.SecurityHeaders)
@@ -137,6 +148,18 @@ func UpdateAppPreBackup(db *sql.DB, k *secrets.Keyring, id, command string) erro
 // SetAppOrder writes an app's explicit position in the list.
 func SetAppOrder(db *sql.DB, id string, order int) {
 	db.Exec("UPDATE apps SET sort_order = ? WHERE id = ?", order, id)
+}
+
+// UpdateAppGitBuild stores how a git app's checkout is built. It takes effect
+// on the next deploy, which is the only moment the choice is acted on.
+func UpdateAppGitBuild(db *sql.DB, id, mode string) error {
+	switch mode {
+	case GitBuildAuto, GitBuildDockerfile, GitBuildCompose:
+	default:
+		return fmt.Errorf("unknown git build mode %q", mode)
+	}
+	_, err := db.Exec("UPDATE apps SET git_build = ? WHERE id = ?", mode, id)
+	return err
 }
 
 func UpdateAppHealth(db *sql.DB, id, healthPath string) error {

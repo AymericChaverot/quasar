@@ -39,8 +39,11 @@ type AppView struct {
 	Status docker.AppStatus
 	Domain string
 	Deploy *docker.DeployState
-	First  bool
-	Last   bool
+	// Build is how a git app's checkout is deployed, and what the checkout
+	// offers. Zero for the other deploy types, which have nothing to choose.
+	Build docker.GitBuild
+	First bool
+	Last  bool
 	// IsAdmin gates the controls inside partials, which are rendered without
 	// the page data map that carries it everywhere else.
 	IsAdmin bool
@@ -66,6 +69,7 @@ func (s *Server) appView(r *http.Request, a *db.App) AppView {
 		Status:  s.dock.Status(r.Context(), a),
 		Domain:  s.cfg.Domain,
 		Deploy:  s.dock.Deploying(a.ID),
+		Build:   s.dock.GitBuildFor(a),
 		IsAdmin: role == auth.RoleAdmin,
 	}
 }
@@ -438,6 +442,28 @@ func (s *Server) handleAppPreBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderPartial(w, "env_saved", nil)
+}
+
+// handleAppGitBuild saves how a git app's checkout is built. It re-renders the
+// whole panel rather than a "saved" marker, because the choice changes what the
+// panel says about itself.
+func (s *Server) handleAppGitBuild(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	if a.DeployType != "git" {
+		http.Error(w, "only git applications are built from a repository", http.StatusBadRequest)
+		return
+	}
+	mode := r.FormValue("git_build")
+	if err := db.UpdateAppGitBuild(s.db, a.ID, mode); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	a.GitBuild = mode
+	s.audit(r, "app.git-build", a.Name, mode)
+	s.renderPartial(w, "git_build_panel", s.appView(r, a))
 }
 
 // handleAppHealth saves the HTTP health check path (empty disables checks).

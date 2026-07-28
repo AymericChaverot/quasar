@@ -33,7 +33,7 @@ func (r RouteInfo) Rule() string { return strings.Join(r.Rules, ", ") }
 // distinguishable from "not deployed".
 func (c *Client) Route(ctx context.Context, a *db.App) RouteInfo {
 	var id string
-	if a.DeployType == "compose" {
+	if c.UsesCompose(a) {
 		if ct, ok := c.composeWebContainer(ctx, a.ID); ok {
 			id = ct.ID
 		} else if list := c.composeContainers(ctx, a.ID); len(list) > 0 {

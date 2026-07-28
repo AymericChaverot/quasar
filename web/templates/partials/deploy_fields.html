@@ -11,7 +11,12 @@
   <div>
     <label for="git_url" class="label">Repository URL</label>
     <input id="git_url" name="git_url" type="text" placeholder="https://github.com/user/repo.git" class="input mono">
-    <p class="help">The repository must contain a Dockerfile at its root.</p>
+    <p class="help">
+      The repository must contain a <span class="mono">docker-compose.yml</span> or a
+      <span class="mono">Dockerfile</span> at its root. A compose file is used when there is one —
+      its stack is brought up as a whole — and the application's page lets you switch to the
+      Dockerfile afterwards.
+    </p>
   </div>
   <div class="w-1/2">
     <label for="git_branch" class="label">Branch</label>

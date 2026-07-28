@@ -90,7 +90,7 @@ func (c *Client) Status(ctx context.Context, a *db.App) AppStatus {
 		}
 	}
 
-	if a.DeployType == "compose" {
+	if c.UsesCompose(a) {
 		return c.composeStatus(ctx, a.ID)
 	}
 
@@ -147,8 +147,8 @@ func statusFromState(state, startedAt string, exitCode int) AppStatus {
 }
 
 func (c *Client) Start(ctx context.Context, a *db.App) error {
-	if a.DeployType == "compose" {
-		return c.compose(ctx, a.ID, "start")
+	if c.UsesCompose(a) {
+		return c.compose(ctx, a, "start")
 	}
 	id, err := c.appContainer(ctx, a.ID)
 	if err != nil {
@@ -158,8 +158,8 @@ func (c *Client) Start(ctx context.Context, a *db.App) error {
 }
 
 func (c *Client) Stop(ctx context.Context, a *db.App) error {
-	if a.DeployType == "compose" {
-		return c.compose(ctx, a.ID, "stop")
+	if c.UsesCompose(a) {
+		return c.compose(ctx, a, "stop")
 	}
 	id, err := c.appContainer(ctx, a.ID)
 	if err != nil {
@@ -169,8 +169,8 @@ func (c *Client) Stop(ctx context.Context, a *db.App) error {
 }
 
 func (c *Client) Restart(ctx context.Context, a *db.App) error {
-	if a.DeployType == "compose" {
-		return c.compose(ctx, a.ID, "restart")
+	if c.UsesCompose(a) {
+		return c.compose(ctx, a, "restart")
 	}
 	id, err := c.appContainer(ctx, a.ID)
 	if err != nil {
@@ -181,14 +181,17 @@ func (c *Client) Restart(ctx context.Context, a *db.App) error {
 
 // Remove tears down the app's containers and deletes its directory on disk.
 func (c *Client) Remove(ctx context.Context, a *db.App) error {
-	if a.DeployType == "compose" {
-		c.compose(ctx, a.ID, "down", "--volumes") // best effort
-	} else {
-		// Every container, not just the newest: an interrupted deploy can
-		// leave a replacement behind that must go too.
-		for _, ct := range c.appContainers(ctx, a.ID) {
-			c.removeContainer(ctx, ct.ID)
-		}
+	if c.UsesCompose(a) {
+		c.compose(ctx, a, "down", "--volumes") // best effort
+	}
+	// Both sets, whichever way the app is deployed today: an interrupted deploy
+	// can leave a replacement container behind, and a git app built the other
+	// way before this one keeps its containers somewhere else entirely.
+	for _, ct := range c.appContainers(ctx, a.ID) {
+		c.removeContainer(ctx, ct.ID)
+	}
+	for _, ct := range c.composeContainers(ctx, a.ID) {
+		c.removeContainer(ctx, ct.ID)
 	}
 	c.forgetDeploy(a.ID)
 	return os.RemoveAll(c.AppDir(a.ID))

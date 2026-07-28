@@ -45,6 +45,20 @@ func TestExecuteTemplates(t *testing.T) {
 		Domain: "example.com",
 	}
 
+	// A git app deployed as a stack: the branch that renders the build panel,
+	// and the one carrying a compose file name the Dockerfile branch has not.
+	gitApp := AppView{
+		App: &db.App{
+			ID: "beef0001", Name: "API", Subdomain: "api",
+			DeployType: "git", GitURL: "https://example.com/org/api.git", GitBranch: "main",
+			Port: 8080, WebhookSecret: "s3cret",
+		},
+		Status:  docker.AppStatus{State: "running", Uptime: "5m"},
+		Domain:  "example.com",
+		Build:   docker.GitBuild{Mode: "compose", HasCompose: true, HasDockerfile: true, ComposeFile: "docker-compose.yml"},
+		IsAdmin: true,
+	}
+
 	cases := []struct {
 		page string
 		data any
@@ -54,20 +68,21 @@ func TestExecuteTemplates(t *testing.T) {
 		{"dashboard", map[string]any{"Title": "Dashboard", "Domain": "example.com"}},
 		{"app_new", map[string]any{"Title": "New", "Domain": "example.com", "Catalog": catalog.Templates, "Form": app.App}},
 		{"app_detail", map[string]any{"Title": "Blog", "App": app}},
+		{"app_detail", map[string]any{"Title": "API", "App": gitApp, "IsAdmin": true}},
 		{"terminal", map[string]any{"Title": "Blog terminal", "App": app}},
 		{"settings", map[string]any{
 			"Title": "Settings", "Theme": "terminal", "Themes": themes,
 			"Username": "admin", "Domain": "example.com",
 			"AppsDir": "/opt/quasar/apps", "DBPath": "/opt/quasar/storage/database.sqlite",
-			"Saved":      "Settings saved.",
-			"Registries": []*db.Registry{{ID: 1, Server: "ghcr.io", Username: "me"}},
+			"Saved":       "Settings saved.",
+			"Registries":  []*db.Registry{{ID: 1, Server: "ghcr.io", Username: "me"}},
 			"GitTokenSet": true, "NotifyURL": "https://discord.com/api/webhooks/x",
 			"TOTPEnabled": false,
 			"TOTPSetup":   map[string]string{"Secret": "ABC123", "QR": "data:image/png;base64,x"},
 		}},
 		{"system", map[string]any{
-			"Title": "System",
-			"Disk":  docker.DiskUsage{ImagesCount: 5, ImagesSizeGB: 2.4, ContainersCount: 3, VolumesCount: 1},
+			"Title":    "System",
+			"Disk":     docker.DiskUsage{ImagesCount: 5, ImagesSizeGB: 2.4, ContainersCount: 3, VolumesCount: 1},
 			"AppSizes": []AppSize{{Name: "Blog", ID: "abcd1234", SizeMB: 12.5}},
 			"Backups":  []backup.Info{{Name: "quasar-20260722-120000.tar.gz", SizeMB: 4.2, Date: time.Now()}},
 			"AutoOn":   true, "Retention": "7", "Saved": "Backup created.",
@@ -102,6 +117,22 @@ func TestExecuteTemplates(t *testing.T) {
 		}}},
 		{"apps_table", []AppView(nil)},
 		{"app_status_panel", app},
+		{"app_status_panel", gitApp},
+		{"git_build_panel", gitApp},
+		// The two states with nothing to choose between: a checkout offering
+		// one way to build, and no checkout at all.
+		{"git_build_panel", func() AppView {
+			v := gitApp
+			v.App = &db.App{ID: "beef0002", Name: "Worker", Subdomain: "worker",
+				DeployType: "git", GitBuild: "compose"}
+			v.Build = docker.GitBuild{Mode: "dockerfile", Choice: "compose", HasDockerfile: true}
+			return v
+		}()},
+		{"git_build_panel", func() AppView {
+			v := gitApp
+			v.Build = docker.GitBuild{}
+			return v
+		}()},
 		{"container_stats", docker.ContainerStats{CPUPercent: 1.5, MemUsedMB: 128, MemLimitMB: 2048, MemPercent: 6.3}},
 		{"container_stats_unavailable", nil},
 		{"deploy_fields_image", nil},

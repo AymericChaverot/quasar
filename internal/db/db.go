@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS apps (
 	image_ref      TEXT NOT NULL DEFAULT '',
 	git_url        TEXT NOT NULL DEFAULT '',
 	git_branch     TEXT NOT NULL DEFAULT 'main',
+	git_build      TEXT NOT NULL DEFAULT '',
 	compose_yaml   TEXT NOT NULL DEFAULT '',
 	port           INTEGER NOT NULL DEFAULT 80,
 	env_content    TEXT NOT NULL DEFAULT '',
@@ -159,6 +160,9 @@ var migrations = []string{
 	// Existing single-account installs default to admin, so an upgrade does
 	// not lock anyone out of their own dashboard.
 	"ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'",
+	// Empty means "whatever the repository asks for", so existing git apps
+	// pick up compose support without anyone having to choose.
+	"ALTER TABLE apps ADD COLUMN git_build TEXT NOT NULL DEFAULT ''",
 }
 
 func Open(path string) (*sql.DB, error) {

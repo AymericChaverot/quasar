@@ -21,7 +21,7 @@ type ContainerStats struct {
 // is the sum of its project's containers, since a stack's cost is all of it,
 // not whichever service the daemon lists first.
 func (c *Client) Stats(ctx context.Context, a *db.App) (ContainerStats, error) {
-	if a.DeployType == "compose" {
+	if c.UsesCompose(a) {
 		return c.composeStats(ctx, a.ID)
 	}
 	target, err := c.appContainer(ctx, a.ID)
