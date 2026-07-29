@@ -118,6 +118,13 @@ func (c *Client) AppDirSize(appID string) int64 {
 // traefikLabels builds the labels that make Traefik route the app's
 // subdomain — plus any custom domains — to the container's internal port.
 func (c *Client) traefikLabels(a *db.App) map[string]string {
+	return c.traefikLabelsPort(a, a.Port)
+}
+
+// traefikLabelsPort is traefikLabels routed at a port other than the app's own.
+// A stack serves from whichever port its front-end service listens on, which is
+// written in its compose file rather than in the app's configuration.
+func (c *Client) traefikLabelsPort(a *db.App, port int) map[string]string {
 	r := "qs-" + a.ID
 	host := a.Subdomain + "." + c.domain
 	if a.Subdomain == "@" { // app claims the root domain
@@ -133,7 +140,7 @@ func (c *Client) traefikLabels(a *db.App) map[string]string {
 		fmt.Sprintf("traefik.http.routers.%s.rule", r):                      rule,
 		fmt.Sprintf("traefik.http.routers.%s.entrypoints", r):               "websecure",
 		fmt.Sprintf("traefik.http.routers.%s.tls.certresolver", r):          "letsencrypt",
-		fmt.Sprintf("traefik.http.services.%s.loadbalancer.server.port", r): fmt.Sprintf("%d", a.Port),
+		fmt.Sprintf("traefik.http.services.%s.loadbalancer.server.port", r): fmt.Sprintf("%d", port),
 	}
 	// Old and new containers share this router for the few seconds a deploy
 	// overlaps them, so Traefik sees one service with two servers. Its own

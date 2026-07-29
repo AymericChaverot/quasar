@@ -20,15 +20,19 @@ const (
 )
 
 type App struct {
-	ID              string
-	Name            string
-	Subdomain       string
-	DeployType      string // "image", "git" or "compose"
-	ImageRef        string
-	GitURL          string
-	GitBranch       string
-	GitBuild        string // git apps: GitBuildAuto/Dockerfile/Compose
-	ComposeYAML     string
+	ID          string
+	Name        string
+	Subdomain   string
+	DeployType  string // "image", "git" or "compose"
+	ImageRef    string
+	GitURL      string
+	GitBranch   string
+	GitBuild    string // git apps: GitBuildAuto/Dockerfile/Compose
+	ComposeYAML string
+	// ComposeService is the stack's service the domain is routed to, empty for
+	// the one Quasar works out from the compose file itself. It is only needed
+	// when several services could plausibly serve the site.
+	ComposeService  string
 	Port            int
 	EnvContent      string
 	DataMount       string // container path bound to apps/<id>/data, empty = no volume
@@ -72,7 +76,7 @@ func (a *App) CustomDomainList() []string {
 	return out
 }
 
-const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, created_at"
+const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, compose_service, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, created_at"
 
 // scanApp reads one row and decrypts its at-rest-encrypted columns, so every
 // *App leaving the db package carries plaintext EnvContent/ComposeYAML —
@@ -80,7 +84,7 @@ const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branc
 func scanApp(row interface{ Scan(...any) error }, k *secrets.Keyring) (*App, error) {
 	var a App
 	err := row.Scan(&a.ID, &a.Name, &a.Subdomain, &a.DeployType, &a.ImageRef, &a.GitURL,
-		&a.GitBranch, &a.GitBuild, &a.ComposeYAML, &a.Port, &a.EnvContent, &a.DataMount,
+		&a.GitBranch, &a.GitBuild, &a.ComposeYAML, &a.ComposeService, &a.Port, &a.EnvContent, &a.DataMount,
 		&a.WebhookSecret, &a.CPULimit, &a.MemLimitMB, &a.CustomDomains,
 		&a.HealthPath, &a.BasicAuthUser, &a.BasicAuthHash, &a.SortOrder,
 		&a.PreBackupCmd, &a.RateLimit, &a.IPAllowCIDRs, &a.SecurityHeaders, &a.CreatedAt)
@@ -159,6 +163,14 @@ func UpdateAppGitBuild(db *sql.DB, id, mode string) error {
 		return fmt.Errorf("unknown git build mode %q", mode)
 	}
 	_, err := db.Exec("UPDATE apps SET git_build = ? WHERE id = ?", mode, id)
+	return err
+}
+
+// UpdateAppComposeService stores which service of a stack the domain is routed
+// to, empty to go back to the one Quasar works out for itself. It takes effect
+// on the next deploy, which is when the compose file is rewritten.
+func UpdateAppComposeService(db *sql.DB, id, service string) error {
+	_, err := db.Exec("UPDATE apps SET compose_service = ? WHERE id = ?", service, id)
 	return err
 }
 

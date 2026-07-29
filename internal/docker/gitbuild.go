@@ -91,11 +91,14 @@ func (c *Client) UsesCompose(a *db.App) bool {
 	return a.DeployType == "git" && c.GitBuildFor(a).Mode == db.GitBuildCompose
 }
 
-// composeContext returns the directory docker compose runs in and the file it
-// runs with. A git app's stack is driven from its checkout, since a compose
+// composeSource returns the directory docker compose runs in and the compose
+// file as the operator wrote it — pasted into Quasar, or committed to the
+// repository. A git app's stack is driven from its checkout, since a compose
 // file's build contexts and relative paths resolve from where the file sits.
 // The file is "" when the app has none, which is what compose callers check.
-func (c *Client) composeContext(a *db.App) (dir, file string) {
+//
+// This is not the file compose is actually run with: see composeContext.
+func (c *Client) composeSource(a *db.App) (dir, file string) {
 	if a.DeployType == "compose" {
 		dir = c.AppDir(a.ID)
 		return dir, filepath.Join(dir, "docker-compose.yml")

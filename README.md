@@ -109,6 +109,25 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
   depuis son `Dockerfile` — un Dockerfile à côté ne décrit qu'un service de la
   stack. La page de l'app affiche ce qui a été détecté et permet de basculer
   explicitement sur `Dockerfile` quand le compose n'est là que pour le dev local.
+- **Compose adapté automatiquement** : un `docker-compose.yml` ordinaire —
+  celui qui tourne tel quel sur un portable, avec son propre nginx sur le port
+  80 — est réécrit par Quasar pour tourner derrière Traefik : publications de
+  ports 80/443 retirées (Traefik les détient pour tout le serveur), service de
+  façade rattaché au réseau `traefik-net`, labels de routeur posés dessus. La
+  réécriture va dans un `docker-compose.quasar.yml` généré à côté du fichier
+  d'origine, à chaque déploiement : le dépôt n'est jamais modifié. Le panneau
+  *Routing* de l'app indique le service routé, son port, et ce qui a été
+  changé. Un fichier qui porte déjà ses propres labels Traefik est laissé
+  intact.
+- **Détection du service de façade, sans deviner** : aucun nom de service ni
+  nom d'image n'est utilisé — dans l'ordre, le service qui publiait le port
+  80/443 de l'hôte, sinon celui derrière lequel le reste de la stack se range
+  (`depends_on` vers d'autres, rien qui pointe vers lui), sinon le seul qui
+  offre le port configuré pour l'app, sinon le seul service du fichier. Si rien
+  ne tranche, Quasar ne touche à rien plutôt que de router le domaine au
+  hasard, et le panneau *Routing* laisse choisir. Ancres et clés de fusion YAML
+  (`&anchor`, `<<: *defaults`, `web: *base`) sont aplaties avant lecture et
+  écriture, sinon les labels atterriraient sur l'ancre partagée.
 - **Routage automatique** : sous-domaine + port interne → labels Traefik
   générés, certificat TLS émis à la première requête. Domaines custom
   additionnels par app (`www.monblog.fr`).
@@ -175,8 +194,10 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
 ├── backups/                 # Archives quasar-<date>.tar.gz
 └── apps/<app-id>/
     ├── source/              # Clone Git (mode build) — son compose éventuel
-    │                        #   est lancé depuis ici
+    │   │                    #   est lancé depuis ici
+    │   └── docker-compose.quasar.yml  # Généré : le compose du repo, adapté
     ├── docker-compose.yml   # Mode compose injecté
+    ├── docker-compose.quasar.yml      # Généré : idem, pour un compose injecté
     ├── .env                 # Passé en --env-file aux stacks compose
     └── data/                # Volumes persistants
 ```
@@ -221,6 +242,10 @@ go test ./...
 - Sessions HTTP-only, Secure, SameSite=Lax ; mots de passe bcrypt.
 - `/` de l'hôte est monté **en lecture seule** dans le dashboard uniquement
   pour les métriques disque (`HOST_ROOT`).
-- Mode compose (injecté ou détecté dans un repo Git) : Quasar n'écrit aucun
-  label, les services doivent rejoindre le réseau externe `traefik-net` et
-  porter leurs propres labels Traefik pour être routés.
+- Mode compose (injecté ou détecté dans un repo Git) : Quasar réécrit le
+  fichier pour poser les labels Traefik sur un seul service, celui qui sert le
+  site. Les ports que la stack publie sur l'hôte en dehors de 80/443 sont
+  **conservés** — une stack peut vouloir exposer une base ou un serveur de jeu
+  — mais ils contournent Traefik, donc TLS et les protections configurées pour
+  l'app ; le panneau *Routing* les signale. Un fichier portant déjà des labels
+  `traefik.*` est exécuté tel quel, sans réécriture.

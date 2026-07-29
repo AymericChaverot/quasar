@@ -24,6 +24,14 @@ func testServer(t *testing.T) *Server {
 	return s
 }
 
+// composeRouteView is a stack app with one particular reading of its compose
+// file, for the panel that reports it.
+func composeRouteView(base AppView, adaptation docker.ComposeAdaptation) AppView {
+	base.Compose = adaptation
+	base.Network = "traefik-net"
+	return base
+}
+
 func TestParseTemplates(t *testing.T) {
 	s := testServer(t)
 	for _, p := range []string{"login", "dashboard", "app_new", "app_detail", "settings", "system", "twofa", "terminal"} {
@@ -155,6 +163,27 @@ func TestExecuteTemplates(t *testing.T) {
 			v.Build = docker.GitBuild{}
 			return v
 		}()},
+		// Every state the routing panel has: rewritten by Quasar, left to its
+		// author, undecidable, routed at a service the file has lost, and no
+		// compose file on disk at all.
+		{"compose_route_panel", composeRouteView(gitApp, docker.ComposeAdaptation{
+			Services: []string{"nginx", "backend"}, Service: "nginx", Port: 80,
+			Unpublished: []string{"nginx 80:80"}, Published: []string{"backend 8080:8080"},
+		})},
+		{"compose_route_panel", composeRouteView(gitApp, docker.ComposeAdaptation{
+			Services: []string{"nginx", "backend"}, Service: "nginx", Choice: "nginx", Port: 8080,
+		})},
+		{"compose_route_panel", composeRouteView(gitApp, docker.ComposeAdaptation{
+			Services: []string{"web", "db"}, Service: "web", Author: true,
+		})},
+		{"compose_route_panel", composeRouteView(gitApp, docker.ComposeAdaptation{
+			Services: []string{"api", "worker"}, Ambiguous: true,
+		})},
+		{"compose_route_panel", composeRouteView(gitApp, docker.ComposeAdaptation{
+			Services: []string{"api", "worker"}, Choice: "renamed", Gone: true,
+		})},
+		{"compose_route_panel", composeRouteView(gitApp, docker.ComposeAdaptation{})},
+		{"compose_route_panel", composeRouteView(gitApp, docker.ComposeAdaptation{Err: "yaml: line 3: mapping values are not allowed"})},
 		{"app_containers", map[string]any{"AppID": "beef0001", "Containers": stackContainers}},
 		{"app_containers", map[string]any{"AppID": "beef0001", "Containers": []docker.AppContainer(nil)}},
 		{"container_stats", docker.ContainerStats{CPUPercent: 1.5, MemUsedMB: 128, MemLimitMB: 2048, MemPercent: 6.3}},

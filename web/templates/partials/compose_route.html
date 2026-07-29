@@ -1,0 +1,102 @@
+{{/* How a stack's compose file is run behind Traefik: which service answers
+     for the domain, and what Quasar rewrote to get it there. Rendered with an
+     AppView; replaces itself on save, because the choice changes everything
+     the panel reports. */}}
+{{define "compose_route_panel"}}
+<div id="compose-route" class="card space-y-3 p-4">
+  {{if .Compose.Err}}
+  <span class="badge badge-err"><span class="dot"></span>unreadable</span>
+  <p class="muted text-sm">{{.Compose.Err}}</p>
+
+  {{else if not .Compose.Services}}
+  <span class="badge badge-muted"><span class="dot"></span>nothing checked out</span>
+  <p class="muted text-sm">
+    The compose file is not on disk yet. Deploy the application and this panel will report which
+    service the domain was routed to.
+  </p>
+
+  {{else if .Compose.Author}}
+  <div class="flex flex-wrap items-center gap-2">
+    <span class="badge badge-ok"><span class="dot"></span>{{.Compose.Service}}</span>
+    <span class="chip">labels written by the author</span>
+  </div>
+  <p class="muted text-sm">
+    This compose file already carries Traefik labels, so Quasar runs it exactly as written and
+    changes nothing: whoever wrote those labels knows which service serves what, and a second
+    router pointed elsewhere would fight the one they wrote. Remove them from the file to have
+    Quasar route the stack itself.
+  </p>
+
+  {{else if .Compose.Adapted}}
+  <div class="flex flex-wrap items-center gap-2">
+    <span class="badge badge-ok"><span class="dot"></span>{{.Compose.Service}}</span>
+    <span class="mono muted text-sm">port {{.Compose.Port}}</span>
+    {{if .Compose.Choice}}<span class="chip">chosen</span>{{end}}
+  </div>
+  <p class="muted text-sm">
+    {{.Host}} is routed to the <span class="mono">{{.Compose.Service}}</span> service. Quasar
+    deploys this stack from a generated
+    <span class="mono">docker-compose.quasar.yml</span>, written beside the compose file on every
+    deploy: the same file with the Traefik labels added, that service put on the
+    <span class="mono">{{.Network}}</span> network, and the host port bindings Traefik already
+    holds removed. The file in the repository is never touched.
+  </p>
+  {{if .Compose.Unpublished}}
+  <p class="muted text-sm">
+    Dropped, because Traefik binds those ports for every application here:
+    {{range $i, $p := .Compose.Unpublished}}{{if $i}}, {{end}}<span class="mono">{{$p}}</span>{{end}}.
+  </p>
+  {{end}}
+  {{if .Compose.Published}}
+  <p class="text-sm" style="color: var(--warn)">
+    Still published straight onto the host, and so reachable without TLS and without any of the
+    protections configured for this application:
+    {{range $i, $p := .Compose.Published}}{{if $i}}, {{end}}<span class="mono">{{$p}}</span>{{end}}.
+    Quasar leaves these alone — a stack may publish a database or a game server on purpose —
+    but remove them from the compose file unless you meant them.
+  </p>
+  {{end}}
+
+  {{else if .Compose.Gone}}
+  <span class="badge badge-err"><span class="dot"></span>{{.Compose.Choice}} is gone</span>
+  <p class="text-sm" style="color: var(--warn)">
+    This application is routed to a <span class="mono">{{.Compose.Choice}}</span> service the
+    compose file no longer has, so the stack is deployed unrouted and the domain reaches nothing.
+    Choose one of the services it does have.
+  </p>
+
+  {{else}}
+  <span class="badge badge-warn"><span class="dot"></span>no service chosen</span>
+  <p class="text-sm" style="color: var(--warn)">
+    Several services could be the one serving this site and nothing singles one out, so Quasar
+    changed nothing rather than route {{.Host}} at a database as readily as at a web server.
+    Choose the service that answers HTTP and redeploy.
+  </p>
+  {{end}}
+
+  {{/* The choice is only offered where it means something: a file with one
+       service has nothing to choose, and one its author wired up themselves is
+       not Quasar's to route. */}}
+  {{if and .IsAdmin (not .Compose.Author) (gt (len .Compose.Services) 1)}}
+  <form hx-post="/apps/{{.ID}}/compose-service" hx-target="#compose-route" hx-swap="outerHTML"
+        class="flex flex-wrap items-center gap-3">
+    <select name="compose_service" class="input !w-auto">
+      <option value="" {{if eq .Compose.Choice ""}}selected{{end}}>Automatic — the service that fronts the stack</option>
+      {{$choice := .Compose.Choice}}
+      {{range .Compose.Services}}
+      <option value="{{.}}" {{if eq $choice .}}selected{{end}}>{{.}}</option>
+      {{end}}
+    </select>
+    <button type="submit" class="btn">Save</button>
+    <span class="help !mt-0">Redeploy to apply.</span>
+  </form>
+  <p class="help !mt-0">
+    Left automatic, Quasar takes the service that binds the host's HTTP port — on a laptop that is
+    what the browser talks to, so it is what Traefik should talk to here. Failing that, the service
+    the rest of the stack sits behind: the one that <span class="mono">depends_on</span> others and
+    that nothing depends on. Failing that, the one offering the port configured for this
+    application. No service name and no image is ever matched on, so nothing here assumes an nginx.
+  </p>
+  {{end}}
+</div>
+{{end}}

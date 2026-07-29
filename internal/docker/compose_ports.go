@@ -59,7 +59,7 @@ func (c *Client) checkComposePorts(ctx context.Context, a *db.App) error {
 		return nil // an unexpected shape must not block a deploy that would work
 	}
 	if conflict := findPortConflict(model); conflict.Service != "" {
-		return c.portConflictError(conflict)
+		return c.portConflictError(conflict, c.ComposeAdaptationFor(a))
 	}
 	return nil
 }
@@ -89,15 +89,33 @@ func findPortConflict(model composeModel) portConflict {
 }
 
 // portConflictError explains the collision and what to do about it. "Port is
-// already allocated", which is all the daemon says, leaves the operator to
-// work out both who holds the port and why publishing it was wrong here.
-func (c *Client) portConflictError(conflict portConflict) error {
+// already allocated", which is all the daemon says, leaves the operator to work
+// out both who holds the port and why publishing it was wrong here.
+//
+// Reaching this at all means the rewrite in compose_adapt.go left the binding
+// in place, and the way out depends on why it did — so the reading it made of
+// the file is what the message is built from.
+func (c *Client) portConflictError(conflict portConflict, rep ComposeAdaptation) error {
+	remedy := fmt.Sprintf("Remove the published port and let Traefik reach the service over the network instead: "+
+		"put it on the external %s network and give it the Traefik labels (a Host rule, the websecure "+
+		"entrypoint, tls.certresolver=letsencrypt)", c.network)
+	switch {
+	case rep.Author:
+		remedy = fmt.Sprintf("This compose file carries its own Traefik labels, so Quasar runs it exactly as "+
+			"written and left the binding alone. Remove it — Traefik reaches %q over the %s network, which "+
+			"the file already puts it on", rep.Service, c.network)
+	case rep.Ambiguous:
+		remedy = "Quasar rewrites a stack's compose file to run behind Traefik, and would have removed this " +
+			"binding, but several services could be the one serving the site and nothing singles one out. " +
+			"Choose it in the application's Routing panel and redeploy"
+	case rep.Gone:
+		remedy = fmt.Sprintf("Quasar rewrites a stack's compose file to run behind Traefik, and would have "+
+			"removed this binding, but this application is routed to a %q service the file no longer has. "+
+			"Choose one it does have in the Routing panel and redeploy", rep.Choice)
+	}
 	return fmt.Errorf("service %q publishes host port %d, which Traefik already binds to serve %s for every "+
-		"application on this server — the Docker daemon refuses the second bind, so the stack cannot start. "+
-		"Remove the published port and let Traefik reach the service over the network instead: put it on the "+
-		"external %s network and give it the Traefik labels (a Host rule, the websecure entrypoint, "+
-		"tls.certresolver=letsencrypt)",
-		conflict.Service, conflict.Port, conflict.Proto, c.network)
+		"application on this server — the Docker daemon refuses the second bind, so the stack cannot start. %s",
+		conflict.Service, conflict.Port, conflict.Proto, remedy)
 }
 
 // publishedRange reads the host port(s) out of a resolved compose port entry.

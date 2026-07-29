@@ -27,6 +27,13 @@
 </section>
 {{end}}
 
+{{if .Stack}}
+<section class="mt-8">
+  <h2 class="h-label mb-3">Routing</h2>
+  {{template "compose_route_panel" .}}
+</section>
+{{end}}
+
 {{/* A stack is several containers behind one status line; this is where they
      become individually visible, each with its own logs. */}}
 {{if .Stack}}

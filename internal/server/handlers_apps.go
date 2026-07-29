@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -46,8 +47,15 @@ type AppView struct {
 	// compose file was pasted into Quasar or found in its repository. The
 	// page shows a stack's containers individually.
 	Stack bool
-	First bool
-	Last  bool
+	// Compose is what Quasar made of a stack's compose file to run it behind
+	// Traefik. It reads the file, so it is only filled in for the pages that
+	// show it — appDetailView — and left zero for the dashboard list.
+	Compose docker.ComposeAdaptation
+	// Network is the Docker network Traefik watches, named wherever the page
+	// explains how an app is reached.
+	Network string
+	First   bool
+	Last    bool
 	// IsAdmin gates the controls inside partials, which are rendered without
 	// the page data map that carries it everywhere else.
 	IsAdmin bool
@@ -75,8 +83,19 @@ func (s *Server) appView(r *http.Request, a *db.App) AppView {
 		Deploy:  s.dock.Deploying(a.ID),
 		Build:   s.dock.GitBuildFor(a),
 		Stack:   s.dock.UsesCompose(a),
+		Network: s.dock.Network(),
 		IsAdmin: role == auth.RoleAdmin,
 	}
+}
+
+// appDetailView is appView for the pages about one application, which have
+// room to say how a stack's compose file is being run. The list does not, and
+// reading every app's compose file to render a table nobody asked that of would
+// be work for nothing.
+func (s *Server) appDetailView(r *http.Request, a *db.App) AppView {
+	v := s.appView(r, a)
+	v.Compose = s.dock.ComposeAdaptationFor(a)
+	return v
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +250,7 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, r, "app_detail", map[string]any{
 		"Title": a.Name,
-		"App":   s.appView(r, a),
+		"App":   s.appDetailView(r, a),
 	})
 }
 
@@ -502,7 +521,36 @@ func (s *Server) handleAppGitBuild(w http.ResponseWriter, r *http.Request) {
 	}
 	a.GitBuild = mode
 	s.audit(r, "app.git-build", a.Name, mode)
-	s.renderPartial(w, "git_build_panel", s.appView(r, a))
+	s.renderPartial(w, "git_build_panel", s.appDetailView(r, a))
+}
+
+// handleAppComposeService saves which service of a stack the domain is routed
+// to. Like the build mode it re-renders its own panel, since the choice changes
+// everything the panel reports.
+func (s *Server) handleAppComposeService(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	if !s.dock.UsesCompose(a) {
+		http.Error(w, "only stacks are routed to one of several services", http.StatusBadRequest)
+		return
+	}
+	service := strings.TrimSpace(r.FormValue("compose_service"))
+	// Only a service the file actually has: storing anything else would leave
+	// every deploy falling back to an unrouted stack, with the panel reporting
+	// a service nobody could find.
+	if service != "" && !slices.Contains(s.dock.ComposeAdaptationFor(a).Services, service) {
+		http.Error(w, "this compose file has no such service", http.StatusBadRequest)
+		return
+	}
+	if err := db.UpdateAppComposeService(s.db, a.ID, service); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	a.ComposeService = service
+	s.audit(r, "app.compose-service", a.Name, service)
+	s.renderPartial(w, "compose_route_panel", s.appDetailView(r, a))
 }
 
 // gitBuildChoiceError rejects a build mode the checkout cannot honour, and

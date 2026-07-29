@@ -494,9 +494,16 @@ func (c *Client) deployCompose(ctx context.Context, a *db.App, pull bool) error 
 // moving tag would otherwise keep running the copy it was first deployed with,
 // forever. pull is what makes it advance.
 func (c *Client) composeUp(ctx context.Context, a *db.App, pull bool) error {
-	// Before anything is built: a stack that collides with Traefik on the
-	// host's HTTP ports fails on the very last container it starts, having
-	// spent the whole deploy building images and starting the other services.
+	// First, because it decides which file everything below runs with: an
+	// ordinary compose file is rewritten here into one that can run behind
+	// Traefik.
+	if err := c.writeAdaptedCompose(a); err != nil {
+		return err
+	}
+	// Then, for what the rewrite could not settle — a stack whose front end
+	// Quasar could not single out still publishes port 80. A collision fails on
+	// the very last container compose starts, having spent the whole deploy
+	// building images and starting the other services.
 	if err := c.checkComposePorts(ctx, a); err != nil {
 		return err
 	}

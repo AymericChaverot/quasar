@@ -101,17 +101,38 @@ func TestComposePortConflictIsDeterministic(t *testing.T) {
 }
 
 // The refusal has to be actionable: the operator needs the service name and
-// what to do instead, not just "port already allocated".
+// what to do instead, not just "port already allocated". What to do differs by
+// why the rewrite left the binding there, so each reason gets its own way out.
 func TestComposePortMessageSaysWhatToDo(t *testing.T) {
 	c := &Client{network: "traefik-net"}
 	var model composeModel
 	if err := json.Unmarshal([]byte(`{"services":{"nginx":{"ports":[{"published":"80"}]}}}`), &model); err != nil {
 		t.Fatal(err)
 	}
-	msg := c.portConflictError(findPortConflict(model)).Error()
-	for _, want := range []string{"nginx", "80", "traefik-net", "certresolver"} {
-		if !strings.Contains(msg, want) {
-			t.Errorf("message does not mention %q:\n%s", want, msg)
-		}
+	conflict := findPortConflict(model)
+
+	tests := []struct {
+		name string
+		rep  ComposeAdaptation
+		want []string
+	}{
+		{"nothing is known about the file", ComposeAdaptation{},
+			[]string{"nginx", "80", "traefik-net", "certresolver"}},
+		{"the author wired it up themselves", ComposeAdaptation{Author: true, Service: "nginx"},
+			[]string{"nginx", "its own Traefik labels"}},
+		{"no service could be singled out", ComposeAdaptation{Ambiguous: true},
+			[]string{"nginx", "Routing panel"}},
+		{"routed at a service that is gone", ComposeAdaptation{Gone: true, Choice: "renamed"},
+			[]string{"renamed", "Routing panel"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			msg := c.portConflictError(conflict, tc.rep).Error()
+			for _, want := range tc.want {
+				if !strings.Contains(msg, want) {
+					t.Errorf("message does not mention %q:\n%s", want, msg)
+				}
+			}
+		})
 	}
 }
