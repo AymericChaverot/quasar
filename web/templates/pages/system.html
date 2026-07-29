@@ -153,30 +153,42 @@
   <section class="space-y-4">
     <h2 class="h-label">Docker storage</h2>
     {{if .Disk}}
-    <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+    {{/* Two to a row on the same 2xl column as every other section, rather
+         than four across a width nothing else on the page uses. At that size a
+         card is wide enough to set the count and the size on one line, which
+         is what keeps the extra width from reading as empty. */}}
+    <div class="grid max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2">
       <div class="card p-4">
         <p class="stat-label muted text-sm">{{template "icon_layers"}}Images</p>
-        <p class="mono mt-1 text-lg">{{.Disk.ImagesCount}}</p>
-        <p class="faint text-xs">{{humanSize .Disk.ImagesBytes}} of layers</p>
+        <p class="stat-figure">
+          <span class="mono text-lg">{{.Disk.ImagesCount}}</span>
+          <span class="faint text-xs">{{humanSize .Disk.ImagesBytes}} of layers</span>
+        </p>
       </div>
       <div class="card p-4">
         <p class="stat-label muted text-sm">{{template "icon_box"}}Containers</p>
-        <p class="mono mt-1 text-lg">{{.Disk.ContainersCount}}</p>
-        <p class="faint text-xs">{{humanSize .Disk.ContainersBytes}} written</p>
+        <p class="stat-figure">
+          <span class="mono text-lg">{{.Disk.ContainersCount}}</span>
+          <span class="faint text-xs">{{humanSize .Disk.ContainersBytes}} written</span>
+        </p>
       </div>
       <div class="card p-4">
         <p class="stat-label muted text-sm">{{template "icon_volume"}}Volumes</p>
-        <p class="mono mt-1 text-lg">{{.Disk.VolumesCount}}</p>
-        <p class="faint text-xs">{{humanSize .Disk.VolumesBytes}}</p>
+        <p class="stat-figure">
+          <span class="mono text-lg">{{.Disk.VolumesCount}}</span>
+          <span class="faint text-xs">{{humanSize .Disk.VolumesBytes}}</span>
+        </p>
       </div>
       <div class="card p-4">
         <p class="stat-label muted text-sm">{{template "icon_hammer"}}Build cache</p>
-        <p class="mono mt-1 text-lg">{{.Disk.CacheCount}}</p>
-        <p class="faint text-xs">{{humanSize .Disk.CacheBytes}} of layers</p>
+        <p class="stat-figure">
+          <span class="mono text-lg">{{.Disk.CacheCount}}</span>
+          <span class="faint text-xs">{{humanSize .Disk.CacheBytes}} of layers</span>
+        </p>
       </div>
     </div>
     {{else}}
-    <div class="card muted p-4 text-sm">Docker disk usage unavailable.</div>
+    <div class="card muted max-w-2xl p-4 text-sm">Docker disk usage unavailable.</div>
     {{end}}
 
     {{with .Cleanup}}

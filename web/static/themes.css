@@ -627,6 +627,17 @@ input[type="checkbox"]:focus-visible {
 }
 .stat-label .ico { color: var(--text-faint); }
 
+/* The count and what it weighs, pushed to opposite ends of the card and sat on
+   the same baseline. The count stays the thing the eye lands on; the size is
+   the caption it would otherwise need a line of its own for. */
+.stat-figure {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
 .alert-err {
   border: var(--border-w) solid color-mix(in srgb, var(--err) 50%, transparent);
   border-radius: var(--radius);
