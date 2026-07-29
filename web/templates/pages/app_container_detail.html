@@ -1,0 +1,43 @@
+{{define "content"}}
+{{$app := .App}}
+{{with .Container}}
+<div class="mb-8">
+  <a href="/apps/{{$app.ID}}" class="link text-sm">← {{$app.Name}}</a>
+  <div class="mt-2 flex items-start justify-between">
+    <div>
+      <h1 class="mono text-lg font-semibold">{{if .Service}}{{.Service}}{{else}}{{.Name}}{{end}}</h1>
+      <p class="faint mt-1 text-sm">{{.Image}}</p>
+    </div>
+    <div class="flex items-center gap-3">
+      {{if eq .State "running"}}
+      <span class="badge badge-muted"><span class="dot" style="background: var(--ok)"></span>running{{if .Uptime}} — up {{.Uptime}}{{end}}</span>
+      {{else}}
+      <span class="badge badge-muted"><span class="dot"></span>{{.State}}</span>
+      {{end}}
+      {{if .IsWeb}}<span class="chip">routed</span>{{end}}
+    </div>
+  </div>
+  <p class="mono faint mt-2 text-xs">{{.Name}}</p>
+</div>
+
+{{/* Start/stop/restart act on the whole project, not on one service: compose
+     owns these containers, and reviving one Quasar stopped behind compose's
+     back is not something the app page could then represent honestly. */}}
+<p class="help mb-8">
+  One service of this application's compose stack. Its lifecycle belongs to the
+  stack — start, stop and restart on the application page act on all of it.
+</p>
+
+<section>
+  <h2 class="h-label mb-3">Container resources</h2>
+  <div hx-get="/partials/apps/{{$app.ID}}/containers/{{.Name}}/stats" hx-trigger="load, every 5s" hx-swap="innerHTML">
+    <div class="card h-20 animate-pulse"></div>
+  </div>
+</section>
+
+<section class="mt-8">
+  <h2 class="h-label mb-3">Live logs</h2>
+  {{template "log_pane" (printf "/apps/%s/containers/%s/logs" $app.ID .Name)}}
+</section>
+{{end}}
+{{end}}

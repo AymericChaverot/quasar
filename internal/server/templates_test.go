@@ -56,7 +56,14 @@ func TestExecuteTemplates(t *testing.T) {
 		Status:  docker.AppStatus{State: "running", Uptime: "5m"},
 		Domain:  "example.com",
 		Build:   docker.GitBuild{Mode: "compose", HasCompose: true, HasDockerfile: true, ComposeFile: "docker-compose.yml"},
+		Stack:   true,
 		IsAdmin: true,
+	}
+
+	stackContainers := []docker.AppContainer{
+		{Name: "qs-beef0001-backend-1", Service: "backend", Image: "beef0001-backend", State: "running", Uptime: "5m"},
+		{Name: "qs-beef0001-nginx-1", Service: "nginx", Image: "nginx:alpine", State: "running", Uptime: "5m", IsWeb: true},
+		{Name: "qs-beef0001-worker-1", Service: "worker", Image: "beef0001-worker", State: "exited"},
 	}
 
 	cases := []struct {
@@ -69,6 +76,10 @@ func TestExecuteTemplates(t *testing.T) {
 		{"app_new", map[string]any{"Title": "New", "Domain": "example.com", "Catalog": catalog.Templates, "Form": app.App}},
 		{"app_detail", map[string]any{"Title": "Blog", "App": app}},
 		{"app_detail", map[string]any{"Title": "API", "App": gitApp, "IsAdmin": true}},
+		{"app_container_detail", map[string]any{
+			"Title": "qs-beef0001-nginx-1", "App": gitApp, "Container": &stackContainers[1]}},
+		{"app_container_detail", map[string]any{
+			"Title": "qs-beef0001-worker-1", "App": gitApp, "Container": &stackContainers[2]}},
 		{"terminal", map[string]any{"Title": "Blog terminal", "App": app}},
 		{"settings", map[string]any{
 			"Title": "Settings", "Theme": "terminal", "Themes": themes,
@@ -133,6 +144,8 @@ func TestExecuteTemplates(t *testing.T) {
 			v.Build = docker.GitBuild{}
 			return v
 		}()},
+		{"app_containers", map[string]any{"AppID": "beef0001", "Containers": stackContainers}},
+		{"app_containers", map[string]any{"AppID": "beef0001", "Containers": []docker.AppContainer(nil)}},
 		{"container_stats", docker.ContainerStats{CPUPercent: 1.5, MemUsedMB: 128, MemLimitMB: 2048, MemPercent: 6.3}},
 		{"container_stats_unavailable", nil},
 		{"deploy_fields_image", nil},

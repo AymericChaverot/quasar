@@ -177,6 +177,10 @@ func (s *Server) routes() {
 
 	s.viewer("GET /apps/{id}", s.handleAppDetail)
 	s.viewer("GET /apps/{id}/logs", s.handleAppLogs)
+	// Per-container views of a compose stack. {name} is resolved against the
+	// app's own project, so it cannot reach another app's containers.
+	s.viewer("GET /apps/{id}/containers/{name}", s.handleAppContainerDetail)
+	s.viewer("GET /apps/{id}/containers/{name}/logs", s.handleAppContainerLogs)
 	s.admin("GET /apps/new", s.handleAppNew)
 	s.admin("POST /apps", s.handleAppCreate)
 	s.admin("POST /apps/{id}/move", s.handleAppMove)
@@ -213,6 +217,8 @@ func (s *Server) routes() {
 	s.viewer("GET /partials/deploy-fields", s.handleDeployFields)
 	s.viewer("GET /partials/apps/{id}/stats", s.handleAppStatsPartial)
 	s.viewer("GET /partials/apps/{id}/status", s.handleAppStatusPartial)
+	s.viewer("GET /partials/apps/{id}/containers", s.handleAppContainersPartial)
+	s.viewer("GET /partials/apps/{id}/containers/{name}/stats", s.handleAppContainerStatsPartial)
 	s.viewer("GET /partials/apps/{id}/deployments", s.handleAppDeploymentsPartial)
 	s.viewer("GET /partials/apps/{id}/tls", s.handleAppTLSPartial)
 	s.viewer("GET /partials/metrics", s.handleServerMetricsPartial)

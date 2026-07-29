@@ -27,6 +27,17 @@
 </section>
 {{end}}
 
+{{/* A stack is several containers behind one status line; this is where they
+     become individually visible, each with its own logs. */}}
+{{if .Stack}}
+<section class="mt-8">
+  <h2 class="h-label mb-3">Stack containers</h2>
+  <div hx-get="/partials/apps/{{.ID}}/containers" hx-trigger="load, every 5s" hx-swap="innerHTML">
+    <div class="card h-20 animate-pulse"></div>
+  </div>
+</section>
+{{end}}
+
 <section class="mt-8">
   <h2 class="h-label mb-3">TLS</h2>
   <div hx-get="/partials/apps/{{.ID}}/tls" hx-trigger="load" hx-swap="innerHTML">

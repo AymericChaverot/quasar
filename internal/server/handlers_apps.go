@@ -42,6 +42,10 @@ type AppView struct {
 	// Build is how a git app's checkout is deployed, and what the checkout
 	// offers. Zero for the other deploy types, which have nothing to choose.
 	Build docker.GitBuild
+	// Stack is true when the app runs as a compose project, whether its
+	// compose file was pasted into Quasar or found in its repository. The
+	// page shows a stack's containers individually.
+	Stack bool
 	First bool
 	Last  bool
 	// IsAdmin gates the controls inside partials, which are rendered without
@@ -70,6 +74,7 @@ func (s *Server) appView(r *http.Request, a *db.App) AppView {
 		Domain:  s.cfg.Domain,
 		Deploy:  s.dock.Deploying(a.ID),
 		Build:   s.dock.GitBuildFor(a),
+		Stack:   s.dock.UsesCompose(a),
 		IsAdmin: role == auth.RoleAdmin,
 	}
 }
@@ -227,6 +232,36 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "app_detail", map[string]any{
 		"Title": a.Name,
 		"App":   s.appView(r, a),
+	})
+}
+
+// getAppContainer resolves one container of an app's compose project from the
+// URL, 404ing on anything that is not part of that project — which is what
+// keeps this from becoming a way to read any container on the host.
+func (s *Server) getAppContainer(w http.ResponseWriter, r *http.Request, a *db.App) *docker.AppContainer {
+	ac, err := s.dock.GetAppContainer(r.Context(), a, r.PathValue("name"))
+	if err != nil {
+		http.Error(w, "container not found for this application", http.StatusNotFound)
+		return nil
+	}
+	return &ac
+}
+
+// handleAppContainerDetail shows one container of a stack: its image, state,
+// live resource use and its own logs, rather than the whole project's.
+func (s *Server) handleAppContainerDetail(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	ac := s.getAppContainer(w, r, a)
+	if ac == nil {
+		return
+	}
+	s.render(w, r, "app_container_detail", map[string]any{
+		"Title":     ac.Name,
+		"App":       s.appView(r, a),
+		"Container": ac,
 	})
 }
 
@@ -457,6 +492,10 @@ func (s *Server) handleAppGitBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mode := r.FormValue("git_build")
+	if problem := gitBuildChoiceError(mode, s.dock.GitBuildFor(a)); problem != "" {
+		http.Error(w, problem, http.StatusBadRequest)
+		return
+	}
 	if err := db.UpdateAppGitBuild(s.db, a.ID, mode); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -464,6 +503,28 @@ func (s *Server) handleAppGitBuild(w http.ResponseWriter, r *http.Request) {
 	a.GitBuild = mode
 	s.audit(r, "app.git-build", a.Name, mode)
 	s.renderPartial(w, "git_build_panel", s.appView(r, a))
+}
+
+// gitBuildChoiceError rejects a build mode the checkout cannot honour, and
+// returns "" for one it can.
+//
+// Storing an impossible wish would leave the app permanently disagreeing with
+// itself — the panel reporting "Dockerfile", every deploy using compose — and
+// the panel hides those options for exactly that reason. This is what stops a
+// hand-made request from getting past it. A checkout that is not on disk yet
+// constrains nothing: the repository is cloned at the next deploy, and the
+// choice is judged then.
+func gitBuildChoiceError(mode string, build docker.GitBuild) string {
+	if build.Mode == "" {
+		return ""
+	}
+	switch {
+	case mode == db.GitBuildDockerfile && !build.HasDockerfile:
+		return "this repository has no Dockerfile at its root"
+	case mode == db.GitBuildCompose && !build.HasCompose:
+		return "this repository has no compose file at its root"
+	}
+	return ""
 }
 
 // handleAppHealth saves the HTTP health check path (empty disables checks).

@@ -1,0 +1,32 @@
+{{/* The containers of a compose stack, each linking to its own detail view.
+     Rendered with {AppID, Containers}. */}}
+{{define "app_containers"}}
+{{if .Containers}}
+<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+  {{range .Containers}}
+  <a href="/apps/{{$.AppID}}/containers/{{.Name}}" class="empty block p-4 opacity-70 hover:opacity-100">
+    <div class="flex items-center justify-between gap-2">
+      <p class="mono truncate text-sm">{{if .Service}}{{.Service}}{{else}}{{.Name}}{{end}}</p>
+      {{if eq .State "running"}}
+      <span class="badge badge-muted"><span class="dot" style="background: var(--ok)"></span>running</span>
+      {{else}}
+      <span class="badge badge-muted"><span class="dot"></span>{{.State}}</span>
+      {{end}}
+    </div>
+    <p class="faint mt-1 truncate text-xs">{{.Image}}</p>
+    <div class="mt-0.5 flex items-center gap-2">
+      {{if .Uptime}}<span class="faint text-xs">up {{.Uptime}}</span>{{end}}
+      {{/* Which service Traefik actually routes: on a stack Quasar does not
+           label itself, this is the only way to see it was set up at all. */}}
+      {{if .IsWeb}}<span class="chip">routed</span>{{end}}
+    </div>
+  </a>
+  {{end}}
+</div>
+{{else}}
+<div class="empty muted p-4 text-sm">
+  No containers for this stack yet — deploy the application, or check the last
+  deployment if it failed.
+</div>
+{{end}}
+{{end}}

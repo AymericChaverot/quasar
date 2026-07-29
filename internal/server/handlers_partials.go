@@ -60,6 +60,38 @@ func (s *Server) handleAppStatsPartial(w http.ResponseWriter, r *http.Request) {
 	s.renderPartial(w, "container_stats", stats)
 }
 
+// handleAppContainersPartial lists the containers of a stack, polled so a
+// service that dies after the deploy shows up without a reload.
+func (s *Server) handleAppContainersPartial(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	s.renderPartial(w, "app_containers", map[string]any{
+		"AppID":      a.ID,
+		"Containers": s.dock.AppContainers(r.Context(), a),
+	})
+}
+
+// handleAppContainerStatsPartial reports one stack container's resource use,
+// as opposed to the whole project's sum shown on the app page.
+func (s *Server) handleAppContainerStatsPartial(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	ac := s.getAppContainer(w, r, a)
+	if ac == nil {
+		return
+	}
+	stats, err := s.dock.StatsByName(r.Context(), ac.Name)
+	if err != nil {
+		s.renderPartial(w, "container_stats_unavailable", nil)
+		return
+	}
+	s.renderPartial(w, "container_stats", stats)
+}
+
 func (s *Server) handleAppStatusPartial(w http.ResponseWriter, r *http.Request) {
 	a := s.getApp(w, r)
 	if a == nil {

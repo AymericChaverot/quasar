@@ -37,14 +37,10 @@ func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// handleAppLogs streams container logs as Server-Sent Events, consumed by the
-// htmx SSE extension on the app detail page.
-func (s *Server) handleAppLogs(w http.ResponseWriter, r *http.Request) {
-	a := s.getApp(w, r)
-	if a == nil {
-		return
-	}
-
+// streamLogLines writes a log stream as Server-Sent Events, consumed by the
+// htmx SSE extension in the log pane. follow is handed a sink to call once per
+// line and blocks until the request is cancelled.
+func streamLogLines(w http.ResponseWriter, r *http.Request, follow func(send func(string)) error) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -55,42 +51,55 @@ func (s *Server) handleAppLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	err := s.dock.StreamLogs(r.Context(), a, func(line string) {
+	err := follow(func(line string) {
 		// One SSE event per log line, HTML-escaped and wrapped for beforeend swap.
 		fmt.Fprintf(w, "data: <div>%s</div>\n\n", html.EscapeString(strings.ToValidUTF8(line, "�")))
 		flusher.Flush()
 	})
+	// A cancelled request is the normal way this ends — the reader navigated
+	// away — and has no error to report to a response nobody is reading.
 	if err != nil && r.Context().Err() == nil {
 		fmt.Fprintf(w, "data: <div class=\"text-red-400\">log stream error: %s</div>\n\n", html.EscapeString(err.Error()))
 		flusher.Flush()
 	}
 }
 
-// handleSystemContainerLogs streams a system container's logs the same way
-// handleAppLogs does, but by container name and with no mutating routes
-// alongside it — this view is read-only.
+// handleAppLogs streams the app's logs: its container, or the service a stack
+// serves HTTP from.
+func (s *Server) handleAppLogs(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	streamLogLines(w, r, func(send func(string)) error {
+		return s.dock.StreamLogs(r.Context(), a, send)
+	})
+}
+
+// handleAppContainerLogs streams one container of a stack, which is the only
+// way to read a service that is not the one serving HTTP.
+func (s *Server) handleAppContainerLogs(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	ac := s.getAppContainer(w, r, a)
+	if ac == nil {
+		return
+	}
+	streamLogLines(w, r, func(send func(string)) error {
+		return s.dock.StreamLogsByName(r.Context(), ac.Name, send)
+	})
+}
+
+// handleSystemContainerLogs streams one of Quasar's own containers, from the
+// read-only system view.
 func (s *Server) handleSystemContainerLogs(w http.ResponseWriter, r *http.Request) {
 	sc := s.getSystemContainer(w, r)
 	if sc == nil {
 		return
 	}
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-
-	err := s.dock.StreamLogsByName(r.Context(), sc.Name, func(line string) {
-		fmt.Fprintf(w, "data: <div>%s</div>\n\n", html.EscapeString(strings.ToValidUTF8(line, "�")))
-		flusher.Flush()
+	streamLogLines(w, r, func(send func(string)) error {
+		return s.dock.StreamLogsByName(r.Context(), sc.Name, send)
 	})
-	if err != nil && r.Context().Err() == nil {
-		fmt.Fprintf(w, "data: <div class=\"text-red-400\">log stream error: %s</div>\n\n", html.EscapeString(err.Error()))
-		flusher.Flush()
-	}
 }
