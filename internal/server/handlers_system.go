@@ -99,12 +99,30 @@ func (s *Server) appIDs() ([]string, error) {
 // installs; an install predating that mount only reaches the file through the
 // read-only mount of the host filesystem, which is enough to list certificates
 // but not to delete one.
+//
+// Writability is probed on the directory rather than on the file itself: the
+// file may not exist yet (no certificate obtained) even on a fully writable
+// mount, and checking the directory avoids a false read-only result in that
+// case.
 func (s *Server) acmePath() (path string, writable bool) {
 	direct := filepath.Join(s.cfg.TraefikDir, "acme.json")
-	if _, err := os.Stat(direct); err == nil {
+	if dirWritable(s.cfg.TraefikDir) {
 		return direct, true
 	}
 	return filepath.Join(s.cfg.HostRootPath, filepath.Dir(s.cfg.AppsDir), "traefik", "acme.json"), false
+}
+
+// dirWritable reports whether dir can be written to by creating and immediately
+// removing a probe file. It returns false for any error, including when the
+// directory does not exist.
+func dirWritable(dir string) bool {
+	f, err := os.CreateTemp(dir, ".writable-probe-*")
+	if err != nil {
+		return false
+	}
+	f.Close()
+	os.Remove(f.Name())
+	return true
 }
 
 // heldCerts is what Traefik has actually obtained. An unreadable store yields
