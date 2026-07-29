@@ -16,15 +16,25 @@ import (
 
 	"quasar/internal/config"
 	"quasar/internal/db"
+	"quasar/internal/secrets"
 )
 
 type Client struct {
-	api       *client.Client
-	dbc       *sql.DB
+	api *client.Client
+	dbc *sql.DB
+	// keyring opens the git credentials, which are the one secret this package
+	// reads for itself; an app's env and compose data arrive already decrypted.
+	keyring   *secrets.Keyring
 	domain    string
 	network   string
 	socketNet string
 	appsDir   string
+
+	// The git credential helper is written once and reused; it carries no
+	// secret of its own, only the code that reads one from the environment.
+	askPassOnce sync.Once
+	askPassPath string
+	askPassErr  error
 
 	mu      sync.Mutex
 	deploys map[string]*DeployState // app ID -> in-flight/last deploy state
@@ -36,7 +46,7 @@ type DeployState struct {
 	Err     string
 }
 
-func New(cfg config.Config, database *sql.DB) (*Client, error) {
+func New(cfg config.Config, database *sql.DB, keyring *secrets.Keyring) (*Client, error) {
 	api, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, err
@@ -44,6 +54,7 @@ func New(cfg config.Config, database *sql.DB) (*Client, error) {
 	return &Client{
 		api:       api,
 		dbc:       database,
+		keyring:   keyring,
 		domain:    cfg.Domain,
 		network:   cfg.TraefikNetwork,
 		socketNet: cfg.SocketNetwork,

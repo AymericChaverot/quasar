@@ -113,6 +113,20 @@ CREATE TABLE IF NOT EXISTS registries (
 	secret   TEXT NOT NULL
 );
 
+-- One token per forge host, so a GitHub account and a self-hosted GitLab can
+-- be held at the same time. host is unique because a clone URL resolves to
+-- exactly one credential; '*' is the fallback for hosts named by no row.
+CREATE TABLE IF NOT EXISTS git_credentials (
+	id           INTEGER PRIMARY KEY AUTOINCREMENT,
+	name         TEXT NOT NULL DEFAULT '',
+	host         TEXT NOT NULL UNIQUE,
+	username     TEXT NOT NULL DEFAULT '',
+	secret       TEXT NOT NULL,
+	hint         TEXT NOT NULL DEFAULT '',
+	created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	last_used_at DATETIME
+);
+
 CREATE TABLE IF NOT EXISTS settings (
 	key   TEXT PRIMARY KEY,
 	value TEXT NOT NULL

@@ -159,6 +159,13 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
   arrêtées, leurs images et les derniers builds git de chaque app (cibles de
   rollback) ; les volumes orphelins sont proposés à part, en case à cocher,
   parce qu'eux ne se re-téléchargent pas.
+- **Identifiants Git** : page dédiée (Paramètres → Git credentials) avec un token
+  par forge, choisi selon le domaine du dépôt — GitHub, GitLab, un Gitea
+  auto-hébergé peuvent coexister, et `*` sert de repli. Chaque token est
+  chiffré avec la master key, jamais réaffiché (seulement un indice masqué),
+  testable en un clic (`git ls-remote` réel), et la page montre quelles apps
+  dépendent de quel token. Liens et scopes exacts fournis pour chaque forge.
+  Le token unique des versions précédentes est migré automatiquement vers `*`.
 - **TLS par app** : état du certificat de chaque hostname servi, et diagnostic
   quand il manque (nom qui ne résout pas, ou qui pointe ailleurs que sur ce
   serveur — la cause habituelle d'une app sans HTTPS).

@@ -115,7 +115,11 @@ func RegistryFor(db *sql.DB, server string) *Registry {
 
 // Well-known settings keys.
 const (
-	SettingGitToken        = "git_token"        // token injected into https git clones
+	// Deprecated: the single platform-wide git token, superseded by the
+	// git_credentials table. Kept only so MigrateGitToken can find and clear
+	// what an install created before per-host credentials existed.
+	SettingGitToken = "git_token"
+
 	SettingNotifyURL       = "notify_url"       // Discord/Slack-compatible webhook
 	SettingBackupRetention = "backup_retention" // how many backup archives to keep
 	SettingBackupAuto      = "backup_auto"      // "true" to run a daily backup

@@ -42,7 +42,15 @@ func main() {
 		log.Printf("encrypted %d app(s)' stored env/compose data at rest", n)
 	}
 
-	dock, err := docker.New(cfg, database)
+	// The platform-wide git token of earlier versions becomes the any-host
+	// credential, sealed rather than left in the settings table in plaintext.
+	if moved, err := db.MigrateGitToken(database, keyring); err != nil {
+		log.Printf("migrate git token: %v", err)
+	} else if moved {
+		log.Print("moved the stored git token into encrypted git credentials (host: any)")
+	}
+
+	dock, err := docker.New(cfg, database, keyring)
 	if err != nil {
 		log.Fatalf("docker: %v", err)
 	}

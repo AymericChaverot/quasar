@@ -296,48 +296,57 @@ func probeOnce(url string) error {
 	return nil
 }
 
-// gitURLWithToken injects the platform git token into https clone URLs so
-// private repositories work without per-app configuration.
-func (c *Client) gitURLWithToken(url string) string {
-	// Checked before the lookup: an ssh remote or one that already carries
-	// credentials has no use for the token, and no reason to query for it.
-	if !strings.HasPrefix(url, "https://") || strings.Contains(url, "@") {
-		return url
-	}
-	token := db.GetSetting(c.dbc, db.SettingGitToken)
-	if token == "" {
-		return url
-	}
-	return "https://oauth2:" + token + "@" + strings.TrimPrefix(url, "https://")
-}
-
 // syncSource makes apps/<id>/source hold the code to build and returns its
 // path: a clone when there is nothing checked out, a fast-forward to the
 // branch head when pull is set, and otherwise the commit already on disk.
+//
+// The clone URL stays exactly as the operator entered it. Credentials reach
+// git through the environment instead (see gitRun), which is what keeps the
+// checkout on disk free of secrets and lets a rotated token take effect
+// without re-cloning.
 func (c *Client) syncSource(ctx context.Context, a *db.App, pull bool) (string, error) {
 	src := c.sourceDir(a.ID)
 
-	var cmd *exec.Cmd
+	var args []string
 	switch _, err := os.Stat(filepath.Join(src, ".git")); {
 	case err != nil:
 		// No checkout to build from, so this clones whether or not an update
 		// was asked for.
 		os.RemoveAll(src)
-		args := []string{"clone", "--depth", "1"}
+		args = []string{"clone", "--depth", "1"}
 		if a.GitBranch != "" {
 			args = append(args, "--branch", a.GitBranch)
 		}
-		args = append(args, c.gitURLWithToken(a.GitURL), src)
-		cmd = exec.CommandContext(ctx, "git", args...)
+		args = append(args, a.GitURL, src)
 	case pull:
-		cmd = exec.CommandContext(ctx, "git", "-C", src, "pull", "--ff-only")
+		args = []string{"-C", src, "pull", "--ff-only"}
 	default:
 		return src, nil // rebuild the commit already there
 	}
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("git: %s: %w", strings.TrimSpace(string(out)), err)
+	if err := c.gitRun(ctx, a.GitURL, args...); err != nil {
+		return "", err
 	}
+	c.dropStoredCredential(ctx, src, a.GitURL)
 	return src, nil
+}
+
+// dropStoredCredential rewrites a remote that carries credentials back to the
+// bare URL.
+//
+// Nothing here writes such a remote any more, but installs created before this
+// have one: earlier versions cloned from a URL with the token embedded, and
+// git copied it verbatim into .git/config. That leaves the token inside the
+// app's source directory — and inside every backup of it — and pins the
+// checkout to that one token, so rotating the credential would change nothing.
+func (c *Client) dropStoredCredential(ctx context.Context, src, plainURL string) {
+	if !strings.HasPrefix(plainURL, "https://") {
+		return
+	}
+	out, err := exec.CommandContext(ctx, "git", "-C", src, "remote", "get-url", "origin").Output()
+	if err != nil || !strings.Contains(strings.TrimSpace(string(out)), "@") {
+		return
+	}
+	exec.CommandContext(ctx, "git", "-C", src, "remote", "set-url", "origin", plainURL).Run()
 }
 
 // deployGit clones (or updates) the repository and then runs it the way the

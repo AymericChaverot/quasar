@@ -17,7 +17,7 @@ import (
 
 // restoredTables are copied from the archive into the live database.
 // Sessions are deliberately excluded so current logins survive the restore.
-var restoredTables = []string{"users", "apps", "registries", "settings", "deployments", "tasks"}
+var restoredTables = []string{"users", "apps", "registries", "git_credentials", "settings", "deployments", "tasks"}
 
 // Restore extracts a backup archive: app data directories and .env files are
 // put back in place, and database tables are copied from the snapshot into

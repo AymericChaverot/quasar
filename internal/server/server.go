@@ -106,6 +106,7 @@ var templateFuncs = template.FuncMap{
 		}
 		return many
 	},
+	"hasPrefix": strings.HasPrefix,
 }
 
 func (s *Server) parseTemplates() error {
@@ -183,6 +184,13 @@ func (s *Server) routes() {
 	s.admin("POST /settings/registries", s.handleRegistryAdd)
 	s.admin("POST /settings/registries/{id}/delete", s.handleRegistryDelete)
 	s.admin("POST /settings/integrations", s.handleIntegrationsSave)
+	// Forge tokens open every private repository the platform builds from, so
+	// the whole section is admin-only — including the read that lists which
+	// hosts have one.
+	s.admin("GET /settings/git", s.handleGitCredentials)
+	s.admin("POST /settings/git", s.handleGitCredentialSave)
+	s.admin("POST /settings/git/{id}/delete", s.handleGitCredentialDelete)
+	s.admin("POST /settings/git/test", s.handleGitCredentialTest)
 	s.admin("POST /settings/notify-test", s.handleNotifyTest)
 	s.admin("POST /settings/users", s.handleUserCreate)
 	s.admin("POST /settings/users/{id}/role", s.handleUserRole)

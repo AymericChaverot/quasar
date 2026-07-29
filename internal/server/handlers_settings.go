@@ -88,32 +88,33 @@ func (s *Server) settingsData(r *http.Request) map[string]any {
 	registries, _ := db.ListRegistries(s.db)
 	users, _ := auth.ListUsers(s.db)
 	tokens, _ := auth.ListTokens(s.db)
+	gitCreds, _ := db.ListGitCredentials(s.db)
 	return map[string]any{
-		"Title":       "Settings",
-		"Username":    username,
-		"Role":        role,
-		"IsAdmin":     role == auth.RoleAdmin,
-		"UserID":      userID,
-		"Users":       users,
-		"Tokens":      tokens,
-		"Themes":      themes,
-		"Domain":      s.cfg.Domain,
-		"AppsDir":     s.cfg.AppsDir,
-		"DBPath":      s.cfg.DBPath,
-		"Registries":  registries,
-		"GitTokenSet": db.GetSetting(s.db, db.SettingGitToken) != "",
-		"NotifyURL":   db.GetSetting(s.db, db.SettingNotifyURL),
-		"NtfyURL":     db.GetSetting(s.db, db.SettingNtfyURL),
-		"SMTPHost":    db.GetSetting(s.db, db.SettingSMTPHost),
-		"SMTPPort":    db.GetSetting(s.db, db.SettingSMTPPort),
-		"SMTPUser":    db.GetSetting(s.db, db.SettingSMTPUser),
-		"SMTPFrom":    db.GetSetting(s.db, db.SettingSMTPFrom),
-		"SMTPTo":      db.GetSetting(s.db, db.SettingSMTPTo),
-		"SMTPPassSet": db.GetSetting(s.db, db.SettingSMTPPassword) != "",
-		"TOTPEnabled": auth.TOTPEnabled(s.db, userID),
-		"AlertDisk":   s.alertThreshold(db.SettingAlertDisk, monitor.AlertDefaultDisk),
-		"AlertMem":    s.alertThreshold(db.SettingAlertMem, monitor.AlertDefaultMem),
-		"AlertCPU":    s.alertThreshold(db.SettingAlertCPU, monitor.AlertDefaultCPU),
+		"Title":        "Settings",
+		"Username":     username,
+		"Role":         role,
+		"IsAdmin":      role == auth.RoleAdmin,
+		"UserID":       userID,
+		"Users":        users,
+		"Tokens":       tokens,
+		"Themes":       themes,
+		"Domain":       s.cfg.Domain,
+		"AppsDir":      s.cfg.AppsDir,
+		"DBPath":       s.cfg.DBPath,
+		"Registries":   registries,
+		"GitCredCount": len(gitCreds),
+		"NotifyURL":    db.GetSetting(s.db, db.SettingNotifyURL),
+		"NtfyURL":      db.GetSetting(s.db, db.SettingNtfyURL),
+		"SMTPHost":     db.GetSetting(s.db, db.SettingSMTPHost),
+		"SMTPPort":     db.GetSetting(s.db, db.SettingSMTPPort),
+		"SMTPUser":     db.GetSetting(s.db, db.SettingSMTPUser),
+		"SMTPFrom":     db.GetSetting(s.db, db.SettingSMTPFrom),
+		"SMTPTo":       db.GetSetting(s.db, db.SettingSMTPTo),
+		"SMTPPassSet":  db.GetSetting(s.db, db.SettingSMTPPassword) != "",
+		"TOTPEnabled":  auth.TOTPEnabled(s.db, userID),
+		"AlertDisk":    s.alertThreshold(db.SettingAlertDisk, monitor.AlertDefaultDisk),
+		"AlertMem":     s.alertThreshold(db.SettingAlertMem, monitor.AlertDefaultMem),
+		"AlertCPU":     s.alertThreshold(db.SettingAlertCPU, monitor.AlertDefaultCPU),
 	}
 }
 
@@ -195,13 +196,10 @@ func (s *Server) handleRegistryDelete(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
-// handleIntegrationsSave stores the git token and notification webhook URL.
+// handleIntegrationsSave stores the notification and alerting configuration.
+// Git credentials moved to their own page once one token per forge became the
+// point; see handlers_git.go.
 func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) {
-	if r.FormValue("clear_git_token") == "on" {
-		db.SetSetting(s.db, db.SettingGitToken, "")
-	} else if token := r.FormValue("git_token"); token != "" {
-		db.SetSetting(s.db, db.SettingGitToken, token)
-	}
 	db.SetSetting(s.db, db.SettingNotifyURL, strings.TrimSpace(r.FormValue("notify_url")))
 
 	// Thresholds are stored as typed, so an unparseable or out-of-range value

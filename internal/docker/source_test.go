@@ -99,18 +99,19 @@ func TestSyncSourceOnlyPullsWhenAskedTo(t *testing.T) {
 	}
 }
 
-// An ssh remote, or one that already carries credentials, must be left alone —
-// and must not cost a settings lookup, which is what lets this run without a
-// database at all.
-func TestGitURLWithTokenLeavesNonHTTPSAlone(t *testing.T) {
-	c := &Client{} // no database: the cheap checks must come first
+// An ssh remote, or one that already carries credentials, must not cost a
+// credential lookup — which is what lets a deploy run against a plain path
+// with no database behind it at all, as the test above does.
+func TestGitCredentialLookupSkippedWithoutADatabase(t *testing.T) {
+	c := &Client{} // no database: the cheap checks have to come first
 	for _, url := range []string{
 		"git@github.com:owner/repo.git",
 		"ssh://git@example.com/repo.git",
 		"https://oauth2:secret@github.com/owner/repo.git",
+		"https://github.com/owner/repo.git",
 	} {
-		if got := c.gitURLWithToken(url); got != url {
-			t.Errorf("gitURLWithToken(%q) = %q, want it unchanged", url, got)
+		if cred := c.gitCredentialFor(url); cred != nil {
+			t.Errorf("gitCredentialFor(%q) returned a credential with no database", url)
 		}
 	}
 }

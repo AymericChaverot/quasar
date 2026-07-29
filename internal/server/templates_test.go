@@ -34,7 +34,7 @@ func composeRouteView(base AppView, adaptation docker.ComposeAdaptation) AppView
 
 func TestParseTemplates(t *testing.T) {
 	s := testServer(t)
-	for _, p := range []string{"login", "dashboard", "app_new", "app_detail", "settings", "system", "twofa", "terminal"} {
+	for _, p := range []string{"login", "dashboard", "app_new", "app_detail", "settings", "system", "twofa", "terminal", "git_credentials"} {
 		if s.pages[p] == nil {
 			t.Errorf("missing page template %q", p)
 		}
@@ -93,9 +93,9 @@ func TestExecuteTemplates(t *testing.T) {
 			"Title": "Settings", "Theme": "terminal", "Themes": themes,
 			"Username": "admin", "Domain": "example.com",
 			"AppsDir": "/opt/quasar/apps", "DBPath": "/opt/quasar/storage/database.sqlite",
-			"Saved":       "Settings saved.",
-			"Registries":  []*db.Registry{{ID: 1, Server: "ghcr.io", Username: "me"}},
-			"GitTokenSet": true, "NotifyURL": "https://discord.com/api/webhooks/x",
+			"Saved":        "Settings saved.",
+			"Registries":   []*db.Registry{{ID: 1, Server: "ghcr.io", Username: "me"}},
+			"GitCredCount": 2, "NotifyURL": "https://discord.com/api/webhooks/x",
 			"TOTPEnabled": false,
 			"TOTPSetup":   map[string]string{"Secret": "ABC123", "QR": "data:image/png;base64,x"},
 		}},
@@ -130,6 +130,35 @@ func TestExecuteTemplates(t *testing.T) {
 				{Cert: certs.Cert{Domain: "gone.example.com", SANs: []string{"gone.example.com", "www.gone.example.com"},
 					Issuer: "R3", NotAfter: time.Now().Add(5 * 24 * time.Hour), DaysLeft: 5, Status: "critical"}},
 			},
+		}},
+		{"git_credentials", map[string]any{
+			"Title": "Git credentials", "IsAdmin": true,
+			"AnyHost": db.AnyHost, "DefaultUser": db.DefaultGitUsername, "Providers": gitProviders,
+			"Saved": "Credential saved for github.com.",
+			"Credentials": []GitCredentialView{
+				{
+					GitCredential: &db.GitCredential{
+						ID: 1, Name: "GitHub — personal", Host: "github.com", Hint: "ghp_…4f2a",
+						CreatedAt:  time.Now().Add(-30 * 24 * time.Hour),
+						LastUsedAt: sql.NullTime{Time: time.Now(), Valid: true},
+					},
+					Apps:      []AppRef{{ID: "abcd1234", Name: "Blog", Host: "github.com"}},
+					SampleURL: "https://github.com/me/blog.git",
+				},
+				// The fallback, never used and holding nothing up: every "empty"
+				// branch of the card at once.
+				{GitCredential: &db.GitCredential{
+					ID: 2, Name: "Imported token", Host: db.AnyHost, Hint: "glpat-…9c31",
+					CreatedAt: time.Now().Add(-90 * 24 * time.Hour),
+				}},
+			},
+			"Uncovered": []AppRef{{ID: "beef0002", Name: "Docs", Host: "codeberg.org"}},
+		}},
+		// A fresh install: no credential stored, nothing cloning from anywhere.
+		{"git_credentials", map[string]any{
+			"Title": "Git credentials", "IsAdmin": true,
+			"AnyHost": db.AnyHost, "DefaultUser": db.DefaultGitUsername, "Providers": gitProviders,
+			"Error": "Could not reach https://github.com/me/private.git — fatal: Authentication failed",
 		}},
 		// A freshly installed server: nothing to reclaim, no certificate issued
 		// yet, no backup taken. Every section's other branch.

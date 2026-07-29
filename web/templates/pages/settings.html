@@ -209,6 +209,27 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
   </section>
 
   <section class="space-y-4">
+    <h2 class="h-label">Git credentials</h2>
+    <a href="/settings/git" class="card nav-card">
+      <span class="cred-mark" aria-hidden="true">{{template "icon_key"}}</span>
+      <span class="min-w-0 flex-1">
+        <span class="block text-sm font-medium">
+          {{if .GitCredCount}}
+            {{.GitCredCount}} {{plural .GitCredCount "token" "tokens"}} stored
+          {{else}}
+            No token stored
+          {{end}}
+        </span>
+        <span class="help block !mt-0">
+          Tokens for cloning private repositories, one per forge host — with the links and scopes
+          needed to create them.
+        </span>
+      </span>
+      <span class="faint shrink-0" aria-hidden="true">→</span>
+    </a>
+  </section>
+
+  <section class="space-y-4">
     <h2 class="h-label">Image registries</h2>
     <div class="card space-y-4 p-4">
       {{if .Registries}}
@@ -238,18 +259,6 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
   <section class="space-y-4">
     <h2 class="h-label">Integrations</h2>
     <form method="post" action="/settings/integrations" class="card space-y-4 p-4">
-      <div>
-        <label for="git_token" class="label">Git access token</label>
-        <input id="git_token" name="git_token" type="password"
-               placeholder="{{if .GitTokenSet}}configured — enter a new value to replace{{else}}ghp_… / glpat-…{{end}}" class="input mono">
-        <p class="help">Injected into https clone URLs so private repositories build. Leave empty to keep the current token.</p>
-        {{if .GitTokenSet}}
-        <label class="mt-2 flex items-center gap-2 text-sm">
-          <input type="checkbox" name="clear_git_token">
-          <span class="muted">Remove the stored token</span>
-        </label>
-        {{end}}
-      </div>
       <div>
         <label for="notify_url" class="label">Notification webhook URL</label>
         <input id="notify_url" name="notify_url" type="text" value="{{.NotifyURL}}"

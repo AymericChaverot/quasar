@@ -1,0 +1,160 @@
+package docker
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
+
+	"quasar/internal/db"
+)
+
+// askPassScript answers git's credential prompts from the environment.
+//
+// git calls this once per prompt with the prompt text as its first argument,
+// which is the only way to tell which of the two it wants. The values travel
+// in environment variables so the token is never in a command line — visible
+// to every process on the host through /proc — and never in .git/config, which
+// is what a clone from an authenticated URL leaves behind on disk.
+const askPassScript = `#!/bin/sh
+case "$1" in
+	Username*) printf '%s\n' "$QUASAR_GIT_USERNAME" ;;
+	*)         printf '%s\n' "$QUASAR_GIT_PASSWORD" ;;
+esac
+`
+
+// askPassHelper writes the credential helper and returns its path. The script
+// holds no secret, so one copy serves every deploy and outliving the request
+// costs nothing.
+func (c *Client) askPassHelper() (string, error) {
+	c.askPassOnce.Do(func() {
+		path := filepath.Join(os.TempDir(), "quasar-git-askpass.sh")
+		if err := os.WriteFile(path, []byte(askPassScript), 0o700); err != nil {
+			c.askPassErr = fmt.Errorf("install git credential helper: %w", err)
+			return
+		}
+		c.askPassPath = path
+	})
+	return c.askPassPath, c.askPassErr
+}
+
+// gitRun runs a git command that may need to authenticate against repoURL.
+//
+// Credentials are resolved from the URL's host and handed over through the
+// environment; the arguments carry the URL exactly as the operator wrote it.
+// Terminal prompting is off, so a rejected token fails immediately instead of
+// blocking on a username nobody is there to type.
+func (c *Client) gitRun(ctx context.Context, repoURL string, args ...string) error {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	env, cred, err := c.gitEnv(repoURL)
+	if err != nil {
+		return err
+	}
+	cmd.Env = env
+
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git: %s: %w", redactURLs(strings.TrimSpace(string(out))), err)
+	}
+	if cred != nil {
+		// Recorded only on success, so "last used" means the token worked.
+		db.MarkGitCredentialUsed(c.dbc, cred.ID)
+	}
+	return nil
+}
+
+// gitEnv builds the environment a git command runs in, and reports which
+// credential (if any) it will offer.
+func (c *Client) gitEnv(repoURL string) ([]string, *db.GitCredential, error) {
+	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never")
+	cred := c.gitCredentialFor(repoURL)
+	if cred == nil {
+		return env, nil, nil
+	}
+	helper, err := c.askPassHelper()
+	if err != nil {
+		return nil, nil, err
+	}
+	return append(env,
+		"GIT_ASKPASS="+helper,
+		"QUASAR_GIT_USERNAME="+cred.Account(),
+		"QUASAR_GIT_PASSWORD="+cred.Secret,
+	), cred, nil
+}
+
+// gitCredentialFor resolves what would authenticate a clone of rawURL, or nil
+// when nothing applies.
+//
+// Which credential is decided by the URL's host: that is what lets a GitHub
+// account and a self-hosted GitLab both be held at once, and what stops one
+// forge's token from ever being offered to another.
+func (c *Client) gitCredentialFor(rawURL string) *db.GitCredential {
+	// Checked before any lookup: an ssh remote, a local path, or a URL that
+	// already carries credentials has no use for a token — and this is what
+	// lets a deploy from a plain path run without a database at all.
+	if !strings.HasPrefix(rawURL, "https://") || strings.Contains(rawURL, "@") {
+		return nil
+	}
+	if c.dbc == nil || c.keyring == nil {
+		return nil
+	}
+	host := db.GitHostOf(rawURL)
+	if host == "" {
+		return nil
+	}
+	return db.GitCredentialFor(c.dbc, c.keyring, host)
+}
+
+// credentialInURL matches the userinfo of any URL: scheme, then everything up
+// to the @ that closes it.
+var credentialInURL = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://)[^/\s@]*@`)
+
+// redactURLs strips credentials out of text on its way to a deploy log, a
+// notification or the browser.
+//
+// Nothing Quasar builds carries a token in a URL any more, but a repository's
+// own submodule or an operator who pasted credentials into the clone URL still
+// can, and git reports the remote it failed to reach verbatim.
+func redactURLs(s string) string {
+	return credentialInURL.ReplaceAllString(s, "${1}***@")
+}
+
+// CheckGitAccess reports whether Quasar can reach a repository with what it
+// has stored, by doing what a deploy does and nothing more.
+//
+// This runs the real authentication path rather than calling a forge's API: a
+// token that lists fine through an API and still cannot clone — the usual
+// shape of a missing scope — is exactly the failure worth catching here.
+func (c *Client) CheckGitAccess(ctx context.Context, repoURL string) (string, error) {
+	repoURL = strings.TrimSpace(repoURL)
+	if repoURL == "" {
+		return "", fmt.Errorf("no repository URL to test against")
+	}
+	cred := c.gitCredentialFor(repoURL)
+
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := c.gitRun(ctx, repoURL, "ls-remote", "--heads", repoURL); err != nil {
+		return "", fmt.Errorf("%s", firstLine(err.Error()))
+	}
+	if cred == nil {
+		return "Reachable with no credential at all — this repository is public.", nil
+	}
+	return fmt.Sprintf("Authenticated against %s as %s.", db.GitHostOf(repoURL), cred.Account()), nil
+}
+
+// firstLine keeps a git failure to the line that says what went wrong. The
+// rest is advice aimed at someone sitting at a terminal.
+func firstLine(s string) string {
+	s = strings.TrimSpace(strings.TrimPrefix(s, "git: "))
+	if s == "" {
+		return "git failed without saying why"
+	}
+	if i := strings.IndexByte(s, '\n'); i > 0 {
+		return strings.TrimSpace(s[:i])
+	}
+	return s
+}
