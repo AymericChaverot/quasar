@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"strings"
 
 	"quasar/internal/auth"
 	"quasar/internal/config"
@@ -62,6 +63,40 @@ func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secr
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.ServeHTTP(w, r) }
 
 // parseTemplates builds one template set per page: layout + partials + page.
+// staticAssets serves the embedded static tree.
+//
+// Two things the bare file server does not do for us. Go's built-in MIME table
+// has no entry for .woff2, and the container image carries no /etc/mime.types
+// to fall back on, so the fonts would go out sniffed as octet-stream. And
+// files read out of an embed.FS have a zero modification time, so there is no
+// Last-Modified to revalidate against and every page load would pull the fonts
+// down again. Their names are tied to their contents, so they can be pinned
+// hard; nothing else here can, since themes.css changes under a fixed name.
+func staticAssets(root fs.FS) http.Handler {
+	files := http.FileServerFS(root)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".woff2") {
+			w.Header().Set("Content-Type", "font/woff2")
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		}
+		files.ServeHTTP(w, r)
+	})
+}
+
+// templateFuncs are the helpers pages and the layout may call.
+var templateFuncs = template.FuncMap{
+	// navActive returns the class marking a nav entry as the current section.
+	// It takes Nav as any and tolerates it being absent so a page can still be
+	// rendered from a partial data set — the template tests do exactly that,
+	// and a missing key would otherwise fail the comparison at execution time.
+	"navActive": func(nav any, section string) string {
+		if s, ok := nav.(string); ok && s == section {
+			return "is-active"
+		}
+		return ""
+	},
+}
+
 func (s *Server) parseTemplates() error {
 	pageFiles, err := fs.Glob(web.Files, "templates/pages/*.html")
 	if err != nil {
@@ -69,7 +104,8 @@ func (s *Server) parseTemplates() error {
 	}
 	for _, page := range pageFiles {
 		name := page[len("templates/pages/") : len(page)-len(".html")]
-		t, err := template.ParseFS(web.Files, "templates/layout.html", "templates/partials/*.html", page)
+		t, err := template.New("layout.html").Funcs(templateFuncs).
+			ParseFS(web.Files, "templates/layout.html", "templates/partials/*.html", page)
 		if err != nil {
 			return fmt.Errorf("parse %s: %w", page, err)
 		}
@@ -112,7 +148,7 @@ func (s *Server) apiWrite(pattern string, h http.HandlerFunc) {
 
 func (s *Server) routes() {
 	static, _ := fs.Sub(web.Files, "static")
-	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
+	s.mux.Handle("GET /static/", http.StripPrefix("/static/", staticAssets(static)))
 	s.guards["GET /static/"] = accessPublic
 
 	s.public("GET /login", s.handleLoginPage)
@@ -274,6 +310,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, dat
 	}
 	data["Theme"] = themeFrom(r)
 	data["Version"] = version.Version
+	data["Nav"] = navSection(r.URL.Path)
 	// Injected for every page so templates can hide controls a viewer would
 	// only get a 403 from. requireAdmin is what actually enforces it; this is
 	// presentation.
@@ -284,6 +321,28 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, dat
 	if err := t.ExecuteTemplate(w, "layout", data); err != nil {
 		log.Printf("render %s: %v", page, err)
 	}
+}
+
+// navSection maps a request path to the header entry that should read as the
+// current one. Pages nested under a section — an application, one of its
+// containers, its terminal — keep that section lit rather than leaving the
+// header blank, which would suggest you had navigated out of it.
+func navSection(path string) string {
+	switch {
+	case path == "/apps/new":
+		return "new"
+	case path == "/" || strings.HasPrefix(path, "/apps/"):
+		return "apps"
+	case strings.HasPrefix(path, "/logs"):
+		return "logs"
+	case strings.HasPrefix(path, "/audit"):
+		return "audit"
+	case strings.HasPrefix(path, "/system"):
+		return "system"
+	case strings.HasPrefix(path, "/settings"):
+		return "settings"
+	}
+	return ""
 }
 
 // renderPartial writes a named partial template without the layout.

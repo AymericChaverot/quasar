@@ -1,6 +1,15 @@
 {{/* Shared icon set — Lucide-style strokes, sized by the .ico class,
      colored via currentColor so they follow the surrounding text. */}}
 
+{{/* The mark: a ring with a jet off each pole — a quasar, reduced to the two
+     strokes that say it. Three weights of the same line, no fills, so it holds
+     at 20px in the header and at 16px in a browser tab. The ring takes the
+     surrounding text colour and the jets take the theme accent, which is what
+     makes the same drawing read differently on each theme. */}}
+{{define "logo_mark"}}<svg class="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="1.8"/><path d="M12 1.5v4.5M12 18v4.5" stroke="var(--accent)" stroke-width="1.8"/></svg>{{end}}
+
+{{define "icon_logout"}}<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>{{end}}
+
 {{define "icon_cpu"}}<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg>{{end}}
 
 {{define "icon_memory"}}<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/><path d="M2 15h20M7 15v4M12 15v4M17 15v4M8 11V9M12 11V9M16 11V9"/></svg>{{end}}

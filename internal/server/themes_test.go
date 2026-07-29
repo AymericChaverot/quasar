@@ -84,3 +84,41 @@ func TestEveryThemeDefinesEveryVariable(t *testing.T) {
 		}
 	}
 }
+
+// The typefaces are embedded rather than fetched from a CDN, which means a
+// renamed or forgotten file breaks silently: the browser drops to a system
+// face, the page still renders, and no request ever fails. This is the only
+// place that would notice.
+func TestEveryFontFaceResolvesToAnEmbeddedFile(t *testing.T) {
+	css, err := web.Files.ReadFile("static/themes.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	urls := regexp.MustCompile(`url\("/static/([^"]+)"\)`).FindAllStringSubmatch(string(css), -1)
+	if len(urls) == 0 {
+		t.Fatal("themes.css declares no @font-face sources; the fonts are no longer embedded")
+	}
+	for _, m := range urls {
+		if _, err := web.Files.ReadFile("static/" + m[1]); err != nil {
+			t.Errorf("themes.css references /static/%s, which is not in the embedded tree: %v", m[1], err)
+		}
+	}
+}
+
+// The layout preloads the fonts by path, which is a second, independent copy
+// of those filenames — one that no stylesheet parse would catch.
+func TestPreloadedFontsAreEmbedded(t *testing.T) {
+	layout, err := web.Files.ReadFile("templates/layout.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	links := regexp.MustCompile(`rel="preload" href="/static/([^"]+)"`).FindAllStringSubmatch(string(layout), -1)
+	if len(links) == 0 {
+		t.Fatal("the layout preloads nothing; the fonts will only be found after themes.css parses")
+	}
+	for _, m := range links {
+		if _, err := web.Files.ReadFile("static/" + m[1]); err != nil {
+			t.Errorf("layout preloads /static/%s, which is not in the embedded tree: %v", m[1], err)
+		}
+	}
+}

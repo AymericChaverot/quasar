@@ -6,6 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}} · Quasar</title>
   <link rel="icon" href="/static/favicon.svg">
+  {{/* The two faces the interface is actually set in. Without these the
+       browser only discovers them after parsing themes.css, and the first
+       paint lands in a fallback face at a different width. */}}
+  <link rel="preload" href="/static/fonts/space-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/jetbrains-mono-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
   <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/sse.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -14,21 +19,22 @@
 <body class="h-full antialiased">
   {{if not .HideNav}}
   <header class="site-header">
-    <div class="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-      <div class="flex items-center gap-8">
-        <a href="/" class="brand">Quasar</a>
-        <span class="mono faint text-xs">{{.Version}}</span>
-        <nav class="flex items-center gap-6">
-          <a href="/" class="nav-link">Dashboard</a>
-          {{if .IsAdmin}}<a href="/apps/new" class="nav-link">New application</a>{{end}}
-          <a href="/logs" class="nav-link">Logs</a>
-          <a href="/audit" class="nav-link">Audit</a>
-          <a href="/system" class="nav-link">System</a>
-          <a href="/settings" class="nav-link">Settings</a>
+    <div class="mx-auto flex h-14 max-w-6xl items-stretch justify-between px-6">
+      <div class="flex items-stretch gap-4">
+        <a href="/" class="brand self-center">{{template "logo_mark"}}Quasar</a>
+        <span class="brand-version self-center">{{.Version}}</span>
+        <span class="brand-rule self-center"></span>
+        <nav class="main-nav">
+          <a href="/" class="nav-link {{navActive .Nav "apps"}}">Dashboard</a>
+          {{if .IsAdmin}}<a href="/apps/new" class="nav-link {{navActive .Nav "new"}}">New application</a>{{end}}
+          <a href="/logs" class="nav-link {{navActive .Nav "logs"}}">Logs</a>
+          <a href="/audit" class="nav-link {{navActive .Nav "audit"}}">Audit</a>
+          <a href="/system" class="nav-link {{navActive .Nav "system"}}">System</a>
+          <a href="/settings" class="nav-link {{navActive .Nav "settings"}}">Settings</a>
         </nav>
       </div>
-      <form method="post" action="/logout">
-        <button class="nav-link">Sign out</button>
+      <form method="post" action="/logout" class="flex items-center">
+        <button class="btn-signout">{{template "icon_logout"}}Sign out</button>
       </form>
     </div>
   </header>

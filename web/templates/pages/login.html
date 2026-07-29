@@ -1,20 +1,21 @@
 {{define "content"}}
-<div class="mx-auto mt-24 w-full max-w-sm">
-  <h1 class="brand mb-1 block text-center">Quasar</h1>
-  <p class="muted mb-8 text-center text-sm">Admin dashboard</p>
+<div class="auth">
+  <div class="auth-mark">{{template "logo_mark"}}</div>
+  <h1 class="auth-brand">Quasar</h1>
+  <p class="auth-sub">Admin dashboard</p>
   {{if .Error}}
-  <div class="alert-err mb-4">{{.Error}}</div>
+  <div class="alert-err mt-6">{{.Error}}</div>
   {{end}}
-  <form method="post" action="/login" class="space-y-4">
+  <form method="post" action="/login" class="card auth-card space-y-4">
     <div>
-      <label for="username" class="h-label mb-1 block">Username</label>
+      <label for="username" class="label">Username</label>
       <input id="username" name="username" type="text" required autofocus class="input">
     </div>
     <div>
-      <label for="password" class="h-label mb-1 block">Password</label>
+      <label for="password" class="label">Password</label>
       <input id="password" name="password" type="password" required class="input">
     </div>
-    <button type="submit" class="btn-primary w-full py-2">Sign in</button>
+    <button type="submit" class="btn-primary w-full justify-center py-2">Sign in</button>
   </form>
 </div>
 {{end}}

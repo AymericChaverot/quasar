@@ -1,18 +1,19 @@
 {{define "content"}}
-<div class="mx-auto mt-24 w-full max-w-sm">
-  <h1 class="brand mb-1 block text-center">Quasar</h1>
-  <p class="muted mb-8 text-center text-sm">Two-factor authentication</p>
+<div class="auth">
+  <div class="auth-mark">{{template "logo_mark"}}</div>
+  <h1 class="auth-brand">Quasar</h1>
+  <p class="auth-sub">Two-factor authentication</p>
   {{if .Error}}
-  <div class="alert-err mb-4">{{.Error}}</div>
+  <div class="alert-err mt-6">{{.Error}}</div>
   {{end}}
-  <form method="post" action="/2fa" class="space-y-4">
+  <form method="post" action="/2fa" class="card auth-card space-y-4">
     <div>
-      <label for="code" class="h-label mb-1 block">Authentication code</label>
+      <label for="code" class="label">Authentication code</label>
       <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
              pattern="[0-9]{6}" maxlength="6" required autofocus
              class="input mono text-center text-lg tracking-widest">
     </div>
-    <button type="submit" class="btn-primary w-full py-2">Verify</button>
+    <button type="submit" class="btn-primary w-full justify-center py-2">Verify</button>
   </form>
 </div>
 {{end}}

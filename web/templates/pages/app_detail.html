@@ -2,7 +2,7 @@
 {{with .App}}
 <div class="mb-8 flex items-start justify-between">
   <div>
-    <h1 class="text-lg font-semibold">{{.Name}}</h1>
+    <h1 class="page-title">{{.Name}}</h1>
     <a href="https://{{.Host}}" target="_blank" rel="noopener"
        class="link mono text-sm">{{.Host}}</a>
   </div>
@@ -216,7 +216,7 @@
 
 {{if $.IsAdmin}}
 <section class="mt-10 border-t pt-6" style="border-color: var(--border)">
-  <h2 class="h-label mb-3" style="color: var(--err)">Danger zone</h2>
+  <h2 class="h-label h-label-danger mb-3">Danger zone</h2>
   <button hx-post="/apps/{{.ID}}/delete"
           hx-confirm="Delete {{.Name}}? Its container, images metadata and data directory will be removed permanently."
           class="btn-danger">

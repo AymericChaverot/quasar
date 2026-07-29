@@ -159,3 +159,28 @@ func TestViewerCanReachTheReadSurface(t *testing.T) {
 		}
 	}
 }
+
+// A page nested under a section — an application, its containers, its
+// terminal — has to keep that section lit in the header. Getting this wrong
+// leaves no entry marked, which reads as having navigated out of the section.
+func TestNavSection(t *testing.T) {
+	cases := map[string]string{
+		"/":                            "apps",
+		"/apps/abcd1234":               "apps",
+		"/apps/abcd1234/containers/db": "apps",
+		"/apps/abcd1234/terminal":      "apps",
+		"/apps/new":                    "new",
+		"/logs":                        "logs",
+		"/audit":                       "audit",
+		"/system":                      "system",
+		"/system/containers/traefik":   "system",
+		"/settings":                    "settings",
+		// Signed out, or a route with no place in the header at all.
+		"/login": "",
+	}
+	for path, want := range cases {
+		if got := navSection(path); got != want {
+			t.Errorf("navSection(%q) = %q, want %q", path, got, want)
+		}
+	}
+}

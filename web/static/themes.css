@@ -2,30 +2,76 @@
    are styled once from the variables. The active theme is set through the
    data-theme attribute on <html>, persisted in a cookie. */
 
+/* --- Typefaces -------------------------------------------------------------
+   Both are shipped inside the binary rather than fetched from a font CDN: the
+   dashboard has to render identically on a machine with no route to the public
+   internet, which is the normal case for the servers Quasar runs on.
+
+   Variable fonts with the latin subset only — one file covers every weight the
+   interface uses, at roughly the size a single static cut would have cost.
+   Both are SIL Open Font Licence 1.1; the licences ship alongside them. */
+
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("/static/fonts/space-grotesk-latin-wght-normal.woff2") format("woff2");
+  font-weight: 300 700; /* the axis range the file actually carries */
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/static/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Log output carries real italics from ANSI escapes; without this cut the
+   browser would slant the upright by hand, which reads badly in monospace. */
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/static/fonts/jetbrains-mono-latin-wght-italic.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: italic;
+  font-display: swap;
+}
+
 :root,
 [data-theme="nebula"] {
-  --bg: #09090b;
-  --surface: #18181b;
-  --surface-2: rgba(24, 24, 27, 0.6);
-  --border: #27272a;
-  --border-strong: #3f3f46;
-  --text: #e4e4e7;
-  --text-muted: #a1a1aa;
-  --text-faint: #71717a;
-  --accent: #f4f4f5;
-  --accent-hover: #ffffff;
-  --accent-text: #09090b;
+  /* Neutral cool greys, no hue of their own — the accent is warm, and any
+     tint in the ramp would fight it. */
+  --bg: #08080a;
+  --surface: #0f1013;
+  --surface-2: #15161a;
+  --border: #23242a;
+  --border-strong: #35373f;
+  --text: #e8e9ec;
+  --text-muted: #9b9da6;
+  --text-faint: #696c77;
+  /* Sulfur. The one band the status colours leave open — green, amber, red
+     and cyan are all spoken for, and an accent inside any of them reads as a
+     status. It clears 15:1 against the background *and* 15:1 for black text
+     on top, so the same value works as text, as a rule, and as a fill; that
+     is what a mid-tone accent cannot do. Hover brightens, since the label
+     sitting on it is dark. */
+  --accent: #d4e815;
+  --accent-hover: #e4f52e;
+  --accent-text: #08080a;
   --ok: #34d399;
   --warn: #fbbf24;
   --err: #f87171;
-  --info: #38bdf8;
-  --chart: #0284c7; /* series color, validated against the dark surface */
+  --info: #22d3ee;
+  /* Charts are cool while the chrome is warm. Drawing a series in the accent
+     put a large khaki wash next to the amber "disk nearly full" meter, and the
+     card started reading as a warning instead of as data. */
+  --chart: #38bdf8; /* series color, validated against the dark surface */
   --radius: 4px;
   --radius-badge: 9999px;
   --border-w: 1px;
-  --log-bg: #000000;
-  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, monospace;
+  --log-bg: #050506;
+  --font-body: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Menlo, monospace;
 }
 
 [data-theme="terminal"] {
@@ -75,8 +121,6 @@
   --radius-badge: 0;
   --border-w: 1px;
   --log-bg: #08080a;
-  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, monospace;
 }
 
 /* The Nord palette: low-contrast arctic blues, easy for long sessions. */
@@ -182,22 +226,62 @@ body {
   font-family: var(--font-body);
 }
 
-.mono { font-family: var(--font-mono); }
+/* Nearly every number on screen sits in a column that refreshes on a timer —
+   CPU percentages, memory, uptimes. Proportional digits make those columns
+   twitch on each poll, so figures are locked to one width everywhere. */
+.mono,
+table,
+.meter + *,
+input,
+select {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "zero" 1; /* slashed zero: 0 and O are read side by side here */
+}
 .muted { color: var(--text-muted); }
 .faint { color: var(--text-faint); }
 
+/* The page title. Set tight and heavy in the display face, so the eye lands on
+   it before the nav — the one place the sans is allowed to be loud. */
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--text);
+}
+.page-title.mono { letter-spacing: -0.01em; }
+
+/* Section headings are structural rather than editorial: monospaced, spaced
+   out, and preceded by a short accent rule that carries the theme's colour
+   down the page. */
 .h-label {
-  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-faint);
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+.h-label::before {
+  content: "";
+  width: 0.75rem;
+  height: 2px;
+  flex-shrink: 0;
+  background: var(--accent);
 }
 
 .label {
   display: block;
   margin-bottom: 0.25rem;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
   color: var(--text-muted);
 }
 
@@ -210,6 +294,24 @@ body {
 .link { color: var(--text-muted); }
 .link:hover { color: var(--text); }
 
+/* Keyboard focus is drawn from the accent rather than left to the browser,
+   which would put a white ring on Paper and a black one on Nebula. Scoped to
+   :focus-visible so a mouse click does not leave a ring behind; text inputs
+   handle their own focus, since there the ring has to show for a pointer
+   user too. */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* A section heading that names something destructive. The marker follows the
+   text rather than the accent, so the whole line reads as one warning. */
+.h-label-danger { color: var(--err); }
+.h-label-danger::before { background: currentColor; }
+
 /* --- Chrome ---------------------------------------------------------------- */
 
 .site-header {
@@ -217,16 +319,148 @@ body {
   background: var(--surface-2);
 }
 
+/* Wordmark and mark travel together and sit slightly apart from the nav, held
+   off it by a hairline rule so the identity is not just another menu entry. */
 .brand {
-  font-size: 0.875rem;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.14em;
+  color: var(--text);
+}
+/* The ring inherits the wordmark's colour rather than being greyed down, so
+   the two read as one lockup the way the original mark did; only the jets are
+   lit. Dimming the ring turned it into a faint circle behind two dashes. */
+.brand .mark {
+  width: 1.375rem;
+  height: 1.375rem;
+  flex-shrink: 0;
+}
+
+.brand-rule {
+  width: var(--border-w);
+  height: 1.25rem;
+  background: var(--border-strong);
+}
+
+.brand-version {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+/* Navigation is metadata about where you are, not prose — so it is set in the
+   mono face, and the active entry is marked by a bar on the header's own edge
+   rather than by a colour the themes would each have to get right. */
+.main-nav {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  gap: 1.5rem;
+}
+
+.nav-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--text-faint);
+}
+.nav-link:hover { color: var(--text); }
+.nav-link.is-active { color: var(--text); }
+.nav-link.is-active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+/* Signing out is the one control in the header that throws work away, so it
+   carries the error colour and an icon at rest rather than only on hover. */
+.btn-signout {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  border: var(--border-w) solid transparent;
+  border-radius: var(--radius);
+  padding: 0.3125rem 0.625rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--err);
+}
+.btn-signout:hover {
+  border-color: color-mix(in srgb, var(--err) 45%, transparent);
+  background: color-mix(in srgb, var(--err) 12%, transparent);
+}
+.btn-signout .ico { width: 0.8125rem; height: 0.8125rem; }
+
+/* --- Sign-in --------------------------------------------------------------- */
+
+/* The one screen with nothing else on it, and the first thing anyone sees, so
+   the mark is given room and the wordmark is set at its full width. */
+.auth {
+  margin: 6rem auto 0;
+  width: 100%;
+  max-width: 22rem;
+}
+
+.auth-mark {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+.auth-mark .mark {
+  width: 3.5rem;
+  height: 3.5rem;
+  color: var(--text);
+  /* The jets are a light source; here it is close enough to see them burn.
+     Kept tight and weak — spread wide, a warm accent over near-black turns
+     the halo muddy rather than bright. */
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 35%, transparent));
+}
+
+.auth-brand {
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  text-indent: 0.22em; /* the tracking is trailing; pull the block back to true centre */
   color: var(--text);
 }
 
-.nav-link { font-size: 0.875rem; color: var(--text-muted); }
-.nav-link:hover { color: var(--text); }
+.auth-sub {
+  margin-top: 0.375rem;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+}
+
+.auth-card { margin-top: 2rem; padding: 1.5rem; }
+.auth-card .label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+}
 
 /* --- Components ------------------------------------------------------------ */
 
@@ -245,10 +479,11 @@ body {
   border: var(--border-w) solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+  padding: 0.1875rem 0.4375rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
 }
 
@@ -262,7 +497,13 @@ body {
   color: var(--text);
   outline: none;
 }
-.input:focus { border-color: var(--border-strong); }
+/* The accent ring is the only focus indicator; it has to be visible on every
+   theme, so it is drawn from --accent rather than a fixed colour. */
+.input:focus,
+.select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
 .input::placeholder { color: var(--text-faint); }
 
 .input-suffix {
@@ -277,6 +518,53 @@ body {
 }
 .input-suffix ~ .input,
 .has-suffix .input { border-radius: var(--radius) 0 0 var(--radius); }
+
+/* Radios and checkboxes are the last controls the browser still draws itself,
+   and a native blue tick on a themed surface is the loudest sign that a page
+   was assembled rather than designed. They follow the accent and the theme's
+   corner radius like everything else — square on Terminal and Marathon,
+   rounded on Nord. */
+input[type="radio"],
+input[type="checkbox"] {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  width: 0.9375rem;
+  height: 0.9375rem;
+  flex-shrink: 0;
+  border: var(--border-w) solid var(--border-strong);
+  background: var(--surface);
+  cursor: pointer;
+}
+input[type="radio"] { border-radius: var(--radius-badge); }
+input[type="checkbox"] { border-radius: var(--radius); }
+
+input[type="radio"]:checked,
+input[type="checkbox"]:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+input[type="radio"]:checked::after {
+  content: "";
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: var(--radius-badge);
+  background: var(--accent-text);
+}
+input[type="checkbox"]:checked::after {
+  content: "";
+  width: 0.25rem;
+  height: 0.5rem;
+  margin-top: -0.125rem;
+  border: solid var(--accent-text);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+input[type="radio"]:focus-visible,
+input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
 
 .select {
   background: var(--surface);
@@ -350,6 +638,8 @@ body {
 
 /* --- Badges & meters ------------------------------------------------------- */
 
+/* A status is a machine word, not a sentence: mono and capitalised, so a column
+   of them scans as a column rather than as prose. */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -357,7 +647,11 @@ body {
   border-radius: var(--radius-badge);
   border: var(--border-w) solid;
   padding: 0.125rem 0.5rem;
-  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
 }
 .badge .dot {
   width: 0.375rem;
@@ -424,10 +718,11 @@ body {
 }
 .table-wrap th {
   padding: 0.625rem 1rem;
-  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.1em;
   color: var(--text-faint);
 }
 .table-wrap td { padding: 0.75rem 1rem; }
@@ -576,14 +871,11 @@ body {
   letter-spacing: 0.08em;
 }
 [data-theme="marathon"] .h-label { color: var(--accent); }
-/* A registration block ahead of every section title, as on the key art. */
+/* The shared accent rule squares off into a registration block, as on the
+   key art. */
 [data-theme="marathon"] .h-label::before {
-  content: "";
-  display: inline-block;
   width: 0.5rem;
   height: 0.5rem;
-  margin-right: 0.5rem;
-  background: var(--accent);
 }
 /* Hazard stripe along the bottom edge of the header. */
 [data-theme="marathon"] .site-header {
@@ -599,12 +891,65 @@ body {
 }
 [data-theme="marathon"] .chip { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 [data-theme="marathon"] .table-wrap thead { border-bottom-color: var(--accent); }
-[data-theme="marathon"] .input:focus,
-[data-theme="marathon"] .select:focus { border-color: var(--accent); }
 [data-theme="marathon"] .btn:hover {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
+}
+
+/* --- Nebula ---------------------------------------------------------------- */
+
+/* The object the theme is named after, standing in for a background image: a
+   cool wash bleeding down from behind the header, so the page has a light
+   source instead of being a flat sheet of near-black. Deliberately not tinted
+   with the accent — a sulfur haze over near-black goes olive, and it would
+   also blunt the accent everywhere it actually carries meaning. Cool ground,
+   warm accent. Fixed and pointer-transparent, and behind everything: it must
+   never intercept a click or a scroll meant for the content. */
+[data-theme="nebula"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(48rem 26rem at 50% -8rem, color-mix(in srgb, var(--info) 11%, transparent), transparent 72%),
+    radial-gradient(34rem 20rem at 88% 4rem, color-mix(in srgb, var(--info) 6%, transparent), transparent 70%);
+}
+
+/* The header sits over that wash, so it needs its own ground to stay readable
+   rather than the translucent surface the other themes use. */
+[data-theme="nebula"] .site-header {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+/* --- Motion ---------------------------------------------------------------- */
+
+/* Short enough to feel like the control responding rather than an animation
+   playing. Suppressed entirely for anyone who has asked for less movement. */
+.btn,
+.btn-primary,
+.btn-danger,
+.btn-signout,
+.nav-link,
+.link,
+.input,
+.select,
+.reorder-btn,
+.table-wrap tbody tr {
+  transition: color 100ms ease, background-color 100ms ease,
+              border-color 100ms ease, box-shadow 100ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 /* --- Synthwave glow -------------------------------------------------------- */
