@@ -249,11 +249,11 @@ func captureLogs(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring
 // streamAppLogs follows one app's container output and batches it into
 // storage; it returns once the container stops (or the app is removed).
 func streamAppLogs(ctx context.Context, database *sql.DB, dock *docker.Client, a *db.App) {
-	lines := make(chan string, 256)
+	lines := make(chan db.LogEntry, 256)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		var buf []string
+		var buf []db.LogEntry
 		ticker := time.NewTicker(logFlushInterval)
 		defer ticker.Stop()
 		flush := func() {
@@ -265,12 +265,12 @@ func streamAppLogs(ctx context.Context, database *sql.DB, dock *docker.Client, a
 		}
 		for {
 			select {
-			case line, ok := <-lines:
+			case entry, ok := <-lines:
 				if !ok {
 					flush()
 					return
 				}
-				buf = append(buf, line)
+				buf = append(buf, entry)
 				if len(buf) >= logFlushBatch {
 					flush()
 				}
@@ -279,7 +279,9 @@ func streamAppLogs(ctx context.Context, database *sql.DB, dock *docker.Client, a
 			}
 		}
 	}()
-	dock.StreamLogs(ctx, a, func(line string) { lines <- line })
+	dock.StreamLogs(ctx, a, func(l docker.LogLine) {
+		lines <- db.LogEntry{TS: l.TS, Line: l.Text}
+	})
 	close(lines)
 	<-done
 }

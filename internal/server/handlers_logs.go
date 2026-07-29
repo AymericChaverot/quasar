@@ -3,10 +3,12 @@ package server
 import (
 	"fmt"
 	"html"
+	"html/template"
 	"net/http"
 	"strings"
 
 	"quasar/internal/db"
+	"quasar/internal/docker"
 )
 
 // logSearchLimit caps how many matching lines a single search returns.
@@ -23,6 +25,14 @@ func (s *Server) handleLogsPage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// LogLineView is a stored log line with its text already rendered, so history
+// reads the same as the live pane rather than showing the raw escape sequences
+// the container wrote.
+type LogLineView struct {
+	db.LogLine
+	HTML template.HTML
+}
+
 // handleLogsSearchPartial runs a search over persisted log history, across
 // every app or scoped to one, optionally filtered by a substring.
 func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request) {
@@ -31,8 +41,12 @@ func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	views := make([]LogLineView, 0, len(lines))
+	for _, l := range lines {
+		views = append(views, LogLineView{LogLine: l, HTML: renderLogLine(l.Line)})
+	}
 	s.renderPartial(w, "logs_results", map[string]any{
-		"Lines":     lines,
+		"Lines":     views,
 		"Truncated": len(lines) == logSearchLimit,
 	})
 }
@@ -40,7 +54,7 @@ func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request)
 // streamLogLines writes a log stream as Server-Sent Events, consumed by the
 // htmx SSE extension in the log pane. follow is handed a sink to call once per
 // line and blocks until the request is cancelled.
-func streamLogLines(w http.ResponseWriter, r *http.Request, follow func(send func(string)) error) {
+func streamLogLines(w http.ResponseWriter, r *http.Request, follow func(send func(docker.LogLine)) error) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -51,9 +65,12 @@ func streamLogLines(w http.ResponseWriter, r *http.Request, follow func(send fun
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	err := follow(func(line string) {
-		// One SSE event per log line, HTML-escaped and wrapped for beforeend swap.
-		fmt.Fprintf(w, "data: <div>%s</div>\n\n", html.EscapeString(strings.ToValidUTF8(line, "�")))
+	err := follow(func(l docker.LogLine) {
+		// One SSE event per log line, wrapped for beforeend swap. An SSE frame
+		// is newline-delimited, so a rendered line must not carry one — it
+		// would split into two events and truncate the line.
+		rendered := strings.ReplaceAll(string(renderLogEntry(l.TS, l.Text)), "\n", " ")
+		fmt.Fprintf(w, "data: <div>%s</div>\n\n", rendered)
 		flusher.Flush()
 	})
 	// A cancelled request is the normal way this ends — the reader navigated
@@ -71,7 +88,7 @@ func (s *Server) handleAppLogs(w http.ResponseWriter, r *http.Request) {
 	if a == nil {
 		return
 	}
-	streamLogLines(w, r, func(send func(string)) error {
+	streamLogLines(w, r, func(send func(docker.LogLine)) error {
 		return s.dock.StreamLogs(r.Context(), a, send)
 	})
 }
@@ -87,7 +104,7 @@ func (s *Server) handleAppContainerLogs(w http.ResponseWriter, r *http.Request) 
 	if ac == nil {
 		return
 	}
-	streamLogLines(w, r, func(send func(string)) error {
+	streamLogLines(w, r, func(send func(docker.LogLine)) error {
 		return s.dock.StreamLogsByName(r.Context(), ac.Name, send)
 	})
 }
@@ -99,7 +116,7 @@ func (s *Server) handleSystemContainerLogs(w http.ResponseWriter, r *http.Reques
 	if sc == nil {
 		return
 	}
-	streamLogLines(w, r, func(send func(string)) error {
+	streamLogLines(w, r, func(send func(docker.LogLine)) error {
 		return s.dock.StreamLogsByName(r.Context(), sc.Name, send)
 	})
 }

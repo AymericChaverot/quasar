@@ -8,7 +8,9 @@
       <tr>
         <td class="mono muted whitespace-nowrap text-xs">{{.TS.Format "2006-01-02 15:04:05"}}</td>
         <td><a href="/apps/{{.AppID}}" class="hover:underline">{{.AppName}}</a></td>
-        <td class="mono break-all text-xs">{{.Line}}</td>
+        {{/* Pre-rendered: the stored line still carries whatever escape
+             sequences the container wrote, and reads here as it does live. */}}
+        <td class="log-cell mono break-all text-xs">{{.HTML}}</td>
       </tr>
       {{end}}
     </tbody>

@@ -18,26 +18,38 @@ type LogLine struct {
 // storage; the live SSE view is unaffected, only the persisted copy is capped.
 const maxLogLineLen = 4000
 
+// LogEntry is one line on its way into storage, carrying the moment the
+// container wrote it. A zero TS falls back to now: lines are batched and
+// flushed on a timer, so the insert time can be seconds late, but it is still
+// better than a row dated to the zero time.
+type LogEntry struct {
+	TS   time.Time
+	Line string
+}
+
 // AppendLogs batches a captured chunk of an app's container output into
 // storage in a single transaction.
-func AppendLogs(database *sql.DB, appID string, lines []string) {
-	if len(lines) == 0 {
+func AppendLogs(database *sql.DB, appID string, entries []LogEntry) {
+	if len(entries) == 0 {
 		return
 	}
 	tx, err := database.Begin()
 	if err != nil {
 		return
 	}
-	stmt, err := tx.Prepare("INSERT INTO app_logs (app_id, line) VALUES (?, ?)")
+	stmt, err := tx.Prepare("INSERT INTO app_logs (app_id, ts, line) VALUES (?, ?, ?)")
 	if err != nil {
 		tx.Rollback()
 		return
 	}
-	for _, l := range lines {
-		if len(l) > maxLogLineLen {
-			l = l[:maxLogLineLen]
+	for _, e := range entries {
+		if len(e.Line) > maxLogLineLen {
+			e.Line = e.Line[:maxLogLineLen]
 		}
-		stmt.Exec(appID, l)
+		if e.TS.IsZero() {
+			e.TS = time.Now()
+		}
+		stmt.Exec(appID, e.TS.UTC(), e.Line)
 	}
 	stmt.Close()
 	tx.Commit()

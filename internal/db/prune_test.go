@@ -42,7 +42,7 @@ func TestPruneLogsKeepsNewestUpToCap(t *testing.T) {
 		t.Fatal(err)
 	}
 	// An app under the cap must be left completely alone.
-	AppendLogs(database, "quiet", []string{"only line"})
+	AppendLogs(database, "quiet", []LogEntry{{Line: "only line"}})
 
 	PruneLogs(database)
 

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"quasar/internal/secrets"
 )
@@ -39,8 +40,8 @@ func TestAppendAndSearchLogs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	AppendLogs(database, "app1", []string{"hello world", "an ERROR occurred"})
-	AppendLogs(database, "app2", []string{"another error here"})
+	AppendLogs(database, "app1", []LogEntry{{Line: "hello world"}, {Line: "an ERROR occurred"}})
+	AppendLogs(database, "app2", []LogEntry{{Line: "another error here"}})
 
 	all, err := SearchLogs(database, "", "error", 10)
 	if err != nil {
@@ -76,6 +77,43 @@ func TestAppendAndSearchLogs(t *testing.T) {
 	}
 }
 
+// History is stored under the moment the container wrote a line, not the
+// moment the collector flushed its batch. The two differ by up to the flush
+// interval — and by the entire backlog when a stream opens on a container that
+// has been running for days, which would otherwise land every one of those
+// lines under the same instant.
+func TestAppendLogsKeepsTheContainersTimestamp(t *testing.T) {
+	database := openTestDB(t)
+	if err := InsertApp(database, testKeyring(t), &App{ID: "app1", Name: "Web", Subdomain: "web", DeployType: "image", ImageRef: "nginx"}); err != nil {
+		t.Fatal(err)
+	}
+
+	emitted := time.Date(2026, 7, 28, 23, 31, 1, 0, time.UTC)
+	AppendLogs(database, "app1", []LogEntry{
+		{TS: emitted, Line: "from the container's clock"},
+		{Line: "unstamped"}, // no timestamp: falls back to now
+	})
+
+	got, err := SearchLogs(database, "app1", "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d rows, want 2", len(got))
+	}
+
+	byLine := map[string]time.Time{}
+	for _, l := range got {
+		byLine[l.Line] = l.TS
+	}
+	if ts := byLine["from the container's clock"]; !ts.UTC().Equal(emitted) {
+		t.Errorf("stored TS = %s, want the container's %s", ts.UTC(), emitted)
+	}
+	if ts := byLine["unstamped"]; time.Since(ts) > time.Minute {
+		t.Errorf("an unstamped line got %s, want roughly now", ts)
+	}
+}
+
 func TestAppendLogsTruncatesLongLines(t *testing.T) {
 	database := openTestDB(t)
 	if err := InsertApp(database, testKeyring(t), &App{ID: "app1", Name: "Web", Subdomain: "web", DeployType: "image", ImageRef: "nginx"}); err != nil {
@@ -86,7 +124,7 @@ func TestAppendLogsTruncatesLongLines(t *testing.T) {
 	for i := range long {
 		long[i] = 'x'
 	}
-	AppendLogs(database, "app1", []string{string(long)})
+	AppendLogs(database, "app1", []LogEntry{{Line: string(long)}})
 
 	got, err := SearchLogs(database, "app1", "", 10)
 	if err != nil {
