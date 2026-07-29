@@ -18,6 +18,15 @@ services:
       EVENTS: 1
       PING: 1
       VERSION: 1
+      # BuildKit through the daemon. Without these two, `docker compose build`
+      # finds it cannot reach the daemon's own builder, silently falls back to
+      # its docker-container driver, and boots a privileged buildx_buildkit
+      # container per build — several at once for a multi-service stack, all
+      # racing on the same container name, then exporting each image to an OCI
+      # tarball to load it back. Granting them keeps builds inside the daemon,
+      # where the Dockerfile deploy path already builds.
+      SESSION: 1
+      GRPC: 1
       # Write operations (create/start/stop/restart containers, pull, build).
       POST: 1
       ALLOW_START: 1

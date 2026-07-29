@@ -213,9 +213,11 @@ go test ./...
 ## Notes de sécurité
 
 - Le dashboard parle à Docker uniquement via le socket-proxy (sections API
-  limitées : containers, images, networks, build, volumes, info, system,
-  exec + POST). `EXEC=1` est requis par le terminal web et les tâches —
-  retirez-le si vous n'utilisez pas ces fonctionnalités.
+  limitées : containers, images, networks, build, session, grpc, volumes, info,
+  system, exec + POST). `EXEC=1` est requis par le terminal web et les tâches —
+  retirez-le si vous n'utilisez pas ces fonctionnalités. `SESSION=1` / `GRPC=1`
+  donnent accès au BuildKit du daemon : sans eux, `docker compose build` démarre
+  un conteneur BuildKit **privilégié** par build à la place.
 - Sessions HTTP-only, Secure, SameSite=Lax ; mots de passe bcrypt.
 - `/` de l'hôte est monté **en lecture seule** dans le dashboard uniquement
   pour les métriques disque (`HOST_ROOT`).

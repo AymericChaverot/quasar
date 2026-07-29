@@ -34,6 +34,8 @@
   <p class="help">
     Services must join the external network traefik-net and carry their own Traefik labels to be routed.
     The subdomain and port fields below are informational for compose apps.
+    Do not publish ports 80 or 443 on the host — Traefik binds them for every application, and the
+    stack would fail to start. Traefik reaches your services over the network, not through the host.
   </p>
 </div>
 {{end}}

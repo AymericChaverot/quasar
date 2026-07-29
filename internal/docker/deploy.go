@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -365,6 +366,9 @@ func (c *Client) deployGit(ctx context.Context, a *db.App, pull bool) (string, e
 		for _, ct := range c.appContainers(ctx, a.ID) {
 			c.removeContainer(ctx, ct.ID)
 		}
+		if err := c.writeSourceEnv(ctx, src, a); err != nil {
+			return "", err
+		}
 		return "", c.composeUp(ctx, a, pull)
 
 	case db.GitBuildDockerfile:
@@ -386,6 +390,33 @@ func (c *Client) deployGit(ctx context.Context, a *db.App, pull bool) (string, e
 	default:
 		return "", fmt.Errorf("the repository has neither a Dockerfile nor a compose file at its root")
 	}
+}
+
+// writeSourceEnv puts the app's environment where a repository's own compose
+// file expects to find it: a .env beside the compose file.
+//
+// Quasar keeps the canonical copy in apps/<id>/.env, outside the checkout, and
+// passes it as --env-file — but that only feeds ${VAR} interpolation of the
+// compose file itself. What actually puts variables inside a container is the
+// service's own `env_file: .env`, and that resolves against the project
+// directory, which for a git app is the checkout. Without this the environment
+// an operator typed into the dashboard would reach nothing.
+//
+// A .env the repository tracks is left alone: overwriting it would discard
+// something the author committed on purpose, and leave a dirty working tree
+// that the next `git pull --ff-only` refuses to advance.
+func (c *Client) writeSourceEnv(ctx context.Context, src string, a *db.App) error {
+	if gitTracks(ctx, src, ".env") {
+		return nil
+	}
+	return os.WriteFile(filepath.Join(src, ".env"), []byte(a.EnvContent+"\n"), 0o600)
+}
+
+// gitTracks reports whether a checkout has the given path under version
+// control (as opposed to it being absent, or present but untracked).
+func gitTracks(ctx context.Context, src, path string) bool {
+	cmd := exec.CommandContext(ctx, "git", "-C", src, "ls-files", "--error-unmatch", "--", path)
+	return cmd.Run() == nil
 }
 
 // buildImage builds a timestamped image from the checkout's Dockerfile, so
@@ -463,6 +494,12 @@ func (c *Client) deployCompose(ctx context.Context, a *db.App, pull bool) error 
 // moving tag would otherwise keep running the copy it was first deployed with,
 // forever. pull is what makes it advance.
 func (c *Client) composeUp(ctx context.Context, a *db.App, pull bool) error {
+	// Before anything is built: a stack that collides with Traefik on the
+	// host's HTTP ports fails on the very last container it starts, having
+	// spent the whole deploy building images and starting the other services.
+	if err := c.checkComposePorts(ctx, a); err != nil {
+		return err
+	}
 	if pull {
 		// --ignore-buildable: a service with a build context has no image to
 		// pull, and its absence from the registry is not an error.
@@ -473,11 +510,12 @@ func (c *Client) composeUp(ctx context.Context, a *db.App, pull bool) error {
 	return c.compose(ctx, a, "up", "-d", "--build", "--remove-orphans")
 }
 
-// compose runs `docker compose` for an app with its project name and files.
-func (c *Client) compose(ctx context.Context, a *db.App, args ...string) error {
+// composeCmd builds a `docker compose` invocation for an app, with its project
+// name and files.
+func (c *Client) composeCmd(ctx context.Context, a *db.App, args ...string) (*exec.Cmd, error) {
 	dir, file := c.composeContext(a)
 	if file == "" {
-		return fmt.Errorf("this application has no compose file")
+		return nil, fmt.Errorf("this application has no compose file")
 	}
 	base := []string{"compose", "-p", composeProject(a.ID), "-f", file}
 	// The app's env lives where Quasar put it, which for a git app is beside
@@ -488,10 +526,58 @@ func (c *Client) compose(ctx context.Context, a *db.App, args ...string) error {
 	}
 	cmd := exec.CommandContext(ctx, "docker", append(base, args...)...)
 	cmd.Dir = dir
+	return cmd, nil
+}
+
+// compose runs `docker compose` for an app.
+func (c *Client) compose(ctx context.Context, a *db.App, args ...string) error {
+	cmd, err := c.composeCmd(ctx, a, args...)
+	if err != nil {
+		return err
+	}
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("docker compose %s: %s: %w", args[0], strings.TrimSpace(string(out)), err)
+		return fmt.Errorf("docker compose %s: %s: %w", args[0], composeTail(out), err)
 	}
 	return nil
+}
+
+// composeOutput runs `docker compose` and returns its stdout alone, keeping
+// stderr for the error message — compose writes warnings there, which would
+// otherwise land in the middle of the JSON a caller is parsing.
+func (c *Client) composeOutput(ctx context.Context, a *db.App, args ...string) ([]byte, error) {
+	cmd, err := c.composeCmd(ctx, a, args...)
+	if err != nil {
+		return nil, err
+	}
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("docker compose %s: %s: %w", args[0], composeTail(stderr.Bytes()), err)
+	}
+	return stdout.Bytes(), nil
+}
+
+// composeErrLines is how much of a failed compose command's output is quoted
+// back to the operator.
+const composeErrLines = 20
+
+// composeTail keeps the end of a compose command's output for the error
+// message. Building a stack streams hundreds of BuildKit progress lines and
+// only says what actually went wrong on the last few, so quoting all of it
+// buries the failure — in the status panel, which renders it as one block, and
+// in the deployments table, which stores it.
+func composeTail(out []byte) string {
+	var kept []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if line = strings.TrimRight(line, " \t\r"); line != "" {
+			kept = append(kept, line)
+		}
+	}
+	if len(kept) > composeErrLines {
+		omitted := fmt.Sprintf("[%d earlier lines omitted]", len(kept)-composeErrLines)
+		kept = append([]string{omitted}, kept[len(kept)-composeErrLines:]...)
+	}
+	return strings.Join(kept, "\n")
 }
 
 // envLines splits .env-style content into KEY=VALUE strings for the container.
