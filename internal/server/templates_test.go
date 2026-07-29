@@ -134,7 +134,8 @@ func TestExecuteTemplates(t *testing.T) {
 		{"git_credentials", map[string]any{
 			"Title": "Git credentials", "IsAdmin": true,
 			"AnyScope": db.AnyScope, "DefaultUser": db.DefaultGitUsername, "Providers": gitProviders,
-			"Saved": "Credential saved for github.com/acme.",
+			"ScopeOptions": scopeOptions(),
+			"Saved":        "Credential saved for github.com/acme.",
 			"Credentials": []GitCredentialView{
 				// An owner-scoped credential: the branch carrying the "scoped"
 				// badge and a scope with a path in it.
@@ -169,7 +170,8 @@ func TestExecuteTemplates(t *testing.T) {
 		{"git_credentials", map[string]any{
 			"Title": "Git credentials", "IsAdmin": true,
 			"AnyScope": db.AnyScope, "DefaultUser": db.DefaultGitUsername, "Providers": gitProviders,
-			"Error": "Could not reach https://github.com/me/private.git — fatal: Authentication failed",
+			"ScopeOptions": scopeOptions(),
+			"Error":        "Could not reach https://github.com/me/private.git — fatal: Authentication failed",
 		}},
 		// A freshly installed server: nothing to reclaim, no certificate issued
 		// yet, no backup taken. Every section's other branch.

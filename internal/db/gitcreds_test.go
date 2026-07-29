@@ -1,6 +1,9 @@
 package db
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 // Which credential a clone URL resolves to is the whole feature: pick the
 // wrong one and a token is offered to a repository it was never issued for,
@@ -180,6 +183,58 @@ func TestSaveReplacesTheTokenForAHostAlreadyHeld(t *testing.T) {
 	list, _ := ListGitCredentials(database)
 	if len(list) != 1 {
 		t.Errorf("got %d rows for one host, want 1", len(list))
+	}
+}
+
+func TestEditingACredentialMovesItWithoutTouchingTheToken(t *testing.T) {
+	database, k := openTestDB(t), testKeyring(t)
+	if err := SaveGitCredential(database, k, &GitCredential{Name: "typo", Scope: "github.com", Secret: "tok"}); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := ListGitCredentials(database)
+	id := list[0].ID
+
+	// A scope typed too wide, narrowed after the fact. What the token can do
+	// has not changed; only which repositories it is offered to.
+	if err := UpdateGitCredentialMeta(database, id, "GitHub — work", "  GitHub.com/Acme  ", "bob"); err != nil {
+		t.Fatal(err)
+	}
+	if got := GitCredentialFor(database, k, "https://github.com/other/repo.git"); got != nil {
+		t.Error("the credential still answers for a repository its new scope excludes")
+	}
+	got := GitCredentialFor(database, k, "https://github.com/acme/api.git")
+	if got == nil {
+		t.Fatal("the credential does not answer for its new scope")
+	}
+	if got.Secret != "tok" {
+		t.Errorf("secret = %q, want the one stored before the edit", got.Secret)
+	}
+	if got.Name != "GitHub — work" || got.Username != "bob" || got.Scope != "github.com/acme" {
+		t.Errorf("got %q / %q / %q, want the edited values normalised", got.Name, got.Username, got.Scope)
+	}
+}
+
+func TestEditingOntoAHeldScopeIsRefused(t *testing.T) {
+	database, k := openTestDB(t), testKeyring(t)
+	for _, scope := range []string{"github.com", "gitlab.com"} {
+		if err := SaveGitCredential(database, k, &GitCredential{Scope: scope, Secret: "tok-" + scope}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, _ := ListGitCredentials(database)
+
+	// Two rows for one scope would make which token a deploy gets a matter of
+	// row order, so the collision is reported rather than resolved.
+	err := UpdateGitCredentialMeta(database, list[0].ID, "", list[1].Scope, "")
+	if !errors.Is(err, ErrGitScopeTaken) {
+		t.Fatalf("err = %v, want ErrGitScopeTaken", err)
+	}
+	// Staying on its own scope is not a collision with itself.
+	if err := UpdateGitCredentialMeta(database, list[0].ID, "renamed", list[0].Scope, ""); err != nil {
+		t.Errorf("renaming in place: %v", err)
+	}
+	if err := UpdateGitCredentialMeta(database, 9999, "x", "codeberg.org", ""); err == nil {
+		t.Error("editing a credential that does not exist should fail")
 	}
 }
 

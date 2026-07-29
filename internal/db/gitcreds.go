@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"net/url"
 	"strings"
 	"time"
@@ -97,6 +98,46 @@ func SaveGitCredential(database *sql.DB, k *secrets.Keyring, c *GitCredential) e
 			secret = excluded.secret, hint = excluded.hint, last_used_at = NULL`,
 		c.Name, scope, c.Username, sealed, MaskToken(c.Secret))
 	return err
+}
+
+// ErrGitScopeTaken is returned when a credential is moved onto a scope another
+// one already holds. Scopes are unique because two tokens for the same target
+// would make which one a deploy gets a matter of row order.
+var ErrGitScopeTaken = errors.New("another credential already covers that scope")
+
+// UpdateGitCredentialMeta changes what a credential is called, what it covers
+// and what it authenticates as, leaving the stored token alone.
+//
+// The token deliberately has no edit path: it cannot be read back, so an edit
+// form could only ever offer to replace it — which is what saving over a scope
+// already does. Everything around it is a label that was typed once and may
+// well have been typed wrong, and re-entering a token to fix a name is exactly
+// the friction that leads to tokens being kept in a file somewhere.
+func UpdateGitCredentialMeta(database *sql.DB, id int64, name, scope, username string) error {
+	scope = NormalizeGitScope(scope)
+	if scope == "" {
+		return sql.ErrNoRows
+	}
+	// Checked rather than left to the unique index, so the page can say which
+	// credential is in the way instead of reporting a constraint.
+	var other int64
+	switch err := database.QueryRow(
+		"SELECT id FROM git_credentials WHERE scope = ? AND id <> ?", scope, id).Scan(&other); {
+	case err == nil:
+		return ErrGitScopeTaken
+	case !errors.Is(err, sql.ErrNoRows):
+		return err
+	}
+	res, err := database.Exec(
+		"UPDATE git_credentials SET name = ?, scope = ?, username = ? WHERE id = ?",
+		name, scope, username, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func DeleteGitCredential(database *sql.DB, id int64) error {

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"sort"
@@ -31,6 +32,28 @@ type AppRef struct {
 	ID   string
 	Name string
 	Host string
+}
+
+// ScopeOption is one entry of the scope picker: the value that goes in the
+// field, and what it means in words.
+//
+// A scope is free text — any host, any owner, any repository — so the picker
+// can only ever be a shortcut to the starting points, never the full set. That
+// is why the field it belongs to stays typable.
+type ScopeOption struct {
+	Value string
+	Label string
+}
+
+// scopeOptions offers the catch-all and every forge with a known domain.
+func scopeOptions() []ScopeOption {
+	opts := []ScopeOption{{db.AnyScope, "everything no other credential covers"}}
+	for _, p := range gitProviders {
+		if p.Host != "" {
+			opts = append(opts, ScopeOption{p.Host, p.Name})
+		}
+	}
+	return opts
 }
 
 func (s *Server) gitData(r *http.Request) map[string]any {
@@ -90,13 +113,14 @@ func (s *Server) gitData(r *http.Request) map[string]any {
 	sort.Slice(uncovered, func(i, j int) bool { return uncovered[i].Host < uncovered[j].Host })
 
 	return map[string]any{
-		"Title":       "Git credentials",
-		"Nav":         "settings",
-		"Credentials": views,
-		"Uncovered":   uncovered,
-		"Providers":   gitProviders,
-		"AnyScope":    db.AnyScope,
-		"DefaultUser": db.DefaultGitUsername,
+		"Title":        "Git credentials",
+		"Nav":          "settings",
+		"Credentials":  views,
+		"Uncovered":    uncovered,
+		"Providers":    gitProviders,
+		"ScopeOptions": scopeOptions(),
+		"AnyScope":     db.AnyScope,
+		"DefaultUser":  db.DefaultGitUsername,
 	}
 }
 
@@ -136,6 +160,35 @@ func (s *Server) handleGitCredentialSave(w http.ResponseWriter, r *http.Request)
 	// The token itself never reaches the audit log; which scope gained one does.
 	s.audit(r, "git-credential.save", scope, cred.Name)
 	redirectGit(w, r, "msg", "Credential saved for "+scopeLabel(scope)+".")
+}
+
+// handleGitCredentialUpdate edits the parts of a credential that are labels:
+// what it is called, what it covers, and what it authenticates as. The token
+// is not among them — see db.UpdateGitCredentialMeta.
+func (s *Server) handleGitCredentialUpdate(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	scope := db.NormalizeGitScope(r.FormValue("scope"))
+	if scope == "" {
+		redirectGit(w, r, "err", "A scope is required — a host, a host and owner, or * for everything.")
+		return
+	}
+	name := strings.TrimSpace(r.FormValue("name"))
+	err = db.UpdateGitCredentialMeta(s.db, id, name, scope, strings.TrimSpace(r.FormValue("username")))
+	switch {
+	case errors.Is(err, db.ErrGitScopeTaken):
+		redirectGit(w, r, "err", "Another credential already covers "+scopeLabel(scope)+
+			". Delete that one first, or give this one a narrower scope.")
+		return
+	case err != nil:
+		redirectGit(w, r, "err", "That credential no longer exists.")
+		return
+	}
+	s.audit(r, "git-credential.update", scope, name)
+	redirectGit(w, r, "msg", "Credential updated. It now covers "+scopeLabel(scope)+".")
 }
 
 func (s *Server) handleGitCredentialDelete(w http.ResponseWriter, r *http.Request) {

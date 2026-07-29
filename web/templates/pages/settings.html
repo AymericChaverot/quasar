@@ -89,33 +89,37 @@
   <section class="space-y-4">
     <h2 class="h-label">Users</h2>
     <div class="card space-y-4 p-4">
-      <ul class="space-y-2">
+      <ul class="user-list">
         {{range .Users}}
-        <li class="flex flex-wrap items-center justify-between gap-3 rounded p-2" style="background: var(--surface-2)">
-          <div>
+        <li class="user-row">
+          {{/* No role chip: the picker in the next column says the same thing,
+               and one of the two has to go for the name to fit on one line. */}}
+          <div class="user-id">
             <span class="mono text-sm">{{.Username}}</span>
-            <span class="chip ml-2">{{.Role}}</span>
-            {{if .TOTPEnabled}}<span class="chip ml-1">2FA</span>{{end}}
+            {{if .TOTPEnabled}}<span class="chip">2FA</span>{{end}}
+            {{if eq .ID $.UserID}}<span class="chip">you</span>{{end}}
           </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <form method="post" action="/settings/users/{{.ID}}/role" class="flex items-center gap-1">
-              <select name="role" class="input !w-28 !py-1 text-xs">
-                <option value="admin" {{if eq .Role "admin"}}selected{{end}}>admin</option>
-                <option value="viewer" {{if eq .Role "viewer"}}selected{{end}}>viewer</option>
-              </select>
-              <button type="submit" class="btn !py-1 text-xs">Set role</button>
-            </form>
-            <form method="post" action="/settings/users/{{.ID}}/password" class="flex items-center gap-1">
-              <input name="password" type="password" placeholder="new password" class="input !w-40 !py-1 text-xs">
-              <button type="submit" class="btn !py-1 text-xs">Reset</button>
-            </form>
-            {{if ne .ID $.UserID}}
-            <form method="post" action="/settings/users/{{.ID}}/delete"
-                  onsubmit="return confirm('Delete the account {{.Username}}?')">
-              <button type="submit" class="btn-danger !py-1 text-xs">Delete</button>
-            </form>
-            {{end}}
-          </div>
+          <form method="post" action="/settings/users/{{.ID}}/role">
+            <select name="role" class="input !w-24 !py-1 text-xs">
+              <option value="admin" {{if eq .Role "admin"}}selected{{end}}>admin</option>
+              <option value="viewer" {{if eq .Role "viewer"}}selected{{end}}>viewer</option>
+            </select>
+            <button type="submit" class="btn !py-1 text-xs">Set role</button>
+          </form>
+          {{/* Your own password is changed under Account, where it takes the
+               current one — the only version of the operation that proves the
+               person at the keyboard is you. Offering it twice invited the
+               weaker of the two. */}}
+          {{if ne .ID $.UserID}}
+          <form method="post" action="/settings/users/{{.ID}}/password">
+            <input name="password" type="password" placeholder="new password" class="input !w-32 !py-1 text-xs">
+            <button type="submit" class="btn !py-1 text-xs">Reset</button>
+          </form>
+          <form method="post" action="/settings/users/{{.ID}}/delete"
+                onsubmit="return confirm('Delete the account {{.Username}}?')">
+            <button type="submit" class="btn-danger !py-1 text-xs">Delete</button>
+          </form>
+          {{end}}
         </li>
         {{end}}
       </ul>
