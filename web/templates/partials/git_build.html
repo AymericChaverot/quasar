@@ -18,11 +18,8 @@
 
   {{if eq .Build.Mode "compose"}}
   <p class="muted text-sm">
-    The stack in this file is brought up as a whole. Quasar writes no Traefik labels for it:
-    the service that serves HTTP has to carry its own, and join the external network, exactly
-    as for a pasted compose file. A compose file written to run standalone usually publishes
-    ports 80 and 443 — remove those, Traefik binds them for every application here and the
-    stack would fail to start.
+    The stack in this file is brought up as a whole. Quasar works out which service serves
+    the site and adapts the file to run behind Traefik — see Routing below for what it did.
   </p>
   {{else if eq .Build.Mode "dockerfile"}}
   <p class="muted text-sm">

@@ -153,10 +153,12 @@ func routeProblem(r docker.RouteInfo, usesCompose bool, host, traefikNet string)
 		return "This application has no container, so Traefik has no route for " + host +
 			" and answers it with its own default certificate. Deploy the application."
 	case !r.Enabled && usesCompose:
-		return "No container in this compose project carries traefik.enable=true. Quasar does not write " +
-			"compose files, so the service that serves HTTP has to carry its own Traefik labels: a " +
-			"Host(`" + host + "`) rule, the websecure entrypoint, tls.certresolver=letsencrypt, and " +
-			"membership of the external " + traefikNet + " network."
+		return "No container in this compose project carries traefik.enable=true. Quasar labels the " +
+			"service it works out fronts the stack automatically — see Routing above for what it decided, " +
+			"or whether the file left it ambiguous. A compose file whose author already wrote its own " +
+			"Traefik labels is left exactly as written, so check those carry a Host(`" + host + "`) rule, " +
+			"the websecure entrypoint, tls.certresolver=letsencrypt, and membership of the external " +
+			traefikNet + " network."
 	case !r.Enabled:
 		return "The running container carries no Traefik labels, so nothing routes " + host +
 			". Redeploy the application."

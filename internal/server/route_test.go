@@ -43,8 +43,9 @@ func TestRouteProblem(t *testing.T) {
 			want:  "no container",
 		},
 		{
-			// True of a git app whose repository carries a compose file just as
-			// much as of a pasted one: neither gets Quasar's labels.
+			// Quasar labels the service it auto-detects, but a container can still
+			// come up unlabelled: the file was ambiguous, its chosen service is
+			// gone, or its author wrote their own labels that don't enable routing.
 			name:        "compose app without traefik labels",
 			route:       docker.RouteInfo{HasContainer: true},
 			usesCompose: true,
