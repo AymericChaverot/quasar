@@ -88,9 +88,9 @@ func (c *Client) gitEnv(repoURL string) ([]string, *db.GitCredential, error) {
 // gitCredentialFor resolves what would authenticate a clone of rawURL, or nil
 // when nothing applies.
 //
-// Which credential is decided by the URL's host: that is what lets a GitHub
-// account and a self-hosted GitLab both be held at once, and what stops one
-// forge's token from ever being offered to another.
+// The whole URL decides, not just its host: that is what lets one GitHub
+// account's token cover one organisation and another's cover the next, and
+// what stops any forge's token from ever being offered to another.
 func (c *Client) gitCredentialFor(rawURL string) *db.GitCredential {
 	// Checked before any lookup: an ssh remote, a local path, or a URL that
 	// already carries credentials has no use for a token — and this is what
@@ -101,11 +101,7 @@ func (c *Client) gitCredentialFor(rawURL string) *db.GitCredential {
 	if c.dbc == nil || c.keyring == nil {
 		return nil
 	}
-	host := db.GitHostOf(rawURL)
-	if host == "" {
-		return nil
-	}
-	return db.GitCredentialFor(c.dbc, c.keyring, host)
+	return db.GitCredentialFor(c.dbc, c.keyring, rawURL)
 }
 
 // credentialInURL matches the userinfo of any URL: scheme, then everything up

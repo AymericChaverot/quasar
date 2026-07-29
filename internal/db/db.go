@@ -113,13 +113,14 @@ CREATE TABLE IF NOT EXISTS registries (
 	secret   TEXT NOT NULL
 );
 
--- One token per forge host, so a GitHub account and a self-hosted GitLab can
--- be held at the same time. host is unique because a clone URL resolves to
--- exactly one credential; '*' is the fallback for hosts named by no row.
+-- scope is how much of the forge a token answers for: a whole host
+-- ("github.com"), one owner on it ("github.com/acme"), a single repository, or
+-- '*' for everything left over. It is unique because a clone URL resolves to
+-- exactly one credential — the most specific scope that covers it.
 CREATE TABLE IF NOT EXISTS git_credentials (
 	id           INTEGER PRIMARY KEY AUTOINCREMENT,
 	name         TEXT NOT NULL DEFAULT '',
-	host         TEXT NOT NULL UNIQUE,
+	scope        TEXT NOT NULL UNIQUE,
 	username     TEXT NOT NULL DEFAULT '',
 	secret       TEXT NOT NULL,
 	hint         TEXT NOT NULL DEFAULT '',
@@ -181,6 +182,10 @@ var migrations = []string{
 	// Empty means "whichever service Quasar works out from the compose file",
 	// which is what every existing stack has been running on all along.
 	"ALTER TABLE apps ADD COLUMN compose_service TEXT NOT NULL DEFAULT ''",
+	// A credential started out naming only a host; it can now name an owner or
+	// a single repository on one, and every existing value is still a valid
+	// scope — the widest kind.
+	"ALTER TABLE git_credentials RENAME COLUMN host TO scope",
 }
 
 func Open(path string) (*sql.DB, error) {

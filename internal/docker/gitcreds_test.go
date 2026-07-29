@@ -23,9 +23,9 @@ func credClient(t *testing.T) *Client {
 		t.Fatal(err)
 	}
 	for _, c := range []db.GitCredential{
-		{Name: "github", Host: "github.com", Secret: "ghp_token"},
-		{Name: "gitlab", Host: "gitlab.com", Username: "oauth2", Secret: "glpat-token"},
-		{Name: "bitbucket", Host: "bitbucket.org", Username: "alice", Secret: "app pass/word"},
+		{Name: "github", Scope: "github.com", Secret: "ghp_token"},
+		{Name: "gitlab", Scope: "gitlab.com", Username: "oauth2", Secret: "glpat-token"},
+		{Name: "bitbucket", Scope: "bitbucket.org", Username: "alice", Secret: "app pass/word"},
 	} {
 		if err := db.SaveGitCredential(database, k, &c); err != nil {
 			t.Fatal(err)

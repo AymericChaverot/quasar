@@ -9,22 +9,24 @@ import (
 	"quasar/internal/secrets"
 )
 
-// AnyHost is the host value of the credential used for forges no other row
-// names. One token covers the common single-account install; the per-host rows
-// exist for everyone who outgrew that.
-const AnyHost = "*"
+// AnyScope is the scope of the credential used for repositories no other row
+// covers. One token serves the common single-account install; the narrower
+// scopes exist for everyone who outgrew that.
+const AnyScope = "*"
 
-// GitCredential is the token Quasar hands to git when it clones or updates
-// from one forge host.
+// GitCredential is the token Quasar hands to git when it clones or updates a
+// repository.
 //
 // The secret is sealed with the master key like an app's env content, so the
 // database file on its own gives up nothing. Listings never carry it: the page
 // that shows credentials has no business decrypting them, and Hint is what it
 // shows instead.
 type GitCredential struct {
-	ID         int64
-	Name       string // what the operator calls it: "GitHub perso", "GitLab work"
-	Host       string // "github.com", "git.example.com:8443", or AnyHost
+	ID   int64
+	Name string // what the operator calls it: "GitHub — work", "GitLab perso"
+	// Scope is how much of a forge this token answers for: "github.com",
+	// "github.com/acme", "github.com/acme/api", or AnyScope.
+	Scope      string
 	Username   string // basic-auth user; most forges ignore it, Bitbucket does not
 	Hint       string // masked reminder, e.g. "ghp_…4f2a"
 	Secret     string // plaintext; only ever set by the lookups that need it
@@ -32,8 +34,21 @@ type GitCredential struct {
 	LastUsedAt sql.NullTime
 }
 
-// IsFallback reports whether this credential is the any-host one.
-func (c *GitCredential) IsFallback() bool { return c.Host == AnyHost }
+// IsFallback reports whether this credential covers everything left over.
+func (c *GitCredential) IsFallback() bool { return c.Scope == AnyScope }
+
+// Host is the forge the scope names, without the owner or repository part.
+func (c *GitCredential) Host() string {
+	host, _, _ := strings.Cut(c.Scope, "/")
+	return host
+}
+
+// Owns reports whether the scope narrows to part of a forge rather than all
+// of it, which is what the page marks as covering only some repositories.
+func (c *GitCredential) Owns() string {
+	_, path, _ := strings.Cut(c.Scope, "/")
+	return path
+}
 
 // Account is how the credential authenticates, for display.
 func (c *GitCredential) Account() string {
@@ -49,20 +64,20 @@ func (c *GitCredential) Account() string {
 // field is editable at all.
 const DefaultGitUsername = "oauth2"
 
-// SaveGitCredential creates or updates the credential for a host.
+// SaveGitCredential creates or updates the credential for a scope.
 //
 // An empty secret keeps whatever is already stored, so renaming a credential
 // or correcting its username does not mean pasting the token again — and does
 // not tempt anyone into keeping a copy of it somewhere to be able to.
 func SaveGitCredential(database *sql.DB, k *secrets.Keyring, c *GitCredential) error {
-	host := NormalizeGitHost(c.Host)
-	if host == "" {
+	scope := NormalizeGitScope(c.Scope)
+	if scope == "" {
 		return sql.ErrNoRows
 	}
 	if c.Secret == "" {
 		res, err := database.Exec(
-			"UPDATE git_credentials SET name = ?, username = ? WHERE host = ?",
-			c.Name, c.Username, host)
+			"UPDATE git_credentials SET name = ?, username = ? WHERE scope = ?",
+			c.Name, c.Username, scope)
 		if err != nil {
 			return err
 		}
@@ -75,14 +90,12 @@ func SaveGitCredential(database *sql.DB, k *secrets.Keyring, c *GitCredential) e
 	if err != nil {
 		return err
 	}
-	// The row is replaced rather than updated so a re-added host starts over
-	// with a fresh created_at and no stale last-used date.
-	_, err = database.Exec(`INSERT INTO git_credentials (name, host, username, secret, hint)
+	_, err = database.Exec(`INSERT INTO git_credentials (name, scope, username, secret, hint)
 		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(host) DO UPDATE SET
+		ON CONFLICT(scope) DO UPDATE SET
 			name = excluded.name, username = excluded.username,
 			secret = excluded.secret, hint = excluded.hint, last_used_at = NULL`,
-		c.Name, host, c.Username, sealed, MaskToken(c.Secret))
+		c.Name, scope, c.Username, sealed, MaskToken(c.Secret))
 	return err
 }
 
@@ -91,11 +104,12 @@ func DeleteGitCredential(database *sql.DB, id int64) error {
 	return err
 }
 
-// ListGitCredentials returns every stored credential without its secret,
-// fallback last so the list reads most-specific first like the lookup does.
+// ListGitCredentials returns every stored credential without its secret, in
+// the order the lookup considers them: narrowest first, fallback last.
 func ListGitCredentials(database *sql.DB) ([]*GitCredential, error) {
-	rows, err := database.Query(`SELECT id, name, host, username, hint, created_at, last_used_at
-		FROM git_credentials ORDER BY host = '*', host`)
+	rows, err := database.Query(`SELECT id, name, scope, username, hint, created_at, last_used_at
+		FROM git_credentials
+		ORDER BY scope = '*', (length(scope) - length(replace(scope, '/', ''))) DESC, scope`)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +117,7 @@ func ListGitCredentials(database *sql.DB) ([]*GitCredential, error) {
 	var out []*GitCredential
 	for rows.Next() {
 		var c GitCredential
-		if err := rows.Scan(&c.ID, &c.Name, &c.Host, &c.Username, &c.Hint, &c.CreatedAt, &c.LastUsedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Scope, &c.Username, &c.Hint, &c.CreatedAt, &c.LastUsedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, &c)
@@ -111,46 +125,67 @@ func ListGitCredentials(database *sql.DB) ([]*GitCredential, error) {
 	return out, rows.Err()
 }
 
-// GitCredentialFor resolves the credential a clone from host should use, or
+// GitCredentialFor resolves the credential a clone of rawURL should use, or
 // nil when nothing covers it. The secret is decrypted.
-func GitCredentialFor(database *sql.DB, k *secrets.Keyring, host string) *GitCredential {
-	for _, candidate := range hostCandidates(host) {
-		if c := gitCredentialByHost(database, k, candidate); c != nil {
-			return c
-		}
-	}
-	return nil
-}
-
-// GitCredentialByID loads one credential with its secret, for the connection
-// test — which has to authenticate exactly as a deploy would.
-func GitCredentialByID(database *sql.DB, k *secrets.Keyring, id int64) *GitCredential {
-	return scanGitCredential(database.QueryRow(
-		`SELECT id, name, host, username, hint, secret, created_at, last_used_at
-		 FROM git_credentials WHERE id = ?`, id), k)
-}
-
-func gitCredentialByHost(database *sql.DB, k *secrets.Keyring, host string) *GitCredential {
-	return scanGitCredential(database.QueryRow(
-		`SELECT id, name, host, username, hint, secret, created_at, last_used_at
-		 FROM git_credentials WHERE host = ?`, host), k)
-}
-
-func scanGitCredential(row *sql.Row, k *secrets.Keyring) *GitCredential {
-	var c GitCredential
-	var sealed string
-	if err := row.Scan(&c.ID, &c.Name, &c.Host, &c.Username, &c.Hint, &sealed,
-		&c.CreatedAt, &c.LastUsedAt); err != nil {
+//
+// The most specific scope wins, so a token for one organisation is never
+// overruled by the forge-wide one it sits under, and neither is overruled by
+// the fallback. Everything is compared in one pass rather than by trying
+// candidate keys in order, because "most specific" is a property of the rows
+// that exist, not of a fixed list of shapes.
+func GitCredentialFor(database *sql.DB, k *secrets.Keyring, rawURL string) *GitCredential {
+	target := GitTargetOf(rawURL)
+	if target == "" {
 		return nil
 	}
-	plain, err := k.Decrypt(sealed)
+	rows, err := database.Query(`SELECT id, name, scope, username, hint, secret, created_at, last_used_at
+		FROM git_credentials`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var best *GitCredential
+	var bestSealed string
+	bestScore := 0
+	for rows.Next() {
+		var c GitCredential
+		var sealed string
+		if err := rows.Scan(&c.ID, &c.Name, &c.Scope, &c.Username, &c.Hint, &sealed,
+			&c.CreatedAt, &c.LastUsedAt); err != nil {
+			return nil
+		}
+		if score := gitScopeMatch(c.Scope, target); score > bestScore {
+			best, bestSealed, bestScore = &c, sealed, score
+		}
+	}
+	if best == nil {
+		return nil
+	}
+	plain, err := k.Decrypt(bestSealed)
 	if err != nil {
 		// A credential sealed with a key this install no longer has is worse
 		// than useless: handing git a ciphertext produces an authentication
 		// failure that looks like a revoked token.
 		return nil
 	}
-	c.Secret = plain
+	best.Secret = plain
+	return best
+}
+
+// GitCredentialByID loads one credential with its secret.
+func GitCredentialByID(database *sql.DB, k *secrets.Keyring, id int64) *GitCredential {
+	var c GitCredential
+	var sealed string
+	err := database.QueryRow(`SELECT id, name, scope, username, hint, secret, created_at, last_used_at
+		FROM git_credentials WHERE id = ?`, id).
+		Scan(&c.ID, &c.Name, &c.Scope, &c.Username, &c.Hint, &sealed, &c.CreatedAt, &c.LastUsedAt)
+	if err != nil {
+		return nil
+	}
+	if c.Secret, err = k.Decrypt(sealed); err != nil {
+		return nil
+	}
 	return &c
 }
 
@@ -161,53 +196,98 @@ func MarkGitCredentialUsed(database *sql.DB, id int64) {
 	database.Exec("UPDATE git_credentials SET last_used_at = ? WHERE id = ?", time.Now(), id)
 }
 
-// hostCandidates lists the credential hosts that could serve a URL host, most
-// specific first: the host as written (which may carry a port), then the bare
-// hostname, then the any-host fallback.
-func hostCandidates(host string) []string {
-	host = NormalizeGitHost(host)
-	if host == "" {
-		return nil
+// gitScopeMatch reports how well scope covers target, higher being more
+// specific; 0 means it does not cover it at all.
+//
+// A scope matches when it is a prefix of the target on a segment boundary, so
+// "github.com/acme" covers acme's repositories and never "acmecorp"'s.
+func gitScopeMatch(scope, target string) int {
+	if scope == AnyScope {
+		return 1 // covers everything, and is beaten by anything naming a host
 	}
-	out := []string{host}
-	if bare, _, found := strings.Cut(host, ":"); found && bare != "" {
-		out = append(out, bare)
+	scopeHost, scopePath, _ := strings.Cut(scope, "/")
+	targetHost, targetPath, _ := strings.Cut(target, "/")
+
+	// A scope naming a port must match it, but one that names none still
+	// covers a forge served on a non-default port.
+	exactHost := scopeHost == targetHost
+	if !exactHost && scopeHost != hostWithoutPort(targetHost) {
+		return 0
 	}
-	return append(out, AnyHost)
+	if scopePath != "" && !segmentPrefix(scopePath, targetPath) {
+		return 0
+	}
+	// Every named path segment outranks the host alone; naming the port breaks
+	// the tie between two scopes that are otherwise equally specific.
+	score := 2 + 2*countSegments(scopePath)
+	if exactHost {
+		score++
+	}
+	return score
 }
 
-// NormalizeGitHost reduces what an operator typed into the host field to the
-// form a URL is matched against. A whole clone URL is accepted because pasting
-// one is the obvious mistake, and rejecting it would teach nothing.
-func NormalizeGitHost(raw string) string {
+// segmentPrefix reports whether prefix covers path without cutting a segment
+// in half: "acme" covers "acme/api" but not "acmecorp/api".
+func segmentPrefix(prefix, path string) bool {
+	return path == prefix || strings.HasPrefix(path, prefix+"/")
+}
+
+func countSegments(path string) int {
+	if path == "" {
+		return 0
+	}
+	return strings.Count(path, "/") + 1
+}
+
+func hostWithoutPort(host string) string {
+	if before, _, found := strings.Cut(host, ":"); found {
+		return before
+	}
+	return host
+}
+
+// NormalizeGitScope reduces what an operator typed into the scope field to the
+// form a URL is matched against.
+//
+// A whole clone URL is accepted because pasting one is the obvious thing to
+// do, and the trailing "/*" people write to mean "everything under here" is
+// simply dropped — a scope already covers everything beneath it.
+func NormalizeGitScope(raw string) string {
 	raw = strings.TrimSpace(strings.ToLower(raw))
-	if raw == "" || raw == AnyHost {
+	if raw == "" || raw == AnyScope {
 		return raw
 	}
 	if strings.Contains(raw, "://") {
 		if u, err := url.Parse(raw); err == nil && u.Host != "" {
-			return u.Host
+			raw = u.Host + u.Path
 		}
 	}
-	// "github.com/owner/repo" and a trailing slash both mean the host.
 	raw = strings.TrimPrefix(raw, "git@")
-	if before, _, found := strings.Cut(raw, "/"); found {
-		raw = before
+	raw = strings.Trim(raw, "/")
+	raw = strings.TrimSuffix(raw, "/*")
+	raw = strings.TrimSuffix(raw, ".git")
+	return strings.Trim(raw, "/")
+}
+
+// GitTargetOf reduces a clone URL to what scopes are matched against —
+// "github.com/acme/api" — or "" when the URL is not one Quasar attaches a
+// credential to.
+func GitTargetOf(rawURL string) string {
+	if !strings.HasPrefix(rawURL, "https://") {
+		return ""
 	}
-	return raw
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return NormalizeGitScope(u.Host + u.Path)
 }
 
 // GitHostOf returns the host a clone URL authenticates against, or "" when the
 // URL is not one Quasar injects credentials into.
 func GitHostOf(rawURL string) string {
-	if !strings.HasPrefix(rawURL, "https://") {
-		return ""
-	}
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return ""
-	}
-	return strings.ToLower(u.Host)
+	host, _, _ := strings.Cut(GitTargetOf(rawURL), "/")
+	return host
 }
 
 // MaskToken is the reminder shown in place of a stored token: enough to tell
@@ -230,8 +310,8 @@ func MaskToken(secret string) string {
 // MigrateGitToken moves the single platform-wide token of earlier versions
 // into the credentials table.
 //
-// It lands on AnyHost because that is exactly what the old setting did: it was
-// injected into every https clone, whatever forge it pointed at. Anything
+// It lands on AnyScope because that is exactly what the old setting did: it
+// was injected into every https clone, whatever forge it pointed at. Anything
 // narrower would be a guess, and a wrong guess breaks a deploy that worked
 // yesterday.
 func MigrateGitToken(database *sql.DB, k *secrets.Keyring) (bool, error) {
@@ -240,14 +320,14 @@ func MigrateGitToken(database *sql.DB, k *secrets.Keyring) (bool, error) {
 		return false, nil
 	}
 	var exists int
-	if err := database.QueryRow("SELECT COUNT(*) FROM git_credentials WHERE host = ?", AnyHost).
+	if err := database.QueryRow("SELECT COUNT(*) FROM git_credentials WHERE scope = ?", AnyScope).
 		Scan(&exists); err != nil {
 		return false, err
 	}
 	if exists == 0 {
 		err := SaveGitCredential(database, k, &GitCredential{
 			Name:   "Imported token",
-			Host:   AnyHost,
+			Scope:  AnyScope,
 			Secret: token,
 		})
 		if err != nil {

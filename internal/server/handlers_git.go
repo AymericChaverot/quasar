@@ -36,38 +36,40 @@ func (s *Server) gitData(r *http.Request) map[string]any {
 	creds, _ := db.ListGitCredentials(s.db)
 	apps, _ := db.ListApps(s.db, s.keyring)
 
-	// Every git app's forge host, so the page can show which credential covers
-	// it — and, just as usefully, which hosts nothing covers yet.
+	// Every git app, resolved the way a deploy resolves it. Doing it once here
+	// is what lets the page show which credential each application actually
+	// gets — and, just as usefully, which repositories nothing covers yet.
 	type gitApp struct {
-		ref  AppRef
-		url  string
-		host string
+		ref    AppRef
+		url    string
+		winner *db.GitCredential
 	}
 	var gitApps []gitApp
 	for _, a := range apps {
 		if a.DeployType != "git" || a.GitURL == "" {
 			continue
 		}
-		host := db.GitHostOf(a.GitURL)
+		target := db.GitTargetOf(a.GitURL)
+		if target == "" {
+			continue // ssh or a local path: nothing on this page applies
+		}
 		gitApps = append(gitApps, gitApp{
-			ref:  AppRef{ID: a.ID, Name: a.Name, Host: host},
-			url:  a.GitURL,
-			host: host,
+			ref:    AppRef{ID: a.ID, Name: a.Name, Host: target},
+			url:    a.GitURL,
+			winner: db.GitCredentialFor(s.db, s.keyring, a.GitURL),
 		})
 	}
 
 	views := make([]GitCredentialView, 0, len(creds))
-	covered := map[string]bool{}
 	for _, c := range creds {
 		v := GitCredentialView{GitCredential: c}
 		for _, ga := range gitApps {
-			// Resolve the same way a deploy does rather than comparing hosts by
-			// hand, so the page cannot claim a match the deploy would not make.
-			if ga.host == "" || !s.credentialWins(c, ga.host) {
+			// Only the credential that actually wins is listed, so a forge-wide
+			// token never claims a repository an owner-scoped one has taken.
+			if ga.winner == nil || ga.winner.ID != c.ID {
 				continue
 			}
 			v.Apps = append(v.Apps, ga.ref)
-			covered[ga.host] = true
 			if v.SampleURL == "" {
 				v.SampleURL = ga.url
 			}
@@ -75,12 +77,12 @@ func (s *Server) gitData(r *http.Request) map[string]any {
 		views = append(views, v)
 	}
 
-	// Hosts an app clones from that no credential answers for. Public
-	// repositories live here quite legitimately, which is why this is worded
-	// as an observation rather than a problem.
+	// Repositories no credential answers for. Public ones live here quite
+	// legitimately, which is why this is worded as an observation rather than
+	// as a problem.
 	var uncovered []AppRef
 	for _, ga := range gitApps {
-		if ga.host != "" && !covered[ga.host] {
+		if ga.winner == nil {
 			uncovered = append(uncovered, ga.ref)
 		}
 	}
@@ -92,17 +94,9 @@ func (s *Server) gitData(r *http.Request) map[string]any {
 		"Credentials": views,
 		"Uncovered":   uncovered,
 		"Providers":   gitProviders,
-		"AnyHost":     db.AnyHost,
+		"AnyScope":    db.AnyScope,
 		"DefaultUser": db.DefaultGitUsername,
 	}
-}
-
-// credentialWins reports whether c is the credential a clone from host would
-// actually resolve to — not merely one that could match it. A host with its
-// own row is never served by the fallback, so the fallback must not claim it.
-func (s *Server) credentialWins(c *db.GitCredential, host string) bool {
-	winner := db.GitCredentialFor(s.db, s.keyring, host)
-	return winner != nil && winner.ID == c.ID
 }
 
 func (s *Server) handleGitCredentials(w http.ResponseWriter, r *http.Request) {
@@ -121,26 +115,26 @@ func redirectGit(w http.ResponseWriter, r *http.Request, key, msg string) {
 }
 
 // handleGitCredentialSave adds a credential or updates the one already held
-// for the same host.
+// for the same scope.
 func (s *Server) handleGitCredentialSave(w http.ResponseWriter, r *http.Request) {
-	host := db.NormalizeGitHost(r.FormValue("host"))
-	if host == "" {
-		redirectGit(w, r, "err", "A host is required — the domain repositories are cloned from, or * for any.")
+	scope := db.NormalizeGitScope(r.FormValue("scope"))
+	if scope == "" {
+		redirectGit(w, r, "err", "A scope is required — a host, a host and owner, or * for everything.")
 		return
 	}
 	cred := &db.GitCredential{
 		Name:     strings.TrimSpace(r.FormValue("name")),
-		Host:     host,
+		Scope:    scope,
 		Username: strings.TrimSpace(r.FormValue("username")),
 		Secret:   strings.TrimSpace(r.FormValue("secret")),
 	}
 	if err := db.SaveGitCredential(s.db, s.keyring, cred); err != nil {
-		redirectGit(w, r, "err", "Nothing is stored for "+host+" yet, so a token is required.")
+		redirectGit(w, r, "err", "Nothing is stored for "+scopeLabel(scope)+" yet, so a token is required.")
 		return
 	}
-	// The token itself never reaches the audit log; which host gained one does.
-	s.audit(r, "git-credential.save", host, cred.Name)
-	redirectGit(w, r, "msg", "Credential saved for "+hostLabel(host)+".")
+	// The token itself never reaches the audit log; which scope gained one does.
+	s.audit(r, "git-credential.save", scope, cred.Name)
+	redirectGit(w, r, "msg", "Credential saved for "+scopeLabel(scope)+".")
 }
 
 func (s *Server) handleGitCredentialDelete(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +145,7 @@ func (s *Server) handleGitCredentialDelete(w http.ResponseWriter, r *http.Reques
 	}
 	db.DeleteGitCredential(s.db, id)
 	s.audit(r, "git-credential.delete", r.PathValue("id"), "")
-	redirectGit(w, r, "msg", "Credential deleted. Applications cloning from that host fall back to any-host credentials, or to anonymous access.")
+	redirectGit(w, r, "msg", "Credential deleted. Repositories it covered fall back to the next widest credential, or to anonymous access.")
 }
 
 // handleGitCredentialTest clones nothing but authenticates exactly as a deploy
@@ -174,11 +168,11 @@ func (s *Server) handleGitCredentialTest(w http.ResponseWriter, r *http.Request)
 	redirectGit(w, r, "msg", msg)
 }
 
-// hostLabel names a host the way the page talks about it, so the any-host
-// wildcard does not surface as a bare asterisk in a sentence.
-func hostLabel(host string) string {
-	if host == db.AnyHost {
-		return "any host"
+// scopeLabel names a scope the way the page talks about it, so the catch-all
+// does not surface as a bare asterisk in the middle of a sentence.
+func scopeLabel(scope string) string {
+	if scope == db.AnyScope {
+		return "every repository not covered by another credential"
 	}
-	return host
+	return scope
 }

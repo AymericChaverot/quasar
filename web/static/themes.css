@@ -797,13 +797,16 @@ input[type="checkbox"]:focus-visible {
 }
 .provider-body dd { min-width: 0; overflow-wrap: anywhere; }
 
-.match-list {
-  display: grid;
-  gap: 0.25rem;
-  padding-left: 1.25rem;
-  list-style: decimal;
-  color: var(--text-muted);
+/* Worked examples of scope resolution. Two columns so the scope and what it
+   resolves to line up down the page — the rule is easier to read off a pair of
+   columns than out of a sentence. */
+.scope-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
 }
+.scope-table td { padding: 0.1875rem 0.75rem 0.1875rem 0; }
+.scope-table td:last-child { width: 1%; white-space: nowrap; padding-right: 0; }
 
 /* --- Cleanup ---------------------------------------------------------------
    The reclaimable breakdown. Its job is to answer "is this worth pressing?"

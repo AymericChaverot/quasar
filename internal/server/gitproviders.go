@@ -31,8 +31,10 @@ var gitProviders = []gitProvider{
 		TokenURL: "https://github.com/settings/personal-access-tokens",
 		Scope:    "Repository access: the repositories to deploy · Permissions → Contents: Read-only",
 		Username: "Leave empty",
-		Note: "Fine-grained tokens expire, and a deploy that worked for months stops with an " +
-			"authentication error the day they do — set a reminder, or use a classic token " +
+		Note: "A fine-grained token belongs to one account or organisation, so pair it with a " +
+			"scope of github.com/<that owner> and a second credential can cover the rest. " +
+			"They also expire, and a deploy that worked for months stops with an authentication " +
+			"error the day they do — set a reminder, or use a classic token " +
 			"(github.com/settings/tokens) with the repo scope instead.",
 	},
 	{
@@ -42,7 +44,8 @@ var gitProviders = []gitProvider{
 		Scope:    "read_repository",
 		Username: "Leave empty",
 		Note: "A project or group access token works too and is the narrower choice: " +
-			"Settings → Access tokens on the project itself, with the Reporter role.",
+			"Settings → Access tokens on the project itself, with the Reporter role. " +
+			"Scope it to gitlab.com/<group> so it is only ever offered to that group's projects.",
 	},
 	{
 		Name:     "Bitbucket",

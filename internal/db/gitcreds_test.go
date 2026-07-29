@@ -3,51 +3,98 @@ package db
 import "testing"
 
 // Which credential a clone URL resolves to is the whole feature: pick the
-// wrong one and a token is offered to a forge it was never issued for, which
-// is both a failed deploy and a token disclosed to the wrong host.
-func TestGitCredentialResolvesMostSpecificHost(t *testing.T) {
+// wrong one and a token is offered to a repository it was never issued for,
+// which is both a failed deploy and a token disclosed to the wrong place.
+func TestGitCredentialResolvesTheNarrowestScope(t *testing.T) {
 	database, k := openTestDB(t), testKeyring(t)
 
 	for _, c := range []GitCredential{
-		{Name: "fallback", Host: AnyHost, Secret: "tok-any"},
-		{Name: "github", Host: "github.com", Secret: "tok-github"},
-		{Name: "self-hosted", Host: "git.example.com:8443", Secret: "tok-port"},
-		{Name: "bare", Host: "gitea.example.com", Secret: "tok-bare"},
+		{Name: "fallback", Scope: AnyScope, Secret: "tok-any"},
+		{Name: "github", Scope: "github.com", Secret: "tok-github"},
+		{Name: "work org", Scope: "github.com/acme", Secret: "tok-acme"},
+		{Name: "one repo", Scope: "github.com/acme/secret", Secret: "tok-repo"},
+		{Name: "self-hosted", Scope: "git.example.com:8443", Secret: "tok-port"},
+		{Name: "bare", Scope: "gitea.example.com", Secret: "tok-bare"},
 	} {
 		if err := SaveGitCredential(database, k, &c); err != nil {
-			t.Fatalf("save %s: %v", c.Host, err)
+			t.Fatalf("save %s: %v", c.Scope, err)
 		}
 	}
 
 	for _, tc := range []struct {
 		name string
-		host string
+		url  string
 		want string
 	}{
-		{"the host with its own credential", "github.com", "tok-github"},
-		{"host and port both named", "git.example.com:8443", "tok-port"},
-		{"a bare-host credential covers a port it does not name", "gitea.example.com:443", "tok-bare"},
-		{"a port-specific credential does not cover the bare host", "git.example.com", "tok-any"},
-		{"anything else falls back", "bitbucket.org", "tok-any"},
+		{"an owner-scoped token beats the forge-wide one",
+			"https://github.com/acme/api.git", "tok-acme"},
+		{"a repository-scoped token beats its owner's",
+			"https://github.com/acme/secret.git", "tok-repo"},
+		{"another owner on the same forge gets the forge-wide token",
+			"https://github.com/me/blog.git", "tok-github"},
+		// The reason scopes only break on a slash: a prefix comparison would
+		// hand acme's token to a completely unrelated account.
+		{"an owner scope never claims a longer name that starts the same way",
+			"https://github.com/acmecorp/api.git", "tok-github"},
+		{"host and port both named", "https://git.example.com:8443/t/r.git", "tok-port"},
+		{"a scope with no port covers a forge served on one",
+			"https://gitea.example.com:443/t/r.git", "tok-bare"},
+		{"a scope that names a port does not cover the bare host",
+			"https://git.example.com/t/r.git", "tok-any"},
+		{"an unrelated forge falls back", "https://bitbucket.org/t/r.git", "tok-any"},
 	} {
-		got := GitCredentialFor(database, k, tc.host)
+		got := GitCredentialFor(database, k, tc.url)
 		if got == nil {
-			t.Errorf("%s: no credential for %s", tc.name, tc.host)
+			t.Errorf("%s: no credential for %s", tc.name, tc.url)
 			continue
 		}
 		if got.Secret != tc.want {
-			t.Errorf("%s: %s resolved to %q, want %q", tc.name, tc.host, got.Secret, tc.want)
+			t.Errorf("%s: %s resolved to %q, want %q", tc.name, tc.url, got.Secret, tc.want)
 		}
+	}
+}
+
+// Two accounts on the same forge is the case a host-only scope cannot express,
+// and the reason owner scopes exist.
+func TestTwoOwnersOnOneForgeKeepSeparateTokens(t *testing.T) {
+	database, k := openTestDB(t), testKeyring(t)
+	for _, c := range []GitCredential{
+		{Name: "work", Scope: "github.com/acme", Secret: "tok-work"},
+		{Name: "personal", Scope: "github.com/me", Secret: "tok-personal"},
+	} {
+		if err := SaveGitCredential(database, k, &c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct{ url, want string }{
+		{"https://github.com/acme/api.git", "tok-work"},
+		{"https://github.com/me/blog.git", "tok-personal"},
+	} {
+		if got := GitCredentialFor(database, k, tc.url); got == nil || got.Secret != tc.want {
+			t.Errorf("%s did not resolve to %q", tc.url, tc.want)
+		}
+	}
+	// With no forge-wide credential, a third owner gets nothing rather than
+	// being handed one of the two above.
+	if got := GitCredentialFor(database, k, "https://github.com/other/x.git"); got != nil {
+		t.Errorf("an uncovered owner resolved to %q", got.Secret)
 	}
 }
 
 func TestGitCredentialAbsentWithoutAFallback(t *testing.T) {
 	database, k := openTestDB(t), testKeyring(t)
-	if err := SaveGitCredential(database, k, &GitCredential{Host: "github.com", Secret: "tok"}); err != nil {
+	if err := SaveGitCredential(database, k, &GitCredential{Scope: "github.com", Secret: "tok"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := GitCredentialFor(database, k, "gitlab.com"); got != nil {
-		t.Errorf("gitlab.com resolved to %q, want nothing — a public clone must not carry a token", got.Secret)
+	for _, url := range []string{
+		"https://gitlab.com/o/r.git",
+		// Not URLs a credential is ever attached to.
+		"git@github.com:o/r.git",
+		"/srv/repos/local.git",
+	} {
+		if got := GitCredentialFor(database, k, url); got != nil {
+			t.Errorf("%s resolved to %q, want nothing", url, got.Secret)
+		}
 	}
 }
 
@@ -55,18 +102,18 @@ func TestGitCredentialAbsentWithoutAFallback(t *testing.T) {
 func TestGitCredentialSecretIsSealedAndNeverListed(t *testing.T) {
 	database, k := openTestDB(t), testKeyring(t)
 	const secret = "glpat-Sup3rSecretValue"
-	if err := SaveGitCredential(database, k, &GitCredential{Name: "gl", Host: "gitlab.com", Secret: secret}); err != nil {
+	if err := SaveGitCredential(database, k, &GitCredential{Name: "gl", Scope: "gitlab.com", Secret: secret}); err != nil {
 		t.Fatal(err)
 	}
 
 	var stored string
-	if err := database.QueryRow("SELECT secret FROM git_credentials WHERE host = 'gitlab.com'").Scan(&stored); err != nil {
+	if err := database.QueryRow("SELECT secret FROM git_credentials WHERE scope = 'gitlab.com'").Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
 	if stored == secret {
 		t.Error("the token is stored in plaintext")
 	}
-	if got := GitCredentialFor(database, k, "gitlab.com"); got == nil || got.Secret != secret {
+	if got := GitCredentialFor(database, k, "https://gitlab.com/o/r.git"); got == nil || got.Secret != secret {
 		t.Error("a sealed token must come back out intact for a deploy")
 	}
 
@@ -89,14 +136,14 @@ func TestGitCredentialSecretIsSealedAndNeverListed(t *testing.T) {
 // of it somewhere to be able to.
 func TestSaveWithoutSecretKeepsTheStoredToken(t *testing.T) {
 	database, k := openTestDB(t), testKeyring(t)
-	if err := SaveGitCredential(database, k, &GitCredential{Name: "old", Host: "github.com", Secret: "tok"}); err != nil {
+	if err := SaveGitCredential(database, k, &GitCredential{Name: "old", Scope: "github.com", Secret: "tok"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveGitCredential(database, k, &GitCredential{Name: "new", Host: "github.com", Username: "bob"}); err != nil {
+	if err := SaveGitCredential(database, k, &GitCredential{Name: "new", Scope: "github.com", Username: "bob"}); err != nil {
 		t.Fatal(err)
 	}
 
-	got := GitCredentialFor(database, k, "github.com")
+	got := GitCredentialFor(database, k, "https://github.com/o/r.git")
 	if got == nil || got.Secret != "tok" {
 		t.Fatal("the stored token was lost by a metadata-only save")
 	}
@@ -105,7 +152,7 @@ func TestSaveWithoutSecretKeepsTheStoredToken(t *testing.T) {
 	}
 
 	// ...but a host with nothing stored has to supply one.
-	err := SaveGitCredential(database, k, &GitCredential{Name: "x", Host: "gitlab.com"})
+	err := SaveGitCredential(database, k, &GitCredential{Name: "x", Scope: "gitlab.com"})
 	if err == nil {
 		t.Error("saving a new host with no token should be refused")
 	}
@@ -113,15 +160,15 @@ func TestSaveWithoutSecretKeepsTheStoredToken(t *testing.T) {
 
 func TestSaveReplacesTheTokenForAHostAlreadyHeld(t *testing.T) {
 	database, k := openTestDB(t), testKeyring(t)
-	if err := SaveGitCredential(database, k, &GitCredential{Host: "github.com", Secret: "old"}); err != nil {
+	if err := SaveGitCredential(database, k, &GitCredential{Scope: "github.com", Secret: "old"}); err != nil {
 		t.Fatal(err)
 	}
-	MarkGitCredentialUsed(database, GitCredentialFor(database, k, "github.com").ID)
+	MarkGitCredentialUsed(database, GitCredentialFor(database, k, "https://github.com/o/r.git").ID)
 
-	if err := SaveGitCredential(database, k, &GitCredential{Host: "github.com", Secret: "rotated"}); err != nil {
+	if err := SaveGitCredential(database, k, &GitCredential{Scope: "github.com", Secret: "rotated"}); err != nil {
 		t.Fatal(err)
 	}
-	got := GitCredentialFor(database, k, "github.com")
+	got := GitCredentialFor(database, k, "https://github.com/o/r.git")
 	if got.Secret != "rotated" {
 		t.Errorf("secret = %q, want the rotated one", got.Secret)
 	}
@@ -136,36 +183,45 @@ func TestSaveReplacesTheTokenForAHostAlreadyHeld(t *testing.T) {
 	}
 }
 
-func TestNormalizeGitHostAcceptsWhatOperatorsActuallyPaste(t *testing.T) {
+func TestNormalizeGitScopeAcceptsWhatOperatorsActuallyPaste(t *testing.T) {
 	for _, tc := range []struct{ in, want string }{
 		{"github.com", "github.com"},
 		{"  GitHub.com  ", "github.com"},
-		{"https://github.com/owner/repo.git", "github.com"},
-		{"github.com/owner/repo", "github.com"},
+		{"github.com/acme", "github.com/acme"},
+		// "everything under here" is what a scope already means, so the star
+		// people write out of habit is simply dropped.
+		{"github.com/acme/*", "github.com/acme"},
+		{"github.com/acme/", "github.com/acme"},
+		// Pasting a repository URL asks for that repository, which is now a
+		// scope in its own right rather than a mistake to be widened.
+		{"https://github.com/owner/repo.git", "github.com/owner/repo"},
 		{"git@github.com", "github.com"},
-		{"https://git.example.com:8443/g/r.git", "git.example.com:8443"},
+		{"https://git.example.com:8443/g/r.git", "git.example.com:8443/g/r"},
 		{"*", "*"},
 		{"", ""},
 	} {
-		if got := NormalizeGitHost(tc.in); got != tc.want {
-			t.Errorf("NormalizeGitHost(%q) = %q, want %q", tc.in, got, tc.want)
+		if got := NormalizeGitScope(tc.in); got != tc.want {
+			t.Errorf("NormalizeGitScope(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
 }
 
-func TestGitHostOfOnlyClaimsHTTPS(t *testing.T) {
-	for _, tc := range []struct{ in, want string }{
-		{"https://github.com/owner/repo.git", "github.com"},
-		{"https://GitHub.com/owner/repo.git", "github.com"},
-		{"https://git.example.com:8443/g/r.git", "git.example.com:8443"},
+func TestGitTargetOfOnlyClaimsHTTPS(t *testing.T) {
+	for _, tc := range []struct{ in, target, host string }{
+		{"https://github.com/owner/repo.git", "github.com/owner/repo", "github.com"},
+		{"https://GitHub.com/Owner/Repo.git", "github.com/owner/repo", "github.com"},
+		{"https://git.example.com:8443/g/r.git", "git.example.com:8443/g/r", "git.example.com:8443"},
 		// Nothing else is a URL Quasar attaches a credential to, so nothing
-		// else has a host worth reporting.
-		{"git@github.com:owner/repo.git", ""},
-		{"ssh://git@example.com/repo.git", ""},
-		{"/srv/repos/local.git", ""},
+		// else has a target worth reporting.
+		{"git@github.com:owner/repo.git", "", ""},
+		{"ssh://git@example.com/repo.git", "", ""},
+		{"/srv/repos/local.git", "", ""},
 	} {
-		if got := GitHostOf(tc.in); got != tc.want {
-			t.Errorf("GitHostOf(%q) = %q, want %q", tc.in, got, tc.want)
+		if got := GitTargetOf(tc.in); got != tc.target {
+			t.Errorf("GitTargetOf(%q) = %q, want %q", tc.in, got, tc.target)
+		}
+		if got := GitHostOf(tc.in); got != tc.host {
+			t.Errorf("GitHostOf(%q) = %q, want %q", tc.in, got, tc.host)
 		}
 	}
 }
@@ -194,12 +250,12 @@ func TestMigrateGitTokenLandsOnTheFallbackAndClearsThePlaintext(t *testing.T) {
 	if err != nil || !moved {
 		t.Fatalf("migrate = %v, %v; want it to move the token", moved, err)
 	}
-	got := GitCredentialFor(database, k, "anything.example.com")
+	got := GitCredentialFor(database, k, "https://anything.example.com/o/r.git")
 	if got == nil || got.Secret != "ghp_legacyvalue123" {
 		t.Fatal("the legacy token should now answer for every host")
 	}
 	if !got.IsFallback() {
-		t.Errorf("migrated credential host = %q, want %q", got.Host, AnyHost)
+		t.Errorf("migrated credential host = %q, want %q", got.Scope, AnyScope)
 	}
 	if left := GetSetting(database, SettingGitToken); left != "" {
 		t.Errorf("the plaintext setting still holds %q", left)
@@ -214,7 +270,7 @@ func TestMigrateGitTokenLandsOnTheFallbackAndClearsThePlaintext(t *testing.T) {
 
 func TestMigrateGitTokenLeavesAnExistingFallbackAlone(t *testing.T) {
 	database, k := openTestDB(t), testKeyring(t)
-	if err := SaveGitCredential(database, k, &GitCredential{Name: "mine", Host: AnyHost, Secret: "current"}); err != nil {
+	if err := SaveGitCredential(database, k, &GitCredential{Name: "mine", Scope: AnyScope, Secret: "current"}); err != nil {
 		t.Fatal(err)
 	}
 	SetSetting(database, SettingGitToken, "stale-legacy")
@@ -222,7 +278,7 @@ func TestMigrateGitTokenLeavesAnExistingFallbackAlone(t *testing.T) {
 	if moved, err := MigrateGitToken(database, k); moved || err != nil {
 		t.Errorf("migrate = %v, %v; want it to leave a configured fallback alone", moved, err)
 	}
-	if got := GitCredentialFor(database, k, "github.com"); got.Secret != "current" {
+	if got := GitCredentialFor(database, k, "https://github.com/o/r.git"); got.Secret != "current" {
 		t.Errorf("secret = %q, want the credential the operator configured", got.Secret)
 	}
 	if left := GetSetting(database, SettingGitToken); left != "" {

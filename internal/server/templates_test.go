@@ -133,31 +133,42 @@ func TestExecuteTemplates(t *testing.T) {
 		}},
 		{"git_credentials", map[string]any{
 			"Title": "Git credentials", "IsAdmin": true,
-			"AnyHost": db.AnyHost, "DefaultUser": db.DefaultGitUsername, "Providers": gitProviders,
-			"Saved": "Credential saved for github.com.",
+			"AnyScope": db.AnyScope, "DefaultUser": db.DefaultGitUsername, "Providers": gitProviders,
+			"Saved": "Credential saved for github.com/acme.",
 			"Credentials": []GitCredentialView{
+				// An owner-scoped credential: the branch carrying the "scoped"
+				// badge and a scope with a path in it.
 				{
 					GitCredential: &db.GitCredential{
-						ID: 1, Name: "GitHub — personal", Host: "github.com", Hint: "ghp_…4f2a",
+						ID: 3, Name: "GitHub — work", Scope: "github.com/acme", Hint: "ghp_…1b7c",
+						CreatedAt:  time.Now().Add(-7 * 24 * time.Hour),
+						LastUsedAt: sql.NullTime{Time: time.Now(), Valid: true},
+					},
+					Apps:      []AppRef{{ID: "beef0003", Name: "Internal API", Host: "github.com/acme/api"}},
+					SampleURL: "https://github.com/acme/api.git",
+				},
+				{
+					GitCredential: &db.GitCredential{
+						ID: 1, Name: "GitHub — personal", Scope: "github.com", Hint: "ghp_…4f2a",
 						CreatedAt:  time.Now().Add(-30 * 24 * time.Hour),
 						LastUsedAt: sql.NullTime{Time: time.Now(), Valid: true},
 					},
-					Apps:      []AppRef{{ID: "abcd1234", Name: "Blog", Host: "github.com"}},
+					Apps:      []AppRef{{ID: "abcd1234", Name: "Blog", Host: "github.com/me/blog"}},
 					SampleURL: "https://github.com/me/blog.git",
 				},
-				// The fallback, never used and holding nothing up: every "empty"
-				// branch of the card at once.
+				// The catch-all, never used and holding nothing up: every
+				// "empty" branch of the card at once.
 				{GitCredential: &db.GitCredential{
-					ID: 2, Name: "Imported token", Host: db.AnyHost, Hint: "glpat-…9c31",
+					ID: 2, Name: "Imported token", Scope: db.AnyScope, Hint: "glpat-…9c31",
 					CreatedAt: time.Now().Add(-90 * 24 * time.Hour),
 				}},
 			},
-			"Uncovered": []AppRef{{ID: "beef0002", Name: "Docs", Host: "codeberg.org"}},
+			"Uncovered": []AppRef{{ID: "beef0002", Name: "Docs", Host: "codeberg.org/me/docs"}},
 		}},
 		// A fresh install: no credential stored, nothing cloning from anywhere.
 		{"git_credentials", map[string]any{
 			"Title": "Git credentials", "IsAdmin": true,
-			"AnyHost": db.AnyHost, "DefaultUser": db.DefaultGitUsername, "Providers": gitProviders,
+			"AnyScope": db.AnyScope, "DefaultUser": db.DefaultGitUsername, "Providers": gitProviders,
 			"Error": "Could not reach https://github.com/me/private.git — fatal: Authentication failed",
 		}},
 		// A freshly installed server: nothing to reclaim, no certificate issued
