@@ -38,6 +38,42 @@
     </div>
   </section>
 
+  {{/* What the machine is, next to what it runs. The processor takes the full
+       row because its model name is a sentence, while a memory or disk figure
+       is three characters and would leave a card of that width mostly empty. */}}
+  {{with .Hardware}}
+  <section class="space-y-4">
+    <h2 class="h-label">Hardware</h2>
+    <div class="grid max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2">
+      <div class="card p-4 sm:col-span-2">
+        <p class="stat-label muted text-sm">{{template "icon_cpu"}}Processor</p>
+        <p class="stat-figure">
+          <span class="mono text-lg">{{.CPULabel}}</span>
+          <span class="faint text-xs">{{.CPUDetail}}</span>
+        </p>
+      </div>
+      <div class="card p-4">
+        <p class="stat-label muted text-sm">{{template "icon_memory"}}Memory</p>
+        <p class="stat-figure">
+          <span class="mono text-lg">{{if .MemTotalGB}}{{printf "%.1f GB" .MemTotalGB}}{{else}}unknown{{end}}</span>
+          <span class="faint text-xs">{{if .SwapTotalGB}}{{printf "%.1f GB" .SwapTotalGB}} of swap{{else}}no swap{{end}}</span>
+        </p>
+      </div>
+      <div class="card p-4">
+        <p class="stat-label muted text-sm">{{template "icon_disk"}}Disk</p>
+        <p class="stat-figure">
+          <span class="mono text-lg">{{if .DiskTotalGB}}{{printf "%.1f GB" .DiskTotalGB}}{{else}}unknown{{end}}</span>
+          <span class="faint text-xs">host filesystem</span>
+        </p>
+      </div>
+    </div>
+    <p class="help max-w-2xl">
+      The capacity of the machine, not what is being used of it — the dashboard carries the live
+      CPU, memory and disk figures.
+    </p>
+  </section>
+  {{end}}
+
   <section class="space-y-4">
     <h2 class="h-label">Environment</h2>
     <div class="card max-w-2xl">

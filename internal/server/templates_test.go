@@ -121,7 +121,11 @@ func TestExecuteTemplates(t *testing.T) {
 			"AutoOn":   true, "Retention": "7", "Saved": "Backup created.",
 			"Current": "v1.0.0", "Latest": "v1.1.0", "UpdateAvail": true,
 			"CheckedAt": "2026-07-22", "Repo": "AymericChaverot/quasar",
-			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64", Uptime: "3d 4h"},
+			"Host": vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64", Uptime: "3d 4h"},
+			"Hardware": vps.Hardware{
+				CPUModel: "Intel Xeon E5-2686 v4", CPUCores: 2, CPUThreads: 4, CPUGHz: 2.3,
+				MemTotalGB: 7.8, SwapTotalGB: 2, DiskTotalGB: 78.6,
+			},
 			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44", OSType: "linux/amd64", TraefikImage: "traefik:v3.7"},
 			"GoRuntime": "go1.26.5",
 			"IsAdmin":   true, "CertsWritable": true,
@@ -178,7 +182,11 @@ func TestExecuteTemplates(t *testing.T) {
 		{"system", map[string]any{
 			"Title": "System", "IsAdmin": true,
 			"Current": "v1.0.0", "Repo": "AymericChaverot/quasar",
-			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64"},
+			"Host": vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64"},
+			// A machine whose /proc/cpuinfo carries no model name and no clock,
+			// with one core and no swap: every "unknown" branch of the hardware
+			// cards at once.
+			"Hardware":  vps.Hardware{CPUCores: 1, CPUThreads: 1, MemTotalGB: 1.9},
 			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44"},
 			"GoRuntime": "go1.26.5",
 			"Disk":      docker.DiskUsage{ImagesCount: 2, ImagesBytes: 180_000_000},

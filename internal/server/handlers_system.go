@@ -44,6 +44,7 @@ func (s *Server) systemData(r *http.Request) map[string]any {
 		"UpdateAvail": updater.IsNewer(version.Version, latest),
 		"Repo":        s.cfg.GitHubRepo,
 		"Host":        vps.CollectHost(),
+		"Hardware":    vps.CollectHardware(s.cfg.HostRootPath),
 		"Offsite":     offsiteView(s.db),
 		"Engine":      s.dock.EngineInfo(r.Context()),
 		"GoRuntime":   runtime.Version(),
