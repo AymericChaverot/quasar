@@ -43,7 +43,20 @@
           <a href="https://{{.Host}}" target="_blank" rel="noopener"
              class="link mono">{{.Host}}</a>
         </td>
-        <td class="muted">{{.DeployType}}</td>
+        {{/* A git app is built one of two ways, and which one decides what a
+             deploy actually does — so the list says so rather than making the
+             admin open the app to find out. The badge is absent until the
+             repository is on disk, since there is nothing to report yet. */}}
+        <td class="muted">
+          <span class="inline-flex flex-wrap items-center gap-1.5">
+            {{.DeployType}}
+            {{if eq .Build.Mode "compose"}}
+            <span class="chip" title="Built as a stack from {{.Build.ComposeFile}}">compose</span>
+            {{else if eq .Build.Mode "dockerfile"}}
+            <span class="chip" title="Built as a single image from the Dockerfile">Dockerfile</span>
+            {{end}}
+          </span>
+        </td>
         <td>{{template "status_badge" .Status.State}}</td>
         <td class="mono muted">{{if .Status.Uptime}}{{.Status.Uptime}}{{else}}–{{end}}</td>
       </tr>

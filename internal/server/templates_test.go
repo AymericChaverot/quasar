@@ -121,7 +121,18 @@ func TestExecuteTemplates(t *testing.T) {
 		data any
 	}{
 		{"system_stats", vps.Stats{CPUPercent: 42.5, MemPercent: 61, MemUsedGB: 1.2, MemTotalGB: 2, DiskPercent: 90, DiskUsedGB: 18, DiskTotalGB: 20}},
-		{"apps_table", []AppView{app, {
+		// Both build badges, plus the rows that carry none: an image app and a
+		// git app whose repository is not on disk yet.
+		{"apps_table", []AppView{app, gitApp, {
+			App:    &db.App{ID: "beef0003", Name: "Docs", Subdomain: "docs", DeployType: "git"},
+			Status: docker.AppStatus{State: "running"},
+			Domain: "example.com",
+			Build:  docker.GitBuild{Mode: "dockerfile", HasDockerfile: true},
+		}, {
+			App:    &db.App{ID: "beef0004", Name: "New", Subdomain: "new", DeployType: "git"},
+			Status: docker.AppStatus{State: "stopped"},
+			Domain: "example.com",
+		}, {
 			App:    &db.App{ID: "ff00ff00", Name: "Site", Subdomain: "@", DeployType: "image", ImageRef: "nginx", Port: 80},
 			Status: docker.AppStatus{State: "running"},
 			Domain: "example.com",
