@@ -294,6 +294,23 @@ select {
 .link { color: var(--text-muted); }
 .link:hover { color: var(--text); }
 
+/* Where "up" goes from a detail page. This is navigation rather than prose, so
+   it takes the mono face at the size the nav uses, and sits above the title it
+   returns from. The arrow is drawn rather than typed: it says nothing a screen
+   reader needs to hear, and keeping it out of the text means every one of
+   these reads as just its destination. */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+.back-link::before { content: "←"; }
+.back-link:hover { color: var(--text); }
+
 /* Keyboard focus is drawn from the accent rather than left to the browser,
    which would put a white ring on Paper and a black one on Nebula. Scoped to
    :focus-visible so a mouse click does not leave a ring behind; text inputs
@@ -769,32 +786,38 @@ input[type="checkbox"]:focus-visible {
 }
 
 /* Guidance for a forge nobody is using right now is noise, so each one stays
-   shut until it is the one being set up. */
+   shut until it is the one being set up.
+
+   Summary and body share a first column, so the hosts line up down the closed
+   list and go on lining up with the values once one is opened. Spacing them
+   apart instead put each host wherever its own name's width left it, which
+   read as five rows that had nothing to do with each other. */
+.provider > summary,
+.provider-body {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: 0.375rem 1rem;
+  padding: 0.875rem 1rem;
+}
+
 .provider > summary {
-  display: flex;
+  grid-template-columns: 8rem minmax(0, 1fr) 1rem;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.625rem 1rem;
+  padding-block: 0.625rem;
   cursor: pointer;
   list-style: none;
 }
 .provider > summary::-webkit-details-marker { display: none; }
 .provider > summary::after {
   content: "+";
+  justify-self: end;
   font-family: var(--font-mono);
   color: var(--text-faint);
 }
 .provider[open] > summary::after { content: "−"; }
 .provider[open] > summary { border-bottom: var(--border-w) solid var(--border); }
 
-.provider-body {
-  display: grid;
-  grid-template-columns: 6rem minmax(0, 1fr);
-  gap: 0.375rem 1rem;
-  padding: 0.875rem 1rem;
-  font-size: 0.8125rem;
-}
+.provider-body { font-size: 0.8125rem; }
 .provider-body dd { min-width: 0; overflow-wrap: anywhere; }
 
 /* Worked examples of scope resolution. Two columns so the scope and what it
@@ -1131,6 +1154,7 @@ input[type="checkbox"]:focus-visible {
 .btn-signout,
 .nav-link,
 .link,
+.back-link,
 .input,
 .select,
 .reorder-btn,

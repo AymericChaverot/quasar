@@ -10,8 +10,9 @@ package server
 // costs a page of static text and removes a support round trip.
 type gitProvider struct {
 	Name string
-	// Host is what goes in the credential's host field. Empty for a forge that
-	// is normally self-hosted, where only the operator knows the domain.
+	// Host is the forge's domain, offered as the starting point for a
+	// credential's scope. Empty for a forge that is normally self-hosted,
+	// where only the operator knows the domain.
 	Host string
 	// TokenURL is where the token is created; a path when the forge is
 	// self-hosted, since the domain varies.
@@ -61,8 +62,8 @@ var gitProviders = []gitProvider{
 		TokenURL: "/user/settings/applications",
 		Scope:    "read:repository",
 		Username: "Leave empty",
-		Note: "Self-hosted, so open that path on your own instance. Put the instance's " +
-			"domain in the host field, with its port if it serves on one.",
+		Note: "Self-hosted, so open that path on your own instance. Scope the credential to " +
+			"the instance's domain, with its port if it serves on one.",
 	},
 	{
 		Name:     "Azure DevOps",

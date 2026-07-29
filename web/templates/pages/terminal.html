@@ -1,11 +1,9 @@
 {{define "content"}}
 {{with .App}}
-<div class="mb-6 flex items-center justify-between">
-  <div>
-    <h1 class="page-title">{{.Name}} — terminal</h1>
-    <p class="muted text-sm">Interactive /bin/sh inside the container. Session ends when you leave the page.</p>
-  </div>
-  <a href="/apps/{{.ID}}" class="link text-sm">Back to application</a>
+<a href="/apps/{{.ID}}" class="back-link">{{.Name}}</a>
+<div class="mt-2 mb-6">
+  <h1 class="page-title">{{.Name}} — terminal</h1>
+  <p class="muted text-sm">Interactive /bin/sh inside the container. Session ends when you leave the page.</p>
 </div>
 
 <link rel="stylesheet" href="https://unpkg.com/@xterm/xterm@5.5.0/css/xterm.css">

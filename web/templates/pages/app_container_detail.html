@@ -2,7 +2,7 @@
 {{$app := .App}}
 {{with .Container}}
 <div class="mb-8">
-  <a href="/apps/{{$app.ID}}" class="link text-sm">← {{$app.Name}}</a>
+  <a href="/apps/{{$app.ID}}" class="back-link">{{$app.Name}}</a>
   <div class="mt-2 flex items-start justify-between">
     <div>
       <h1 class="page-title mono">{{if .Service}}{{.Service}}{{else}}{{.Name}}{{end}}</h1>

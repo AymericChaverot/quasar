@@ -13,10 +13,11 @@ import (
 // GitCredentialView pairs a stored credential with the applications it would
 // actually authenticate.
 //
-// Host matching is invisible otherwise: an operator who typed "github.com"
-// into the host field has no way to check that it is what their repository
+// Scope matching is invisible otherwise: an operator who typed "github.com"
+// into the scope field has no way to check that it is what their repository
 // URLs resolve to, and a typo shows up much later as a failing deploy. Listing
-// the apps each credential covers turns that into something readable now.
+// the apps each credential actually wins turns that into something readable
+// now.
 type GitCredentialView struct {
 	*db.GitCredential
 	Apps []AppRef
