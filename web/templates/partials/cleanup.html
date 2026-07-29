@@ -1,0 +1,21 @@
+{{/* One row of the reclaimable breakdown. The icon is chosen from the
+     category's key rather than carried in the data: a template cannot invoke
+     another by a name it computes, and the set is fixed and small. */}}
+{{define "cleanup_row"}}
+<div class="sweep-row">
+  <span class="sweep-row-mark" aria-hidden="true">
+    {{if eq .Key "images"}}{{template "icon_layers"}}
+    {{else if eq .Key "dangling"}}{{template "icon_tag_off"}}
+    {{else if eq .Key "cache"}}{{template "icon_hammer"}}
+    {{else if eq .Key "containers"}}{{template "icon_box"}}
+    {{else if eq .Key "networks"}}{{template "icon_network"}}
+    {{else}}{{template "icon_volume"}}{{end}}
+  </span>
+  <div class="min-w-0">
+    <p>{{.Label}}</p>
+    {{if .Note}}<p class="mono faint truncate text-xs">{{.Note}}</p>{{end}}
+  </div>
+  <p class="sweep-count mono">{{.Count}}</p>
+  <p class="sweep-size mono">{{if .Bytes}}{{humanSize .Bytes}}{{else}}—{{end}}</p>
+</div>
+{{end}}

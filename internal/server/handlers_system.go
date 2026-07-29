@@ -48,15 +48,15 @@ func (s *Server) systemData(r *http.Request) map[string]any {
 		"Engine":      s.dock.EngineInfo(r.Context()),
 		"GoRuntime":   runtime.Version(),
 	}
-	if du, err := s.dock.DiskUsage(r.Context()); err == nil {
-		data["Disk"] = du
-	}
 	_, certsWritable := s.acmePath()
 	data["Certs"] = s.certViews()
 	data["CertsWritable"] = certsWritable
+
 	if apps, err := db.ListApps(s.db, s.keyring); err == nil {
 		var sizes []AppSize
+		ids := make([]string, 0, len(apps))
 		for _, a := range apps {
+			ids = append(ids, a.ID)
 			sizes = append(sizes, AppSize{
 				Name:   a.Name,
 				ID:     a.ID,
@@ -64,8 +64,33 @@ func (s *Server) systemData(r *http.Request) map[string]any {
 			})
 		}
 		data["AppSizes"] = sizes
+		// The app list is what tells the scan which images, containers and
+		// networks still belong to something, so the storage figures are only
+		// asked for once it has been read successfully.
+		if st, err := s.dock.Storage(r.Context(), ids); err == nil {
+			data["Disk"] = st.Usage
+			data["Cleanup"] = st.Cleanup
+		}
 	}
 	return data
+}
+
+// appIDs lists the applications the platform still knows about — the set a
+// cleanup treats as off limits.
+//
+// The error is never swallowed by callers. An unreadable app table would come
+// back as an empty list, which a sweep would read as "nothing here belongs to
+// anyone" and act on.
+func (s *Server) appIDs() ([]string, error) {
+	apps, err := db.ListApps(s.db, s.keyring)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(apps))
+	for _, a := range apps {
+		ids = append(ids, a.ID)
+	}
+	return ids, nil
 }
 
 // acmePath resolves Traefik's ACME store and reports whether it can be written
@@ -190,13 +215,34 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "system", data)
 }
 
-func (s *Server) handlePrune(w http.ResponseWriter, r *http.Request) {
-	mb, err := s.dock.PruneImages(r.Context())
+// handleCleanup removes everything Docker is holding that no application, no
+// rollback and no part of the platform still needs.
+func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
+	ids, err := s.appIDs()
 	if err != nil {
-		http.Error(w, "prune failed: "+err.Error(), http.StatusInternalServerError)
+		redirectSystem(w, r, "Cleanup cancelled: the application list could not be read ("+err.Error()+"), and without it nothing can be told apart from a leftover.")
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/system?msg=Pruned dangling images, reclaimed %.0f MB.", mb), http.StatusSeeOther)
+	withVolumes := r.FormValue("volumes") == "on"
+
+	// Deleting gigabytes of layers takes longer than a browser is willing to
+	// wait for a response, and a sweep abandoned half-way is worse than one
+	// never started: the images are gone but the containers holding them are
+	// not, so a second attempt finds a different daemon than the scan did.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Minute)
+	defer cancel()
+
+	rep, err := s.dock.Cleanup(ctx, ids, withVolumes)
+	if err != nil {
+		redirectSystem(w, r, "Cleanup failed: "+err.Error())
+		return
+	}
+	detail := ""
+	if withVolumes {
+		detail = "including orphaned volumes"
+	}
+	s.audit(r, "system.cleanup", docker.HumanSize(rep.Bytes), detail)
+	redirectSystem(w, r, rep.Summary())
 }
 
 func (s *Server) handleBackupNow(w http.ResponseWriter, r *http.Request) {

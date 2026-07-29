@@ -95,6 +95,17 @@ var templateFuncs = template.FuncMap{
 		}
 		return ""
 	},
+	// Byte counts are shown in whichever unit the number actually fills, so a
+	// 40 MB layer and a 4 GB one are not both reported as "0.0 GB".
+	"humanSize": docker.HumanSize,
+	// plural picks the word that agrees with a count, so the interface reads as
+	// prose instead of as "1 object(s)".
+	"plural": func(n int, one, many string) string {
+		if n == 1 {
+			return one
+		}
+		return many
+	},
 }
 
 func (s *Server) parseTemplates() error {
@@ -194,7 +205,7 @@ func (s *Server) routes() {
 	s.viewer("GET /system", s.handleSystem)
 	s.viewer("GET /system/containers/{name}", s.handleSystemContainerDetail)
 	s.viewer("GET /system/containers/{name}/logs", s.handleSystemContainerLogs)
-	s.admin("POST /system/prune", s.handlePrune)
+	s.admin("POST /system/cleanup", s.handleCleanup)
 	s.admin("POST /system/backup", s.handleBackupNow)
 	// An archive contains every app's data and .env: a read, but not one a
 	// viewer gets.

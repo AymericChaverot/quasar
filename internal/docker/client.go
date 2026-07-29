@@ -19,11 +19,12 @@ import (
 )
 
 type Client struct {
-	api     *client.Client
-	dbc     *sql.DB
-	domain  string
-	network string
-	appsDir string
+	api       *client.Client
+	dbc       *sql.DB
+	domain    string
+	network   string
+	socketNet string
+	appsDir   string
 
 	mu      sync.Mutex
 	deploys map[string]*DeployState // app ID -> in-flight/last deploy state
@@ -41,12 +42,13 @@ func New(cfg config.Config, database *sql.DB) (*Client, error) {
 		return nil, err
 	}
 	return &Client{
-		api:     api,
-		dbc:     database,
-		domain:  cfg.Domain,
-		network: cfg.TraefikNetwork,
-		appsDir: cfg.AppsDir,
-		deploys: map[string]*DeployState{},
+		api:       api,
+		dbc:       database,
+		domain:    cfg.Domain,
+		network:   cfg.TraefikNetwork,
+		socketNet: cfg.SocketNetwork,
+		appsDir:   cfg.AppsDir,
+		deploys:   map[string]*DeployState{},
 	}, nil
 }
 

@@ -151,34 +151,94 @@
   </section>
 
   <section class="space-y-4">
-    <h2 class="h-label">Docker disk usage</h2>
+    <h2 class="h-label">Docker storage</h2>
     {{if .Disk}}
     <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
       <div class="card p-4">
         <p class="stat-label muted text-sm">{{template "icon_layers"}}Images</p>
         <p class="mono mt-1 text-lg">{{.Disk.ImagesCount}}</p>
-        <p class="faint text-xs">{{printf "%.1f" .Disk.ImagesSizeGB}} GB layers</p>
+        <p class="faint text-xs">{{humanSize .Disk.ImagesBytes}} of layers</p>
       </div>
       <div class="card p-4">
         <p class="stat-label muted text-sm">{{template "icon_box"}}Containers</p>
         <p class="mono mt-1 text-lg">{{.Disk.ContainersCount}}</p>
+        <p class="faint text-xs">{{humanSize .Disk.ContainersBytes}} written</p>
       </div>
       <div class="card p-4">
         <p class="stat-label muted text-sm">{{template "icon_volume"}}Volumes</p>
         <p class="mono mt-1 text-lg">{{.Disk.VolumesCount}}</p>
-        <p class="faint text-xs">{{printf "%.1f" .Disk.VolumesSizeGB}} GB</p>
+        <p class="faint text-xs">{{humanSize .Disk.VolumesBytes}}</p>
       </div>
-      {{if .IsAdmin}}
-      <div class="card flex items-center p-4">
-        <form method="post" action="/system/prune">
-          <button type="submit" class="btn"
-                  onclick="return confirm('Remove all dangling images?')">Prune dangling images</button>
-        </form>
+      <div class="card p-4">
+        <p class="stat-label muted text-sm">{{template "icon_hammer"}}Build cache</p>
+        <p class="mono mt-1 text-lg">{{.Disk.CacheCount}}</p>
+        <p class="faint text-xs">{{humanSize .Disk.CacheBytes}} of layers</p>
       </div>
-      {{end}}
     </div>
     {{else}}
     <div class="card muted p-4 text-sm">Docker disk usage unavailable.</div>
+    {{end}}
+
+    {{with .Cleanup}}
+    {{if .Empty}}
+    <div class="card flex max-w-2xl items-center gap-3 p-4">
+      <span class="sweep-mark is-clear" aria-hidden="true">{{template "icon_sweep"}}</span>
+      <div>
+        <p class="text-sm">Nothing to reclaim.</p>
+        <p class="help !mt-0">Every image, container, network and volume on this server is still spoken for.</p>
+      </div>
+    </div>
+    {{else}}
+    <div class="card max-w-2xl">
+      <div class="sweep-head">
+        <span class="sweep-mark" aria-hidden="true">{{template "icon_sweep"}}</span>
+        <div class="min-w-0">
+          <p class="text-sm font-medium">Reclaimable</p>
+          <p class="help !mt-0">Left behind by deploys, updates and deleted applications.</p>
+        </div>
+        <p class="sweep-total mono">{{humanSize .Bytes}}</p>
+      </div>
+
+      {{range .Items}}{{template "cleanup_row" .}}{{end}}
+
+      {{if $.IsAdmin}}
+      <form method="post" action="/system/cleanup"
+            onsubmit="return confirm('Remove {{.Count}} unused {{plural .Count "object" "objects"}}? Applications, their images and the last few rollback builds are left untouched.')">
+        {{/* A volume is the one thing here that cannot be pulled or rebuilt
+             back, so it is never part of what the button sweeps by default. */}}
+        {{with .Volumes}}
+        {{if .Count}}
+        <label class="sweep-danger">
+          <input type="checkbox" name="volumes" class="mt-0.5">
+          <span class="min-w-0 text-sm">
+            <span>Also delete {{.Count}} orphaned {{plural .Count "volume" "volumes"}}, {{humanSize .Bytes}}</span>
+            {{if .Note}}<span class="mono faint block truncate text-xs">{{.Note}}</span>{{end}}
+            <span class="block text-xs" style="color: var(--err)">
+              Permanent. These belong to no application Quasar knows about, but a database left
+              behind by an app deleted in error lives here — and no backup covers it.
+            </span>
+          </span>
+        </label>
+        {{end}}
+        {{end}}
+        <div class="sweep-foot">
+          <p class="faint text-xs">
+            {{.Count}} {{plural .Count "object" "objects"}} in
+            {{len .Items}} {{plural (len .Items) "category" "categories"}}
+          </p>
+          <button type="submit" class="btn-primary">{{template "icon_sweep"}}Clean up {{humanSize .Bytes}}</button>
+        </div>
+      </form>
+      {{end}}
+    </div>
+    {{end}}
+
+    <p class="help max-w-2xl">
+      A cleanup removes what nothing on this server points at any more. It keeps every running and
+      stopped application, the images those need, and the most recent git builds of each app so a
+      rollback still has somewhere to go. An image that no container has ever been created from is
+      pulled again on the next deploy.
+    </p>
     {{end}}
   </section>
 

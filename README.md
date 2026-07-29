@@ -151,8 +151,14 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
 - **Backups** : archive à la demande ou quotidienne (snapshot SQLite cohérent
   + `data/` + `.env` de chaque app), rétention configurable, téléchargement
   depuis le dashboard.
-- **Maintenance disque** : usage Docker (images, conteneurs, volumes), prune
-  des images orphelines, taille par app.
+- **Maintenance disque** : usage Docker (images, conteneurs, volumes, cache de
+  build) et taille par app. Le nettoyage chiffre l'espace récupérable par
+  catégorie *avant* qu'on clique, puis supprime tout ce que plus rien ne
+  réclame — images sans conteneur, couches non taguées, cache de build,
+  conteneurs laissés par un déploiement, réseaux vides. Il épargne les apps
+  arrêtées, leurs images et les derniers builds git de chaque app (cibles de
+  rollback) ; les volumes orphelins sont proposés à part, en case à cocher,
+  parce qu'eux ne se re-téléchargent pas.
 - **TLS par app** : état du certificat de chaque hostname servi, et diagnostic
   quand il manque (nom qui ne résout pas, ou qui pointe ailleurs que sur ce
   serveur — la cause habituelle d'une app sans HTTPS).

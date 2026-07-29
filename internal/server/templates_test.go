@@ -100,8 +100,22 @@ func TestExecuteTemplates(t *testing.T) {
 			"TOTPSetup":   map[string]string{"Secret": "ABC123", "QR": "data:image/png;base64,x"},
 		}},
 		{"system", map[string]any{
-			"Title":    "System",
-			"Disk":     docker.DiskUsage{ImagesCount: 5, ImagesSizeGB: 2.4, ContainersCount: 3, VolumesCount: 1},
+			"Title": "System",
+			"Disk": docker.DiskUsage{
+				ImagesCount: 5, ImagesBytes: 2_600_000_000, ContainersCount: 3,
+				ContainersBytes: 41_000_000, VolumesCount: 1, VolumesBytes: 900_000_000,
+				CacheCount: 12, CacheBytes: 1_400_000_000,
+			},
+			"Cleanup": docker.CleanupScan{
+				Items: []docker.Reclaimable{
+					{Key: "images", Label: "Images no container uses", Count: 2, Bytes: 700_000_000, Note: "nginx:1.24, redis:7"},
+					{Key: "dangling", Label: "Untagged layers left by rebuilds", Count: 6, Bytes: 1_100_000_000},
+					{Key: "cache", Label: "Build cache no longer referenced", Count: 12, Bytes: 1_400_000_000},
+					{Key: "networks", Label: "Networks with nothing attached", Count: 1, Note: "qs-dead0001_default"},
+				},
+				Volumes: docker.Reclaimable{Key: "volumes", Count: 2, Bytes: 340_000_000, Note: "orphan-pgdata, tmpcache"},
+				Count:   21, Bytes: 3_200_000_000,
+			},
 			"AppSizes": []AppSize{{Name: "Blog", ID: "abcd1234", SizeMB: 12.5}},
 			"Backups":  []backup.Info{{Name: "quasar-20260722-120000.tar.gz", SizeMB: 4.2, Date: time.Now()}},
 			"AutoOn":   true, "Retention": "7", "Saved": "Backup created.",
@@ -115,6 +129,31 @@ func TestExecuteTemplates(t *testing.T) {
 				{Cert: certs.Cert{Domain: "admin.example.com", Issuer: "R3", NotAfter: time.Now().Add(60 * 24 * time.Hour), DaysLeft: 60, Status: "ok"}, UsedBy: "this dashboard"},
 				{Cert: certs.Cert{Domain: "gone.example.com", SANs: []string{"gone.example.com", "www.gone.example.com"},
 					Issuer: "R3", NotAfter: time.Now().Add(5 * 24 * time.Hour), DaysLeft: 5, Status: "critical"}},
+			},
+		}},
+		// A freshly installed server: nothing to reclaim, no certificate issued
+		// yet, no backup taken. Every section's other branch.
+		{"system", map[string]any{
+			"Title": "System", "IsAdmin": true,
+			"Current": "v1.0.0", "Repo": "AymericChaverot/quasar",
+			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64"},
+			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44"},
+			"GoRuntime": "go1.26.5",
+			"Disk":      docker.DiskUsage{ImagesCount: 2, ImagesBytes: 180_000_000},
+			"Cleanup":   docker.CleanupScan{},
+		}},
+		// One of everything, to catch a count that only reads well in the plural.
+		{"system", map[string]any{
+			"Title": "System", "IsAdmin": true,
+			"Current": "v1.0.0", "Repo": "AymericChaverot/quasar",
+			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64"},
+			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44"},
+			"GoRuntime": "go1.26.5",
+			"Disk":      docker.DiskUsage{ImagesCount: 2, ImagesBytes: 180_000_000},
+			"Cleanup": docker.CleanupScan{
+				Items:   []docker.Reclaimable{{Key: "dangling", Label: "Untagged layers left by rebuilds", Count: 1, Bytes: 41_000_000}},
+				Volumes: docker.Reclaimable{Key: "volumes", Count: 1, Bytes: 12_000_000, Note: "stray"},
+				Count:   1, Bytes: 41_000_000,
 			},
 		}},
 	}
