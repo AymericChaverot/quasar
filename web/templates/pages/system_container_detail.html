@@ -1,6 +1,8 @@
 {{define "content"}}
 {{with .Container}}
-<a href="/system" class="back-link">System</a>
+{{/* The list these are reached from is on the dashboard, not /system — so
+     that is where "up" goes, whatever the URL is nested under. */}}
+<a href="/" class="back-link">Dashboard</a>
 <div class="mt-2 mb-8 flex items-start justify-between">
   <div>
     <h1 class="page-title mono">{{.Name}}</h1>
