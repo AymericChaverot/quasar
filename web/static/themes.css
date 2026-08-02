@@ -513,6 +513,11 @@ summary:focus-visible,
   color: var(--text);
 }
 
+/* Ligatures are off in anything typed into. JetBrains Mono joins "//" — the
+   start of every URL and of half the values in an .env file — into one glyph,
+   and mid-edit the pair shows as a gap and a single slash, which reads as a
+   character the field just ate. What goes in a field here is a value some
+   other program parses byte for byte, so it is shown byte for byte. */
 .input {
   width: 100%;
   background: var(--surface);
@@ -520,6 +525,7 @@ summary:focus-visible,
   border-radius: var(--radius);
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
+  font-variant-ligatures: none;
   color: var(--text);
   outline: none;
 }
