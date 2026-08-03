@@ -6,17 +6,9 @@
 {{define "content"}}
 {{/* The verdict, felt before it is read: when the update lands the bottom of
      the screen fills with light, green or red, as though something had been
-     poured into it. A pool across the full width, the two walls it climbs at
-     the edges, and three plumes churning inside it on periods that do not
-     divide into each other, so the surface never visibly repeats. */}}
-<div id="update-glow" class="glow" aria-hidden="true">
-  <span class="glow-pool"></span>
-  <span class="glow-wall glow-wall-l"></span>
-  <span class="glow-wall glow-wall-r"></span>
-  <span class="glow-plume glow-a"></span>
-  <span class="glow-plume glow-b"></span>
-  <span class="glow-plume glow-c"></span>
-</div>
+     poured into it. Here it is lit for good — the page is about to be left
+     behind either way. */}}
+{{template "glow" (dict "ID" "update-glow")}}
 
 <div id="updating" class="auth updating" data-version="{{.Current}}" data-target="{{.Target}}">
   {{/* The mark is what carries the outcome: it pulses while the update runs,
@@ -127,7 +119,7 @@
     finished = true;
     meter.hidden = true;
     markEl.classList.add('is-failed');
-    glowEl.classList.add('is-failed');
+    glowEl.classList.add('is-failed', 'is-flare');
     // The step that was running is the step that broke: it takes a cross, and
     // nothing is left spinning under an error message as though work were
     // still going on.
@@ -148,7 +140,7 @@
     stage('done', 'done', 'done');
     progress(100);
     markEl.classList.add('is-ok');
-    glowEl.classList.add('is-ok');
+    glowEl.classList.add('is-ok', 'is-flare');
     phaseEl.textContent = 'Now running ' + v + '. Taking you back…';
     // Long enough for the tick to land and the light to fall back to its low
     // steady level; short enough that nobody is left on a finished screen.

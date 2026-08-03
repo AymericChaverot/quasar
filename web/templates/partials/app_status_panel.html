@@ -1,5 +1,8 @@
 {{define "app_status_panel"}}
-<div class="card flex flex-wrap items-center justify-between gap-4 p-4">
+{{/* The state is carried as data as well as drawn as a badge: this panel is
+     polled, and the detail page watches the value across swaps to know when a
+     deploy has finished and what it finished as. */}}
+<div class="card flex flex-wrap items-center justify-between gap-4 p-4" data-app-state="{{.Status.State}}">
   <div class="flex items-center gap-4">
     {{template "status_badge" .Status.State}}
     {{if .Status.Uptime}}<span class="mono muted text-sm">up {{.Status.Uptime}}</span>{{end}}

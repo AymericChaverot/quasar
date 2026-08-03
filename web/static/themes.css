@@ -1472,10 +1472,23 @@ button[disabled] { cursor: progress; opacity: 0.65; }
   opacity: 0;
   color: transparent;
 }
+/* The colour says which outcome; one of the three classes below says how it
+   arrives and whether it stays. Kept apart so a page can light the same glow
+   as an announcement or as a mood. */
 .glow.is-ok { color: var(--ok); }
 .glow.is-failed { color: var(--err); }
-.glow.is-ok,
-.glow.is-failed { animation: glow-flare 2.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+/* Poured in and left lit, for a page whose outcome is the whole point of it
+   still being on screen. */
+.glow.is-flare { animation: glow-flare 2.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+/* The same pour, then drained: an announcement on a page that has other things
+   to say once it has been made. */
+.glow.is-burst { animation: glow-burst 6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+/* No pour at all — it wells up, holds, and goes. This is a state being
+   reported, not an event happening, and a flash would claim otherwise. */
+.glow.is-brief { animation: glow-brief 5s ease-out forwards; }
 
 /* Poured in, not faded in: it surges past its level, drops most of the way
    back inside half a second, then settles the rest of the way slowly. */
@@ -1485,6 +1498,22 @@ button[disabled] { cursor: progress; opacity: 0.65; }
   22%  { opacity: 0.76; transform: translateY(3%); }
   45%  { opacity: 0.52; transform: translateY(-1%); }
   100% { opacity: 0.42; transform: translateY(0); }
+}
+
+@keyframes glow-burst {
+  0%   { opacity: 0;    transform: translateY(26%); }
+  3%   { opacity: 1;    transform: translateY(-7%); }
+  9%   { opacity: 0.76; transform: translateY(3%); }
+  18%  { opacity: 0.52; transform: translateY(-1%); }
+  55%  { opacity: 0.42; transform: translateY(0); }
+  100% { opacity: 0;    transform: translateY(8%); }
+}
+
+@keyframes glow-brief {
+  0%   { opacity: 0;    transform: translateY(16%); }
+  16%  { opacity: 0.42; transform: translateY(0); }
+  55%  { opacity: 0.42; transform: translateY(0); }
+  100% { opacity: 0;    transform: translateY(8%); }
 }
 
 /* The body of it, lying flat across the whole width. */

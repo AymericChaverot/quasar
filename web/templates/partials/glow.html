@@ -1,0 +1,21 @@
+{{/* Light pooled along the bottom of the screen, coloured by an outcome and
+     lit by whatever page it is on: the update landing, an application found
+     running or found down.
+
+     Built like liquid in a vessel rather than as a bar of colour — a pool
+     lying across the full width, the two walls it climbs at the left and right
+     edges the way a meniscus does, and three plumes turning over inside it.
+     Every layer moves on its own period, and none of those periods divide into
+     each other, so the surface never settles into a loop the eye can follow.
+
+     Takes an ID, because a page addresses its own glow from script. */}}
+{{define "glow"}}
+<div id="{{.ID}}" class="glow" aria-hidden="true">
+  <span class="glow-pool"></span>
+  <span class="glow-wall glow-wall-l"></span>
+  <span class="glow-wall glow-wall-r"></span>
+  <span class="glow-plume glow-a"></span>
+  <span class="glow-plume glow-b"></span>
+  <span class="glow-plume glow-c"></span>
+</div>
+{{end}}

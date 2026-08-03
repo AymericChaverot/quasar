@@ -218,6 +218,7 @@ func TestExecuteTemplates(t *testing.T) {
 		name string
 		data any
 	}{
+		{"glow", map[string]any{"ID": "app-glow"}},
 		// The card on its own, as a check swaps it in: an update waiting to be
 		// installed, and the same card reporting that a check found nothing.
 		{"update_card", map[string]any{
