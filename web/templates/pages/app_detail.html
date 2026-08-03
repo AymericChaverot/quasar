@@ -171,24 +171,7 @@
 
   <section>
     <h2 class="h-label mb-3">Password protection</h2>
-    <form hx-post="/apps/{{.ID}}/basic-auth" hx-target="#ba-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
-      {{if .BasicAuthUser}}
-      <p class="muted text-sm">Protected — user <span class="mono">{{.BasicAuthUser}}</span>. Set new credentials or disable.</p>
-      {{else}}
-      <p class="muted text-sm">Adds Traefik basic auth in front of the app. Redeploy to apply.</p>
-      {{end}}
-      <div class="grid grid-cols-2 gap-3">
-        <input name="ba_user" type="text" placeholder="username" value="{{.BasicAuthUser}}" class="input mono">
-        <input name="ba_password" type="password" placeholder="password" class="input mono">
-      </div>
-      <div class="flex items-center gap-3">
-        <button type="submit" class="btn">Save</button>
-        {{if .BasicAuthUser}}
-        <button type="submit" name="disable" value="1" class="btn-danger">Disable</button>
-        {{end}}
-        <span id="ba-feedback"></span>
-      </div>
-    </form>
+    {{template "basic_auth_panel" .}}
   </section>
 </div>
 {{end}}

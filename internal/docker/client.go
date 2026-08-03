@@ -3,6 +3,7 @@
 package docker
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"fmt"
@@ -128,6 +129,62 @@ func (c *Client) AppDirSize(appID string) int64 {
 	return size
 }
 
+// routerName is the Traefik router an app is served by, and the prefix its
+// middlewares are named with.
+func routerName(appID string) string { return "qs-" + appID }
+
+// basicAuthLabel is the label carrying an app's basic-auth credentials.
+func basicAuthLabel(appID string) string {
+	return fmt.Sprintf("traefik.http.middlewares.%s-auth.basicauth.users", routerName(appID))
+}
+
+// basicAuthUsers is the htpasswd line Traefik checks visitors against, and ""
+// for an app with no password protection — which is also what a container
+// carrying no such label reads as, so the two compare directly.
+func basicAuthUsers(a *db.App) string {
+	if a.BasicAuthUser == "" || a.BasicAuthHash == "" {
+		return ""
+	}
+	return a.BasicAuthUser + ":" + a.BasicAuthHash
+}
+
+// BasicAuthPending reports whether the password protection stored for an app is
+// not yet what its containers enforce.
+//
+// Traefik reads credentials from container labels, which are fixed when the
+// container is created, so saving a password protects nobody until the app is
+// redeployed — and clearing one keeps letting the old password through. The
+// panel says which of the two an operator is looking at, rather than leaving
+// them to discover it by visiting the site. An app with no container has
+// nothing to disagree with, so nothing is pending.
+func (c *Client) BasicAuthPending(ctx context.Context, a *db.App) bool {
+	labels, ok := c.servingLabels(ctx, a)
+	return ok && !basicAuthApplied(a, labels)
+}
+
+// basicAuthApplied reports whether a container created with these labels
+// enforces exactly what is stored for the app — no password on either side
+// included, since an app without one and a container without the label agree.
+func basicAuthApplied(a *db.App, labels map[string]string) bool {
+	return labels[basicAuthLabel(a.ID)] == basicAuthUsers(a)
+}
+
+// servingLabels returns the labels on the container that serves the app — a
+// stack's front end, or the newest container of a single-container app — and
+// false when it has none. A stopped container still answers: it is what a
+// start, as opposed to a deploy, would put back in front of visitors.
+func (c *Client) servingLabels(ctx context.Context, a *db.App) (map[string]string, bool) {
+	if c.UsesCompose(a) {
+		ct, ok := c.composeWebContainer(ctx, a.ID)
+		return ct.Labels, ok
+	}
+	list := c.appContainers(ctx, a.ID)
+	if len(list) == 0 {
+		return nil, false
+	}
+	return list[0].Labels, true
+}
+
 // traefikLabels builds the labels that make Traefik route the app's
 // subdomain — plus any custom domains — to the container's internal port.
 func (c *Client) traefikLabels(a *db.App) map[string]string {
@@ -138,7 +195,7 @@ func (c *Client) traefikLabels(a *db.App) map[string]string {
 // A stack serves from whichever port its front-end service listens on, which is
 // written in its compose file rather than in the app's configuration.
 func (c *Client) traefikLabelsPort(a *db.App, port int) map[string]string {
-	r := "qs-" + a.ID
+	r := routerName(a.ID)
 	host := a.Subdomain + "." + c.domain
 	if a.Subdomain == "@" { // app claims the root domain
 		host = c.domain
@@ -180,8 +237,8 @@ func (c *Client) traefikLabelsPort(a *db.App, port int) map[string]string {
 		labels[fmt.Sprintf("traefik.http.middlewares.%s-ratelimit.ratelimit.burst", r)] = fmt.Sprintf("%d", a.RateLimit*3)
 		chain = append(chain, r+"-ratelimit")
 	}
-	if a.BasicAuthUser != "" && a.BasicAuthHash != "" {
-		labels[fmt.Sprintf("traefik.http.middlewares.%s-auth.basicauth.users", r)] = a.BasicAuthUser + ":" + a.BasicAuthHash
+	if users := basicAuthUsers(a); users != "" {
+		labels[basicAuthLabel(a.ID)] = users
 		chain = append(chain, r+"-auth")
 	}
 	if a.SecurityHeaders {

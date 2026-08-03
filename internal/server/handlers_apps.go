@@ -54,6 +54,11 @@ type AppView struct {
 	// Network is the Docker network Traefik watches, named wherever the page
 	// explains how an app is reached.
 	Network string
+	// AuthPending is true when the app's password protection has been changed
+	// since the container serving it was created, so visitors still meet the
+	// previous setting. Only filled in for the detail pages, which is where
+	// the setting is changed.
+	AuthPending bool
 	First   bool
 	Last    bool
 	// IsAdmin gates the controls inside partials, which are rendered without
@@ -64,6 +69,15 @@ type AppView struct {
 // Host is the public hostname of the app: "sub.domain", or the bare root
 // domain when the app claims the apex via the "@" subdomain.
 func (v AppView) Host() string { return appHost(v.App, v.Domain) }
+
+// basicAuthMinLength is the shortest password accepted for edge protection.
+const basicAuthMinLength = 4
+
+// BasicAuthMinLength lets the form refuse a too-short password itself. A form
+// posted anyway is still rejected by the handler; what this buys is the
+// refusal being visible — htmx swaps nothing on a 4xx, so a rejected save
+// otherwise looks exactly like a page that ignored the click.
+func (v AppView) BasicAuthMinLength() int { return basicAuthMinLength }
 
 // appHost is Host for callers that have an app and the root domain but no view
 // to wrap them in.
@@ -95,6 +109,7 @@ func (s *Server) appView(r *http.Request, a *db.App) AppView {
 func (s *Server) appDetailView(r *http.Request, a *db.App) AppView {
 	v := s.appView(r, a)
 	v.Compose = s.dock.ComposeAdaptationFor(a)
+	v.AuthPending = s.dock.BasicAuthPending(r.Context(), a)
 	return v
 }
 
@@ -594,6 +609,11 @@ func (s *Server) handleAppHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAppBasicAuth enables/disables Traefik basic auth (applied at redeploy).
+//
+// Like the build mode it re-renders its own panel rather than a "saved" marker:
+// the password itself can never be shown back, so the panel reporting who is
+// protected and whether the running container agrees is the only evidence an
+// operator has that the save landed.
 func (s *Server) handleAppBasicAuth(w http.ResponseWriter, r *http.Request) {
 	a := s.getApp(w, r)
 	if a == nil {
@@ -604,12 +624,14 @@ func (s *Server) handleAppBasicAuth(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		s.renderPartial(w, "env_saved", nil)
+		a.BasicAuthUser, a.BasicAuthHash = "", ""
+		s.audit(r, "app.basic-auth", a.Name, "disabled")
+		s.renderPartial(w, "basic_auth_panel", s.appDetailView(r, a))
 		return
 	}
 	user := strings.TrimSpace(r.FormValue("ba_user"))
 	pass := r.FormValue("ba_password")
-	if user == "" || len(pass) < 4 {
+	if user == "" || len(pass) < basicAuthMinLength {
 		http.Error(w, "username and a password of at least 4 characters are required", http.StatusBadRequest)
 		return
 	}
@@ -622,7 +644,9 @@ func (s *Server) handleAppBasicAuth(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.renderPartial(w, "env_saved", nil)
+	a.BasicAuthUser, a.BasicAuthHash = user, string(hash)
+	s.audit(r, "app.basic-auth", a.Name, user)
+	s.renderPartial(w, "basic_auth_panel", s.appDetailView(r, a))
 }
 
 // handleAppDomains updates the app's custom domain list (redeploy applies it).

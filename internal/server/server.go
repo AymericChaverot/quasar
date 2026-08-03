@@ -295,6 +295,9 @@ func (s *Server) routes() {
 	s.viewer("GET /partials/apps/{id}/containers/{name}/stats", s.handleAppContainerStatsPartial)
 	s.viewer("GET /partials/apps/{id}/deployments", s.handleAppDeploymentsPartial)
 	s.viewer("GET /partials/apps/{id}/tls", s.handleAppTLSPartial)
+	// Admin-only like the panel it refreshes: it names the account the app is
+	// protected with, which a viewer is not shown.
+	s.admin("GET /partials/apps/{id}/basic-auth", s.handleAppBasicAuthPartial)
 	s.viewer("GET /partials/metrics", s.handleServerMetricsPartial)
 	s.viewer("GET /partials/apps/{id}/metrics", s.handleAppMetricsPartial)
 }

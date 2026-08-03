@@ -100,6 +100,18 @@ func (s *Server) handleAppStatusPartial(w http.ResponseWriter, r *http.Request) 
 	s.renderPartial(w, "app_status_panel", s.appView(r, a))
 }
 
+// handleAppBasicAuthPartial re-reports whether the running container enforces
+// the app's password protection. The panel polls it so that a redeploy — which
+// is what carries the setting out — is seen to have applied it, instead of
+// leaving "redeploy owed" on screen until someone reloads the page.
+func (s *Server) handleAppBasicAuthPartial(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	s.renderPartial(w, "basic_auth_state", s.appDetailView(r, a))
+}
+
 // TLSView is the certificate state of every hostname an app answers on, next
 // to the route Traefik actually holds for it.
 type TLSView struct {

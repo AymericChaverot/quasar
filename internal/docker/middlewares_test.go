@@ -125,3 +125,38 @@ func TestBlankAllowListIsIgnored(t *testing.T) {
 		}
 	}
 }
+
+// The panel tells an operator whether the credentials they saved are actually
+// in front of the app, and it is this comparison that decides. Getting it wrong
+// in the reassuring direction would have the panel call an app protected while
+// its container still lets everyone through.
+func TestBasicAuthAppliedComparesStoredCredentialsToTheContainer(t *testing.T) {
+	protected := baseApp()
+	protected.BasicAuthUser, protected.BasicAuthHash = "ops", "$2y$05$hash"
+
+	withAuth := labelsFor(protected)
+	noAuth := labelsFor(baseApp())
+
+	rotated := baseApp()
+	rotated.BasicAuthUser, rotated.BasicAuthHash = "ops", "$2y$05$other"
+
+	tests := []struct {
+		name   string
+		app    *db.App
+		labels map[string]string
+		want   bool
+	}{
+		{"protected app on a container carrying the same credentials", protected, withAuth, true},
+		{"protected app on a container created before it was set", protected, noAuth, false},
+		{"password rotated since the container was created", rotated, withAuth, false},
+		{"open app on a container that never had a password", baseApp(), noAuth, true},
+		{"protection removed but the container still enforces it", baseApp(), withAuth, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := basicAuthApplied(tc.app, tc.labels); got != tc.want {
+				t.Errorf("basicAuthApplied = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

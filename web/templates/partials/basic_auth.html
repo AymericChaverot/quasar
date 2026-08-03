@@ -1,0 +1,105 @@
+{{/* Basic auth in front of an app: who is protected, and whether the running
+     container already enforces it. Rendered with an AppView; replaces itself
+     on save, because the password can never be read back and this panel is the
+     only evidence the operator has that the save landed. */}}
+{{define "basic_auth_panel"}}
+<div id="basic-auth" class="card space-y-3 p-4">
+  {{template "basic_auth_state" .}}
+  {{template "basic_auth_form" .}}
+</div>
+{{end}}
+
+{{/* Polled on its own, so a redeploy started elsewhere on the page clears
+     "redeploy owed" without a reload. Only the state refreshes: re-fetching the
+     form under an operator would wipe the password they are halfway through
+     typing. */}}
+{{define "basic_auth_state"}}
+<div id="basic-auth-state" class="space-y-3"
+     hx-get="/partials/apps/{{.ID}}/basic-auth" hx-trigger="every 5s" hx-swap="outerHTML">
+  <div class="flex flex-wrap items-center gap-2">
+    {{if .BasicAuthUser}}
+    <span class="badge badge-ok"><span class="dot"></span>protected</span>
+    <span class="mono muted text-sm">{{.BasicAuthUser}}</span>
+    {{else}}
+    <span class="badge badge-muted"><span class="dot"></span>open</span>
+    {{end}}
+    {{if and .AuthPending (not .Compose.Author)}}<span class="chip">redeploy owed</span>{{end}}
+  </div>
+
+  {{/* A stack whose author wrote their own Traefik labels is run exactly as
+       written, middlewares included — so credentials saved here are stored and
+       never applied, and no redeploy will change that. */}}
+  {{if .Compose.Author}}
+  <p class="text-sm" style="color: var(--warn)">
+    This compose file carries its own Traefik labels, so Quasar routes nothing itself and adds no
+    middleware: whatever is set here is never put in front of the app. Remove those labels from
+    the file to have Quasar route the stack — and protect it.
+  </p>
+
+  {{else if .AuthPending}}
+  <p class="text-sm" style="color: var(--warn)">
+    {{if .BasicAuthUser}}
+    Saved, but not in front of the app yet: the container serving it was created before this
+    change and Traefik reads the credentials from its labels. Redeploy and visitors will be
+    asked for the password.
+    {{else}}
+    Saved, but the app is still asking for the old password: the container serving it was created
+    while protection was on. Redeploy to drop it.
+    {{end}}
+  </p>
+
+  {{else if .BasicAuthUser}}
+  {{/* Nothing is serving yet, so there is no container to agree or disagree
+       with what is stored — the first deploy carries it out. */}}
+  {{if eq .Status.State "not deployed"}}
+  <p class="muted text-sm">
+    Stored. Traefik will ask visitors for these credentials from the first deploy of this
+    application onwards.
+  </p>
+  {{else}}
+  <p class="muted text-sm">
+    Traefik asks visitors for these credentials before anything reaches the app, and the running
+    container enforces them.
+  </p>
+  {{end}}
+
+  {{else}}
+  <p class="muted text-sm">
+    Puts a browser password prompt in front of the whole app — worth having over anything not
+    meant to be public that has no login of its own. Traefik checks it before the request reaches
+    the container.
+  </p>
+  {{end}}
+</div>
+{{end}}
+
+{{/* The form is outside the polled fragment, but its Disable button depends on
+     the same state — so a save swaps the whole panel, not just the state. */}}
+{{define "basic_auth_form"}}
+<div class="space-y-3">
+  <form hx-post="/apps/{{.ID}}/basic-auth" hx-target="#basic-auth" hx-swap="outerHTML"
+        class="space-y-3">
+    <div class="grid grid-cols-2 gap-3">
+      <input name="ba_user" type="text" placeholder="username" value="{{.BasicAuthUser}}"
+             required autocomplete="off" class="input mono">
+      <input name="ba_password" type="password" minlength="{{.BasicAuthMinLength}}" required
+             placeholder="{{if .BasicAuthUser}}new password{{else}}password{{end}}"
+             autocomplete="new-password" class="input mono">
+    </div>
+    <div class="flex items-center gap-3">
+      <button type="submit" class="btn">Save</button>
+      {{/* Disabling wants neither field, so it skips the validation the save
+           needs — an empty password must not stop protection being removed. */}}
+      {{if .BasicAuthUser}}
+      <button type="submit" name="disable" value="1" formnovalidate class="btn-danger">Disable</button>
+      {{end}}
+      <span class="help !mt-0">Redeploy to apply.</span>
+    </div>
+  </form>
+
+  <p class="help !mt-0">
+    The password is kept as a bcrypt hash and is never shown again, so changing the username means
+    setting the password again with it. Saving replaces whatever was there.
+  </p>
+</div>
+{{end}}
