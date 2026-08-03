@@ -41,6 +41,10 @@ type Server struct {
 	// route table can be asserted on rather than trusted. Adding a mutating
 	// route without admin gating is the mistake this makes visible.
 	guards map[string]string
+
+	// edgeAttempts caps how fast one address may guess at one application's
+	// password on the public login page.
+	edgeAttempts *edgeThrottle
 }
 
 func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) (*Server, error) {
@@ -52,6 +56,8 @@ func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secr
 		pages:   map[string]*template.Template{},
 		mux:     http.NewServeMux(),
 		guards:  map[string]string{},
+
+		edgeAttempts: newEdgeThrottle(),
 	}
 	if err := s.parseTemplates(); err != nil {
 		return nil, err
@@ -187,6 +193,10 @@ func (s *Server) routes() {
 	s.public("POST /logout", s.handleLogout)
 	// Deploy webhooks are authenticated by their per-app secret, not a session.
 	s.public("POST /hooks/{id}/{secret}", s.handleWebhook)
+	// Called by Traefik, not by a person, before every request to a
+	// password-protected application. It authorises against that application's
+	// own credentials, so a dashboard session is neither required nor useful.
+	s.public("GET /edge-auth/{id}", s.handleEdgeAuth)
 
 	s.viewer("GET /{$}", s.handleDashboard)
 	s.viewer("GET /settings", s.handleSettings)

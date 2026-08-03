@@ -72,10 +72,11 @@ func TestBasicAuthPanelLetsDisableSkipValidation(t *testing.T) {
 	}
 }
 
-// Traefik reads the credentials from container labels, so a save alone changes
-// nothing a visitor meets. This is what stops the panel claiming an app is
-// protected while its running container still lets everyone through — the
-// exact confusion of "I saved a password and the site did not ask for it".
+// Turning protection on changes the router a container is created with, so a
+// save alone changes nothing a visitor meets. This is what stops the panel
+// claiming an app is protected while its running container still lets everyone
+// through — the exact confusion of "I saved a password and the site did not
+// ask for it".
 func TestBasicAuthPanelReportsAPendingRedeploy(t *testing.T) {
 	tests := []struct {
 		name string
@@ -90,12 +91,12 @@ func TestBasicAuthPanelReportsAPendingRedeploy(t *testing.T) {
 		{
 			name: "disabled but still deployed",
 			view: AppView{AuthPending: true},
-			want: "still asking for the old password",
+			want: "still asks visitors to sign in",
 		},
 		{
 			name: "deployed and enforced",
 			view: AppView{App: protectedApp()},
-			want: "container enforces them",
+			want: "enforces it",
 		},
 		// Nothing is serving, so there is no container to be out of step with:
 		// claiming visitors are being asked for a password would be a lie in

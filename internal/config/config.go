@@ -24,6 +24,10 @@ type Config struct {
 	GitHubRepo     string // "owner/name", used for release checks and update images
 	SocketNetwork  string // Docker network where the socket proxy lives
 	KeyPath        string // at-rest encryption master key, next to the database
+	// EdgeAuthURL is where Traefik reaches this dashboard to have a request to
+	// a password-protected application authorised. It is an address on the
+	// internal network, never one a visitor resolves.
+	EdgeAuthURL string
 }
 
 func Load() Config {
@@ -45,6 +49,10 @@ func Load() Config {
 		CookieSecure:   getenv("COOKIE_SECURE", "true") != "false",
 		GitHubRepo:     getenv("GITHUB_REPO", "AymericChaverot/quasar"),
 		SocketNetwork:  getenv("SOCKET_NETWORK", "quasar-socket-net"),
+		// The dashboard's container name on the Traefik network, which is
+		// fixed by the system stack. Set it only when the dashboard runs
+		// somewhere else — local development against a containerised Traefik.
+		EdgeAuthURL: strings.TrimSuffix(getenv("EDGE_AUTH_URL", "http://quasar-dashboard:8080"), "/"),
 		// Beside the database, on the same persisted volume, but deliberately
 		// outside anything backup.Run archives.
 		KeyPath: filepath.Join(filepath.Dir(dbPath), "master.key"),

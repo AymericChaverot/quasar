@@ -39,12 +39,12 @@
   {{else if .AuthPending}}
   <p class="text-sm" style="color: var(--warn)">
     {{if .BasicAuthUser}}
-    Saved, but not in front of the app yet: the container serving it was created before this
-    change and Traefik reads the credentials from its labels. Redeploy and visitors will be
-    asked for the password.
+    Saved, but not in front of the app yet: turning protection on adds a middleware to the
+    router, and a container carries the router it was created with. Redeploy and visitors will
+    meet the sign-in page.
     {{else}}
-    Saved, but the app is still asking for the old password: the container serving it was created
-    while protection was on. Redeploy to drop it.
+    Saved, but the app still asks visitors to sign in: the container serving it was created while
+    protection was on. Redeploy to drop it.
     {{end}}
   </p>
 
@@ -53,21 +53,22 @@
        with what is stored — the first deploy carries it out. */}}
   {{if eq .Status.State "not deployed"}}
   <p class="muted text-sm">
-    Stored. Traefik will ask visitors for these credentials from the first deploy of this
-    application onwards.
+    Stored. Visitors will be asked to sign in from the first deploy of this application onwards.
   </p>
   {{else}}
   <p class="muted text-sm">
-    Traefik asks visitors for these credentials before anything reaches the app, and the running
-    container enforces them.
+    Visitors meet a sign-in page before anything reaches the app, and the running container
+    enforces it. Changing the password here takes effect at once and ends any session opened
+    with the old one — no redeploy needed.
   </p>
   {{end}}
 
   {{else}}
   <p class="muted text-sm">
-    Puts a browser password prompt in front of the whole app — worth having over anything not
-    meant to be public that has no login of its own. Traefik checks it before the request reaches
-    the container.
+    Puts a sign-in page in front of the whole app — worth having over anything not meant to be
+    public that has no login of its own. Quasar checks the password before the request reaches
+    the container, and a client that sends HTTP Basic credentials itself is let straight through,
+    so scripts and probes keep working.
   </p>
   {{end}}
 </div>
@@ -99,7 +100,8 @@
 
   <p class="help !mt-0">
     The password is kept as a bcrypt hash and is never shown again, so changing the username means
-    setting the password again with it. Saving replaces whatever was there.
+    setting the password again with it. Saving replaces whatever was there. A visitor stays signed
+    in for seven days, on that one hostname.
   </p>
 </div>
 {{end}}

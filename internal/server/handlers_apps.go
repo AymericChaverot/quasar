@@ -59,8 +59,8 @@ type AppView struct {
 	// previous setting. Only filled in for the detail pages, which is where
 	// the setting is changed.
 	AuthPending bool
-	First   bool
-	Last    bool
+	First       bool
+	Last        bool
 	// IsAdmin gates the controls inside partials, which are rendered without
 	// the page data map that carries it everywhere else.
 	IsAdmin bool
@@ -109,7 +109,7 @@ func (s *Server) appView(r *http.Request, a *db.App) AppView {
 func (s *Server) appDetailView(r *http.Request, a *db.App) AppView {
 	v := s.appView(r, a)
 	v.Compose = s.dock.ComposeAdaptationFor(a)
-	v.AuthPending = s.dock.BasicAuthPending(r.Context(), a)
+	v.AuthPending = s.dock.ProtectionPending(r.Context(), a)
 	return v
 }
 

@@ -8,7 +8,7 @@ import (
 )
 
 func labelsFor(a *db.App) map[string]string {
-	return (&Client{domain: "example.com"}).traefikLabels(a)
+	return (&Client{domain: "example.com", edgeAuthURL: "http://quasar-dashboard:8080"}).traefikLabels(a)
 }
 
 func baseApp() *db.App {
@@ -73,13 +73,13 @@ func TestEachMiddlewareIsIndependent(t *testing.T) {
 			wantValue: "31536000",
 		},
 		{
-			name: "basic auth only",
+			name: "password protection only",
 			configure: func(a *db.App) {
 				a.BasicAuthUser, a.BasicAuthHash = "ops", "$2y$05$hash"
 			},
 			wantChain: "qs-a1-auth",
-			wantLabel: "traefik.http.middlewares.qs-a1-auth.basicauth.users",
-			wantValue: "ops:$2y$05$hash",
+			wantLabel: "traefik.http.middlewares.qs-a1-auth.forwardauth.address",
+			wantValue: "http://quasar-dashboard:8080/edge-auth/a1",
 		},
 	}
 	for _, tc := range tests {
@@ -126,15 +126,19 @@ func TestBlankAllowListIsIgnored(t *testing.T) {
 	}
 }
 
-// The panel tells an operator whether the credentials they saved are actually
-// in front of the app, and it is this comparison that decides. Getting it wrong
-// in the reassuring direction would have the panel call an app protected while
-// its container still lets everyone through.
-func TestBasicAuthAppliedComparesStoredCredentialsToTheContainer(t *testing.T) {
-	protected := baseApp()
-	protected.BasicAuthUser, protected.BasicAuthHash = "ops", "$2y$05$hash"
+// The panel tells an operator whether the protection they saved is actually in
+// front of the app, and it is this comparison that decides. Getting it wrong in
+// the reassuring direction would have the panel call an app protected while its
+// container still lets everyone through.
+//
+// A changed password is deliberately not a difference: the credentials are read
+// from the database on every request now, so only turning protection on or off
+// is something a container can be out of step with.
+func TestProtectionAppliedComparesTheContainerToTheSetting(t *testing.T) {
+	guarded := baseApp()
+	guarded.BasicAuthUser, guarded.BasicAuthHash = "ops", "$2y$05$hash"
 
-	withAuth := labelsFor(protected)
+	withAuth := labelsFor(guarded)
 	noAuth := labelsFor(baseApp())
 
 	rotated := baseApp()
@@ -146,17 +150,28 @@ func TestBasicAuthAppliedComparesStoredCredentialsToTheContainer(t *testing.T) {
 		labels map[string]string
 		want   bool
 	}{
-		{"protected app on a container carrying the same credentials", protected, withAuth, true},
-		{"protected app on a container created before it was set", protected, noAuth, false},
-		{"password rotated since the container was created", rotated, withAuth, false},
+		{"protected app on a container that carries the middleware", guarded, withAuth, true},
+		{"protected app on a container created before it was set", guarded, noAuth, false},
+		{"password rotated since the container was created", rotated, withAuth, true},
 		{"open app on a container that never had a password", baseApp(), noAuth, true},
 		{"protection removed but the container still enforces it", baseApp(), withAuth, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := basicAuthApplied(tc.app, tc.labels); got != tc.want {
-				t.Errorf("basicAuthApplied = %v, want %v", got, tc.want)
+			if got := protectionApplied(tc.app, tc.labels); got != tc.want {
+				t.Errorf("protectionApplied = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// The address in the label is what Traefik calls, so an app must never be
+// pointed at another app's authorisation — the whole protection would be
+// checked against the wrong password.
+func TestEdgeAuthAddressNamesTheAppItProtects(t *testing.T) {
+	a := baseApp()
+	a.BasicAuthUser, a.BasicAuthHash = "ops", "$2y$05$hash"
+	if got := labelsFor(a)[edgeAuthLabel(a.ID)]; !strings.HasSuffix(got, "/edge-auth/"+a.ID) {
+		t.Errorf("forward-auth address = %q, want it to end in /edge-auth/%s", got, a.ID)
 	}
 }

@@ -30,6 +30,10 @@ type Client struct {
 	network   string
 	socketNet string
 	appsDir   string
+	// edgeAuthURL is where Traefik calls this dashboard back to have a request
+	// to a protected app authorised. It is written into the app's labels, so it
+	// has to be an address Traefik itself resolves on the internal network.
+	edgeAuthURL string
 
 	// The git credential helper is written once and reused; it carries no
 	// secret of its own, only the code that reads one from the environment.
@@ -53,14 +57,15 @@ func New(cfg config.Config, database *sql.DB, keyring *secrets.Keyring) (*Client
 		return nil, err
 	}
 	return &Client{
-		api:       api,
-		dbc:       database,
-		keyring:   keyring,
-		domain:    cfg.Domain,
-		network:   cfg.TraefikNetwork,
-		socketNet: cfg.SocketNetwork,
-		appsDir:   cfg.AppsDir,
-		deploys:   map[string]*DeployState{},
+		api:         api,
+		dbc:         database,
+		keyring:     keyring,
+		domain:      cfg.Domain,
+		network:     cfg.TraefikNetwork,
+		socketNet:   cfg.SocketNetwork,
+		appsDir:     cfg.AppsDir,
+		edgeAuthURL: cfg.EdgeAuthURL,
+		deploys:     map[string]*DeployState{},
 	}, nil
 }
 
@@ -133,41 +138,33 @@ func (c *Client) AppDirSize(appID string) int64 {
 // middlewares are named with.
 func routerName(appID string) string { return "qs-" + appID }
 
-// basicAuthLabel is the label carrying an app's basic-auth credentials.
-func basicAuthLabel(appID string) string {
-	return fmt.Sprintf("traefik.http.middlewares.%s-auth.basicauth.users", routerName(appID))
+// edgeAuthLabel is the label pointing an app's protection at the dashboard.
+func edgeAuthLabel(appID string) string {
+	return fmt.Sprintf("traefik.http.middlewares.%s-auth.forwardauth.address", routerName(appID))
 }
 
-// basicAuthUsers is the htpasswd line Traefik checks visitors against, and ""
-// for an app with no password protection — which is also what a container
-// carrying no such label reads as, so the two compare directly.
-func basicAuthUsers(a *db.App) string {
-	if a.BasicAuthUser == "" || a.BasicAuthHash == "" {
-		return ""
-	}
-	return a.BasicAuthUser + ":" + a.BasicAuthHash
-}
-
-// BasicAuthPending reports whether the password protection stored for an app is
-// not yet what its containers enforce.
+// protectionPending reports whether an app's password protection has been
+// turned on or off since the container serving it was created.
 //
-// Traefik reads credentials from container labels, which are fixed when the
-// container is created, so saving a password protects nobody until the app is
-// redeployed — and clearing one keeps letting the old password through. The
-// panel says which of the two an operator is looking at, rather than leaving
-// them to discover it by visiting the site. An app with no container has
-// nothing to disagree with, so nothing is pending.
-func (c *Client) BasicAuthPending(ctx context.Context, a *db.App) bool {
+// Only that much is a redeploy's business. The credentials themselves are read
+// from the database on every request, so a changed password takes effect at
+// once; what is baked into the container is whether the router carries the
+// middleware at all, and that is what a deploy has to catch up with. An app
+// with no container has nothing to disagree with, so nothing is pending.
+func (c *Client) ProtectionPending(ctx context.Context, a *db.App) bool {
 	labels, ok := c.servingLabels(ctx, a)
-	return ok && !basicAuthApplied(a, labels)
+	return ok && !protectionApplied(a, labels)
 }
 
-// basicAuthApplied reports whether a container created with these labels
-// enforces exactly what is stored for the app — no password on either side
-// included, since an app without one and a container without the label agree.
-func basicAuthApplied(a *db.App, labels map[string]string) bool {
-	return labels[basicAuthLabel(a.ID)] == basicAuthUsers(a)
+// protectionApplied reports whether a container created with these labels
+// carries the protection the app is configured with — neither side having any
+// counting as agreement.
+func protectionApplied(a *db.App, labels map[string]string) bool {
+	return (labels[edgeAuthLabel(a.ID)] != "") == protected(a)
 }
+
+// protected reports whether an app has password protection configured.
+func protected(a *db.App) bool { return a.BasicAuthUser != "" && a.BasicAuthHash != "" }
 
 // servingLabels returns the labels on the container that serves the app — a
 // stack's front end, or the newest container of a single-container app — and
@@ -237,8 +234,21 @@ func (c *Client) traefikLabelsPort(a *db.App, port int) map[string]string {
 		labels[fmt.Sprintf("traefik.http.middlewares.%s-ratelimit.ratelimit.burst", r)] = fmt.Sprintf("%d", a.RateLimit*3)
 		chain = append(chain, r+"-ratelimit")
 	}
-	if users := basicAuthUsers(a); users != "" {
-		labels[basicAuthLabel(a.ID)] = users
+	// Password protection is delegated to the dashboard rather than checked by
+	// Traefik itself, which is what allows a visitor to be shown a page instead
+	// of the browser's own credentials box: that box is the browser's answer to
+	// the WWW-Authenticate header Traefik's basicauth middleware sends, and
+	// nothing about it can be styled or explained. The dashboard answers this
+	// call with the login page, and only lets the request through once it has
+	// seen credentials it accepts.
+	if protected(a) {
+		labels[edgeAuthLabel(a.ID)] = c.edgeAuthURL + "/edge-auth/" + a.ID
+		// Left unset, Traefik strips some X-Forwarded headers a client sent and
+		// passes others through untouched — and says so in a warning at every
+		// start. False is the answer that matches what the dashboard reads:
+		// the address a request came from, and the host it asked for, are only
+		// worth anything if Traefik is the one that wrote them.
+		labels[fmt.Sprintf("traefik.http.middlewares.%s-auth.forwardauth.trustForwardHeader", r)] = "false"
 		chain = append(chain, r+"-auth")
 	}
 	if a.SecurityHeaders {
