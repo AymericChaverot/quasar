@@ -665,14 +665,27 @@ func setLabels(svc *yaml.Node, labels map[string]string) {
 		mapSet(svc, "labels", existing)
 	}
 	for _, key := range sortedKeys(labels) {
+		value := escapeInterpolation(labels[key])
 		switch existing.Kind {
 		case yaml.MappingNode:
-			mapSet(existing, key, quoted(labels[key]))
+			mapSet(existing, key, quoted(value))
 		case yaml.SequenceNode:
-			existing.Content = append(existing.Content, quoted(key+"="+labels[key]))
+			existing.Content = append(existing.Content, quoted(key+"="+value))
 		}
 	}
 }
+
+// escapeInterpolation doubles every "$" so that compose passes the value on as
+// written instead of reading it as a variable reference.
+//
+// A bcrypt hash is why this exists. "$2a$10$KI2SuB..." reaches the container as
+// "$2a$10.6c4e..." — compose substituted the undefined variable $KI2SuB for
+// nothing — and Traefik then rejects every password against the truncated hash,
+// so a protected stack asks for credentials it can never accept. Only the
+// labels Quasar generates are escaped: the rest of the file is the author's,
+// and compose interpolates it exactly as it would were they running it
+// themselves.
+func escapeInterpolation(v string) string { return strings.ReplaceAll(v, "$", "$$") }
 
 // joinNetwork puts the service on the external network Traefik watches.
 func joinNetwork(svc *yaml.Node, network string) {

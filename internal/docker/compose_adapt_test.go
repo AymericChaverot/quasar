@@ -496,3 +496,49 @@ func TestAdaptComposeIsStable(t *testing.T) {
 		t.Errorf("adapting twice gave different files:\n%s\n---\n%s", first, second)
 	}
 }
+
+// The reported bug: a stack behind basic auth kept asking for credentials that
+// were correct. Compose interpolates the file it is handed, so the "$KI2SuB"
+// segment of the bcrypt hash was read as an undefined variable and dropped —
+// Traefik was left comparing passwords against a truncated hash, which nothing
+// matches. Both label spellings are checked: the mapping Quasar writes for a
+// service with no labels, and the sequence it appends to when the author used
+// the list form.
+func TestAdaptComposeEscapesDollarsInGeneratedLabels(t *testing.T) {
+	const hash = "ops:$2a$10$KI2SuB.6c4e0JVLXdPK1leU2X8Rii7DjWWCKCBZiYbIWWa96E8MRe"
+	opt := testOptions("", 80)
+	opt.Labels = func(p int) map[string]string {
+		return map[string]string{
+			"traefik.enable": "true",
+			"traefik.http.middlewares.qs-abcd1234-auth.basicauth.users": hash,
+		}
+	}
+
+	mapping := `services:
+  web:
+    image: nginx
+    ports: ["80:80"]
+`
+	sequence := `services:
+  web:
+    image: nginx
+    ports: ["80:80"]
+    labels:
+      - "com.example.owner=ops"
+`
+	for _, src := range []string{mapping, sequence} {
+		out, _, err := adaptCompose([]byte(src), opt)
+		if err != nil {
+			t.Fatalf("adapt: %v", err)
+		}
+		written := string(out)
+		if !strings.Contains(written, strings.ReplaceAll(hash, "$", "$$")) {
+			t.Errorf("the hash is written unescaped, so compose will eat part of it:\n%s", written)
+		}
+		// What compose does with the file: "$$" collapses back to one "$",
+		// which has to leave the hash exactly as it was stored.
+		if got := strings.ReplaceAll(written, "$$", "$"); !strings.Contains(got, hash) {
+			t.Errorf("after compose interpolation the hash is not itself:\n%s", got)
+		}
+	}
+}
