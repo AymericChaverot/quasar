@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
@@ -104,6 +105,17 @@ echo "rollback failed, dashboard is DOWN"
 exit 1
 `
 
+// PullStatus is how far an image pull has got. Total stays zero until the
+// daemon has announced the layers it is about to transfer, so Percent is only
+// meaningful once it isn't — a pull reports nothing for the first second or two
+// while the manifest is resolved.
+type PullStatus struct {
+	Current int64   // bytes received across every layer
+	Total   int64   // bytes the layers add up to
+	Percent float64 // 0 to 100, zero until Total is known
+	Phase   string  // what the daemon is doing: "Downloading", "Extracting"
+}
+
 // SelfUpdate pulls the given dashboard image and spawns a short-lived
 // "updater" container that recreates the dashboard service. The dashboard
 // cannot recreate its own container (the command would die with it), so the
@@ -112,9 +124,14 @@ exit 1
 // The updater uses the freshly pulled image itself, which ships docker-cli
 // and the compose plugin.
 //
+// report, if non-nil, is called as the pull advances — that transfer is the
+// only part of an update long enough to be worth watching, and the only part
+// this process is still alive for. It runs on the goroutine driving the pull,
+// so it must not block.
+//
 // ctx must not be tied to an HTTP request: the pull below transfers the whole
 // image and readily outlives a browser that gives up on the request.
-func (c *Client) SelfUpdate(ctx context.Context, imageRef, socketNetwork string) error {
+func (c *Client) SelfUpdate(ctx context.Context, imageRef, socketNetwork string, report func(PullStatus)) error {
 	// imageRef reaches a shell as part of updaterScript, and its tag comes
 	// from a GitHub release name, which is attacker-chosen for anyone who can
 	// point GITHUB_REPO elsewhere.
@@ -126,7 +143,7 @@ func (c *Client) SelfUpdate(ctx context.Context, imageRef, socketNetwork string)
 	if err != nil {
 		return fmt.Errorf("pull %s: %w", imageRef, err)
 	}
-	if err := drainPull(rc); err != nil {
+	if err := drainPull(rc, report); err != nil {
 		return fmt.Errorf("pull %s: %w", imageRef, err)
 	}
 
@@ -168,25 +185,85 @@ func (c *Client) SelfUpdate(ctx context.Context, imageRef, socketNetwork string)
 	return nil
 }
 
-// drainPull consumes an image pull's progress stream and reports the failures
-// the daemon only announces inside it. ImagePull returns a nil error as soon
-// as the request is accepted, so an unauthorized or missing tag otherwise
-// surfaces later as a baffling "No such image" from ContainerCreate.
-func drainPull(rc io.ReadCloser) error {
+// pullReportEvery caps how often a pull's progress is passed on. The daemon
+// emits a line per chunk per layer — thousands of them — and the consumer is a
+// browser polling once a second.
+const pullReportEvery = 250 * time.Millisecond
+
+// drainPull consumes an image pull's progress stream, reporting how far it has
+// got to report and returning the failures the daemon only announces inside the
+// stream. ImagePull returns a nil error as soon as the request is accepted, so
+// an unauthorized or missing tag otherwise surfaces later as a baffling "No
+// such image" from ContainerCreate.
+func drainPull(rc io.ReadCloser, report func(PullStatus)) error {
 	defer rc.Close()
+
+	// Per layer, because the daemon interleaves them: every line is one layer's
+	// running total, and only their sum says anything about the whole image.
+	type layer struct{ current, total int64 }
+	layers := map[string]*layer{}
+	phase := ""
+	last := time.Time{}
+
+	emit := func(force bool) {
+		if report == nil || (!force && time.Since(last) < pullReportEvery) {
+			return
+		}
+		last = time.Now()
+		var st PullStatus
+		for _, l := range layers {
+			st.Current += l.current
+			st.Total += l.total
+		}
+		if st.Total > 0 {
+			st.Percent = float64(st.Current) / float64(st.Total) * 100
+		}
+		st.Phase = phase
+		report(st)
+	}
+
 	dec := json.NewDecoder(rc)
 	for {
 		var msg struct {
-			Error string `json:"error"`
+			ID             string `json:"id"`
+			Status         string `json:"status"`
+			Error          string `json:"error"`
+			ProgressDetail struct {
+				Current int64 `json:"current"`
+				Total   int64 `json:"total"`
+			} `json:"progressDetail"`
 		}
 		switch err := dec.Decode(&msg); {
 		case err == io.EOF:
+			emit(true)
 			return nil
 		case err != nil:
 			return err
 		case msg.Error != "":
 			return fmt.Errorf("%s", msg.Error)
 		}
+		// Lines without an id are about the pull as a whole ("Pulling from
+		// org/app", "Digest: sha256:…") and carry no layer to account for.
+		if msg.ID == "" {
+			continue
+		}
+		l := layers[msg.ID]
+		if l == nil {
+			l = &layer{}
+			layers[msg.ID] = l
+		}
+		switch msg.Status {
+		case "Downloading":
+			// Extracting repeats the same byte counts a second time, so only
+			// the transfer is counted or every layer would weigh double.
+			l.current, l.total = msg.ProgressDetail.Current, msg.ProgressDetail.Total
+			phase = "Downloading"
+		case "Download complete", "Already exists":
+			l.current = l.total
+		case "Extracting":
+			phase = "Extracting"
+		}
+		emit(false)
 	}
 }
 

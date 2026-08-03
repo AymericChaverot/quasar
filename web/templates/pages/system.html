@@ -9,33 +9,7 @@
 
   <section class="space-y-4">
     <h2 class="h-label">Software update</h2>
-    <div class="card max-w-2xl space-y-4 p-4">
-      <div class="flex flex-wrap items-center justify-between gap-4">
-        <dl class="grid grid-cols-[8rem_1fr] gap-y-1 text-sm">
-          <dt class="muted">Current version</dt>
-          <dd class="mono">{{.Current}}</dd>
-          <dt class="muted">Latest release</dt>
-          <dd class="mono">{{if .Latest}}{{.Latest}}{{else}}unknown — run a check{{end}}</dd>
-        </dl>
-        {{if .IsAdmin}}
-        <div class="flex items-center gap-2">
-          <form method="post" action="/system/update/check">
-            <button type="submit" class="btn">Check for updates</button>
-          </form>
-          {{if .UpdateAvail}}
-          <form method="post" action="/system/update/apply"
-                onsubmit="return confirm('Update the dashboard to {{.Latest}}? Applications keep running; the dashboard restarts briefly.')">
-            <button type="submit" class="btn-primary">Update to {{.Latest}}</button>
-          </form>
-          {{end}}
-        </div>
-        {{end}}
-      </div>
-      {{if .UpdateAvail}}
-      <p class="text-sm" style="color: var(--warn)">A newer version is available. Updating replaces only the dashboard container — running applications are not touched.</p>
-      {{end}}
-      <p class="help">Releases come from github.com/{{.Repo}}. The platform checks automatically every 6 hours.</p>
-    </div>
+    {{template "update_card" .}}
   </section>
 
   {{/* What the machine is, next to what it runs. The processor takes the full

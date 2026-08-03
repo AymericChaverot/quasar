@@ -1,0 +1,51 @@
+{{/* The software-update card. Rendered inside the System page, and swapped in
+     on its own by a check — which is why it carries its own id and every key it
+     needs, rather than reading anything from the page around it. */}}
+{{define "update_card"}}
+<div id="update-card" class="card max-w-2xl space-y-4 p-4">
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <dl class="grid grid-cols-[8rem_1fr] gap-y-1 text-sm">
+      <dt class="muted">Current version</dt>
+      <dd class="mono">{{.Current}}</dd>
+      <dt class="muted">Latest release</dt>
+      <dd class="mono">{{if .Latest}}{{.Latest}}{{else}}unknown — run a check{{end}}</dd>
+    </dl>
+    {{if .IsAdmin}}
+    <div class="flex items-center gap-2">
+      {{/* The button swaps this whole card for the answer, so it can report
+           that it is working: GitHub takes a second or two, and a control that
+           does nothing visible for that long reads as one that did not fire.
+           The spinner takes the icon's place rather than sitting next to it,
+           which keeps the button from changing width mid-request. */}}
+      <button type="button" class="btn"
+              hx-post="/system/update/check"
+              hx-target="#update-card" hx-swap="outerHTML"
+              hx-indicator="this" hx-disabled-elt="this">
+        {{template "icon_restart"}}<span class="spinner" aria-hidden="true"></span>Check for updates
+      </button>
+      {{if .UpdateAvail}}
+      <form method="post" action="/system/update/apply"
+            onsubmit="return confirm('Update the dashboard to {{.Latest}}? Applications keep running; the dashboard restarts briefly.')">
+        <button type="submit" class="btn-primary">{{template "icon_deploy"}}Update to {{.Latest}}</button>
+      </form>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+
+  {{if .CheckError}}
+  <p class="text-sm" style="color: var(--err)">{{.CheckError}}</p>
+  {{else if .Checked}}
+  <p class="text-sm" style="color: var(--ok)">{{.Checked}}</p>
+  {{end}}
+
+  {{if .UpdateAvail}}
+  <p class="text-sm" style="color: var(--warn)">A newer version is available. Updating replaces only the dashboard container — running applications are not touched.</p>
+  {{end}}
+
+  <p class="help">
+    Releases come from github.com/{{.Repo}}. The platform checks automatically every 6 hours{{if .CheckedAt}},
+    last checked {{.CheckedAt}}{{end}}.
+  </p>
+</div>
+{{end}}

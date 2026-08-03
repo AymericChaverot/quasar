@@ -1,0 +1,242 @@
+{{/* The page an update is watched from. It has to survive the dashboard it is
+     served by being destroyed and rebuilt underneath it, so everything it needs
+     is already in the document: the version it was served by, the release being
+     installed, and a poll loop that treats an unreachable server as the
+     expected middle of the process rather than as an error. */}}
+{{define "content"}}
+{{/* The verdict, felt before it is read: when the update lands the bottom of
+     the screen fills with light, green or red, as though something had been
+     poured into it. A pool across the full width, the two walls it climbs at
+     the edges, and three plumes churning inside it on periods that do not
+     divide into each other, so the surface never visibly repeats. */}}
+<div id="update-glow" class="glow" aria-hidden="true">
+  <span class="glow-pool"></span>
+  <span class="glow-wall glow-wall-l"></span>
+  <span class="glow-wall glow-wall-r"></span>
+  <span class="glow-plume glow-a"></span>
+  <span class="glow-plume glow-b"></span>
+  <span class="glow-plume glow-c"></span>
+</div>
+
+<div id="updating" class="auth updating" data-version="{{.Current}}" data-target="{{.Target}}">
+  {{/* The mark is what carries the outcome: it pulses while the update runs,
+       then blooms out and leaves a tick or a cross in its place. The two
+       outcomes sit in the document from the start, stacked on the logo, so the
+       swap is a crossfade and not a reflow. */}}
+  <div class="auth-mark update-mark" id="update-mark">
+    {{template "logo_mark"}}
+    <svg class="mark outcome outcome-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10"/>
+      <polyline class="stroke-draw" points="7.5 12.5 10.5 15.5 16.5 9"/>
+    </svg>
+    <svg class="mark outcome outcome-err" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10"/>
+      <line class="stroke-draw" x1="15" y1="9" x2="9" y2="15"/>
+      <line class="stroke-draw" x1="9" y1="9" x2="15" y2="15"/>
+    </svg>
+  </div>
+  <h1 class="auth-brand">Updating</h1>
+  <p class="auth-sub"><span class="mono">{{.Current}}</span> → <span class="mono">{{.Target}}</span></p>
+
+  <div class="card auth-card space-y-4">
+    <div>
+      <p id="update-phase" class="text-sm">Starting the update…</p>
+      <div id="update-meter" class="meter is-waiting mt-3"><div class="fill-info" style="width: 100%"></div></div>
+    </div>
+    <ol class="update-steps">
+      <li class="update-step" data-step="pull">
+        <span class="step-mark" aria-hidden="true">
+          <span class="spinner"></span>
+          <span class="step-ok">{{template "icon_check"}}</span>
+          <span class="step-no">{{template "icon_x"}}</span>
+        </span>
+        Download {{.Target}}
+      </li>
+      <li class="update-step" data-step="swap">
+        <span class="step-mark" aria-hidden="true">
+          <span class="spinner"></span>
+          <span class="step-ok">{{template "icon_check"}}</span>
+          <span class="step-no">{{template "icon_x"}}</span>
+        </span>
+        Restart the dashboard
+      </li>
+      <li class="update-step" data-step="back">
+        <span class="step-mark" aria-hidden="true">
+          <span class="spinner"></span>
+          <span class="step-ok">{{template "icon_check"}}</span>
+          <span class="step-no">{{template "icon_x"}}</span>
+        </span>
+        Back online
+      </li>
+    </ol>
+  </div>
+
+  <div id="update-error" class="alert-err mt-4" hidden></div>
+  <a id="update-back" href="/system" class="btn mt-4 w-full justify-center" hidden>Back to System</a>
+
+  <p class="update-note">
+    Your applications keep running throughout. The update carries on even if this page is closed.
+  </p>
+  <noscript>
+    <p class="update-note">The update is running. Reload /system in a minute to see the result.</p>
+  </noscript>
+</div>
+
+<script>
+(function () {
+  var root = document.getElementById('updating');
+  var boot = root.dataset.version;            // the version this page was served by
+  var target = root.dataset.target;
+  var phaseEl = document.getElementById('update-phase');
+  var meter = document.getElementById('update-meter');
+  var bar = meter.firstElementChild;
+  var errEl = document.getElementById('update-error');
+  var backEl = document.getElementById('update-back');
+  var markEl = document.getElementById('update-mark');
+  var glowEl = document.getElementById('update-glow');
+  var steps = {};
+  root.querySelectorAll('[data-step]').forEach(function (el) { steps[el.dataset.step] = el; });
+
+  var deadline = Date.now() + 20 * 60 * 1000;
+  var dropped = false;   // the dashboard has been unreachable at least once
+  var finished = false;
+
+  function stage(pull, swap, back) {
+    var want = { pull: pull, swap: swap, back: back };
+    Object.keys(want).forEach(function (name) {
+      steps[name].classList.toggle('is-active', want[name] === 'active');
+      steps[name].classList.toggle('is-done', want[name] === 'done');
+    });
+  }
+
+  // A percentage the daemon has not reported yet is shown as movement rather
+  // than as an empty bar, which would read as "nothing is happening".
+  function progress(pct) {
+    if (pct > 0) {
+      meter.classList.remove('is-waiting');
+      bar.style.width = Math.min(100, pct) + '%';
+    } else {
+      meter.classList.add('is-waiting');
+      bar.style.width = '100%';
+    }
+  }
+
+  function fail(msg) {
+    finished = true;
+    meter.hidden = true;
+    markEl.classList.add('is-failed');
+    glowEl.classList.add('is-failed');
+    // The step that was running is the step that broke: it takes a cross, and
+    // nothing is left spinning under an error message as though work were
+    // still going on.
+    Object.keys(steps).forEach(function (name) {
+      if (steps[name].classList.contains('is-active')) {
+        steps[name].classList.remove('is-active');
+        steps[name].classList.add('is-failed');
+      }
+    });
+    phaseEl.textContent = 'The update stopped.';
+    errEl.textContent = msg;
+    errEl.hidden = false;
+    backEl.hidden = false;
+  }
+
+  function done(v) {
+    finished = true;
+    stage('done', 'done', 'done');
+    progress(100);
+    markEl.classList.add('is-ok');
+    glowEl.classList.add('is-ok');
+    phaseEl.textContent = 'Now running ' + v + '. Taking you back…';
+    // Long enough for the tick to land and the light to fall back to its low
+    // steady level; short enough that nobody is left on a finished screen.
+    setTimeout(function () {
+      location.replace('/system?msg=' + encodeURIComponent('Dashboard updated to ' + v + '.'));
+    }, 2400);
+  }
+
+  function schedule(ms) {
+    if (finished) return;
+    if (Date.now() > deadline) {
+      fail('The dashboard has not come back within twenty minutes. Check storage/update.log on the server, and whether the quasar-dashboard container is running.');
+      return;
+    }
+    setTimeout(tick, ms);
+  }
+
+  function ask() {
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, 5000);
+    return fetch('/system/update/status', { cache: 'no-store', signal: ctrl.signal })
+      .then(function (res) { clearTimeout(timer); return res; })
+      .catch(function () { clearTimeout(timer); return null; });
+  }
+
+  function tick() {
+    ask().then(function (res) {
+      if (finished) return;
+
+      // Followed a redirect: the session did not survive, so the answer is a
+      // login page rather than a status.
+      if (res && res.redirected) { location.replace(res.url); return; }
+
+      if (!res || !res.ok) {
+        // No answer at all: this container is being replaced right now, or the
+        // proxy has nothing to route to yet. That is the expected middle of an
+        // update, not a failure.
+        dropped = true;
+        stage('done', 'done', 'active');
+        phaseEl.textContent = 'The dashboard is restarting. Waiting for it to answer again…';
+        progress(0);
+        schedule(1500);
+        return;
+      }
+
+      res.json().then(function (s) {
+        if (finished) return;
+
+        // A different version answering can only mean the new container is up.
+        if (s.version && s.version !== boot) { done(s.version); return; }
+
+        if (s.phase === 'failed') {
+          fail(s.error || 'The update did not complete.');
+          return;
+        }
+        // Back from a restart, on the version we started from: the updater put
+        // the old image back because the new one would not stay up.
+        if (dropped && s.phase === '') {
+          fail('The dashboard came back on ' + boot + ', so ' + target + ' did not take — it was rolled back to the version that works. storage/update.log on the server says why.');
+          return;
+        }
+
+        if (s.phase === 'pulling') {
+          stage('active', '', '');
+          progress(s.percent);
+          if (s.detail === 'Extracting') {
+            phaseEl.textContent = 'Unpacking ' + target + '…';
+          } else if (s.percent > 0) {
+            phaseEl.textContent = 'Downloading ' + target + ' — ' + Math.round(s.percent) + '%';
+          } else {
+            phaseEl.textContent = 'Fetching ' + target + '…';
+          }
+        } else if (s.phase === 'handoff') {
+          stage('done', 'active', '');
+          progress(0);
+          phaseEl.textContent = 'Restarting the dashboard on ' + target + '…';
+        }
+        schedule(1200);
+      }, function () {
+        // A 200 that is not the JSON we asked for: something else answered.
+        dropped = true;
+        schedule(1500);
+      });
+    });
+  }
+
+  stage('active', '', '');
+  tick();
+})();
+</script>
+{{end}}

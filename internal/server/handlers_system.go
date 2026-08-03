@@ -19,8 +19,6 @@ import (
 	"quasar/internal/docker"
 	"quasar/internal/offsite"
 	"quasar/internal/secrets"
-	"quasar/internal/updater"
-	"quasar/internal/version"
 	"quasar/internal/vps"
 )
 
@@ -32,22 +30,21 @@ type AppSize struct {
 }
 
 func (s *Server) systemData(r *http.Request) map[string]any {
-	latest := db.GetSetting(s.db, updater.SettingLatestTag)
 	data := map[string]any{
-		"Title":       "System",
-		"Backups":     backup.List(s.cfg.BackupsDir),
-		"AutoOn":      db.GetSetting(s.db, db.SettingBackupAuto) == "true",
-		"Retention":   db.GetSetting(s.db, db.SettingBackupRetention),
-		"Current":     version.Version,
-		"Latest":      latest,
-		"CheckedAt":   db.GetSetting(s.db, updater.SettingCheckedAt),
-		"UpdateAvail": updater.IsNewer(version.Version, latest),
-		"Repo":        s.cfg.GitHubRepo,
-		"Host":        vps.CollectHost(),
-		"Hardware":    vps.CollectHardware(s.cfg.HostRootPath),
-		"Offsite":     offsiteView(s.db),
-		"Engine":      s.dock.EngineInfo(r.Context()),
-		"GoRuntime":   runtime.Version(),
+		"Title":     "System",
+		"Backups":   backup.List(s.cfg.BackupsDir),
+		"AutoOn":    db.GetSetting(s.db, db.SettingBackupAuto) == "true",
+		"Retention": db.GetSetting(s.db, db.SettingBackupRetention),
+		"Host":      vps.CollectHost(),
+		"Hardware":  vps.CollectHardware(s.cfg.HostRootPath),
+		"Offsite":   offsiteView(s.db),
+		"Engine":    s.dock.EngineInfo(r.Context()),
+		"GoRuntime": runtime.Version(),
+	}
+	// The same keys the card is swapped in with after a check, so the page and
+	// the swap cannot drift apart.
+	for k, v := range s.updateCardData() {
+		data[k] = v
 	}
 	_, certsWritable := s.acmePath()
 	data["Certs"] = s.certViews()
@@ -420,38 +417,6 @@ func (s *Server) handleOffsiteTest(w http.ResponseWriter, r *http.Request) {
 		msg = "Offsite test failed: " + err.Error()
 	}
 	http.Redirect(w, r, "/system?msg="+url.QueryEscape(msg), http.StatusSeeOther)
-}
-
-// handleUpdateCheck queries GitHub for the latest release right now.
-func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
-	latest, err := updater.Check(r.Context(), s.db, s.cfg.GitHubRepo)
-	if err != nil {
-		http.Redirect(w, r, "/system?msg=Update check failed: "+err.Error(), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, "/system?msg=Latest release: "+latest, http.StatusSeeOther)
-}
-
-// handleUpdateApply launches the self-update to the latest known release.
-func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
-	latest := db.GetSetting(s.db, updater.SettingLatestTag)
-	if latest == "" {
-		http.Redirect(w, r, "/system?msg=No release known yet — run a check first.", http.StatusSeeOther)
-		return
-	}
-	imageRef := "ghcr.io/" + strings.ToLower(s.cfg.GitHubRepo) + ":" + latest
-	// SelfUpdate pulls the whole image before it can hand off to the updater
-	// container, which takes minutes on a modest VPS with no feedback in the
-	// browser. Detached from the request context so a reload, a closed tab or
-	// an impatient proxy cannot cancel the pull half-way through.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 20*time.Minute)
-	defer cancel()
-	if err := s.dock.SelfUpdate(ctx, imageRef, s.cfg.SocketNetwork); err != nil {
-		http.Error(w, "update failed: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	s.audit(r, "platform.update", latest, imageRef)
-	http.Redirect(w, r, "/system?msg=Update to "+latest+" started — the dashboard will restart in a few seconds.", http.StatusSeeOther)
 }
 
 // getSystemContainer fetches a quasar-* container by name for the read-only

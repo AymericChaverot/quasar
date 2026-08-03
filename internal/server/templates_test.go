@@ -34,7 +34,7 @@ func composeRouteView(base AppView, adaptation docker.ComposeAdaptation) AppView
 
 func TestParseTemplates(t *testing.T) {
 	s := testServer(t)
-	for _, p := range []string{"login", "dashboard", "app_new", "app_detail", "settings", "system", "twofa", "terminal", "git_credentials"} {
+	for _, p := range []string{"login", "dashboard", "app_new", "app_detail", "settings", "system", "twofa", "terminal", "git_credentials", "updating"} {
 		if s.pages[p] == nil {
 			t.Errorf("missing page template %q", p)
 		}
@@ -79,6 +79,7 @@ func TestExecuteTemplates(t *testing.T) {
 		data any
 	}{
 		{"login", map[string]any{"Title": "Sign in", "HideNav": true, "Error": "bad"}},
+		{"updating", map[string]any{"Title": "Updating", "HideNav": true, "Current": "v1.0.0", "Target": "v1.1.0"}},
 		{"twofa", map[string]any{"Title": "2FA", "HideNav": true, "Error": "bad code"}},
 		{"dashboard", map[string]any{"Title": "Dashboard", "Domain": "example.com"}},
 		{"app_new", map[string]any{"Title": "New", "Domain": "example.com", "Catalog": catalog.Templates, "Form": app.App}},
@@ -217,6 +218,19 @@ func TestExecuteTemplates(t *testing.T) {
 		name string
 		data any
 	}{
+		// The card on its own, as a check swaps it in: an update waiting to be
+		// installed, and the same card reporting that a check found nothing.
+		{"update_card", map[string]any{
+			"Current": "v1.0.0", "Latest": "v1.1.0", "UpdateAvail": true, "IsAdmin": true,
+			"Repo": "AymericChaverot/quasar", "CheckedAt": "just now", "Checked": "v1.1.0 is available.",
+		}},
+		{"update_card", map[string]any{
+			"Current": "v1.1.0", "Latest": "v1.1.0", "IsAdmin": true,
+			"Repo": "AymericChaverot/quasar", "CheckedAt": "2 min ago",
+			"CheckError": "Update check failed: github api: 403 rate limit exceeded",
+		}},
+		// A viewer's copy: no buttons, and no check has ever run.
+		{"update_card", map[string]any{"Current": "v1.1.0", "Repo": "AymericChaverot/quasar"}},
 		{"system_stats", vps.Stats{CPUPercent: 42.5, MemPercent: 61, MemUsedGB: 1.2, MemTotalGB: 2, DiskPercent: 90, DiskUsedGB: 18, DiskTotalGB: 20}},
 		// Both build badges, plus the rows that carry none: an image app and a
 		// git app whose repository is not on disk yet.

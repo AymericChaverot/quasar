@@ -151,7 +151,7 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 		// succeed and reports a bad tag or a rejected credential inside the
 		// stream, so draining it without reading is how a deploy ended up
 		// failing later with a confusing "No such image".
-		if err := drainPull(rc); err != nil {
+		if err := drainPull(rc, nil); err != nil {
 			return fmt.Errorf("pull %s: %w", imageRef, err)
 		}
 	}

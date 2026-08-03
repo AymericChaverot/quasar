@@ -1285,6 +1285,356 @@ input[type="checkbox"]:focus-visible {
   backdrop-filter: blur(12px);
 }
 
+/* --- Work in flight -------------------------------------------------------- */
+
+/* A control that has fired a request and is waiting on the answer. The spinner
+   takes the icon's place rather than being added beside it, so the button keeps
+   its width and its label stays where it was. htmx puts .htmx-request on
+   whatever hx-indicator names — here, the button itself. */
+.spinner {
+  display: inline-block;
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-badge);
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  animation: spin 620ms linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.btn .spinner,
+.btn-primary .spinner,
+.btn-danger .spinner { display: none; }
+
+.btn.htmx-request .spinner,
+.btn-primary.htmx-request .spinner,
+.btn-danger.htmx-request .spinner { display: inline-block; }
+
+.btn.htmx-request .ico,
+.btn-primary.htmx-request .ico,
+.btn-danger.htmx-request .ico { display: none; }
+
+/* A button htmx has disabled for the duration of its request must stop looking
+   pressable, or the second click that does nothing reads as the interface
+   ignoring it. */
+button[disabled] { cursor: progress; opacity: 0.65; }
+.btn[disabled]:hover,
+.btn-danger[disabled]:hover { background: transparent; }
+.btn-primary[disabled]:hover { background: var(--accent); border-color: var(--accent); }
+
+/* --- Update in progress ---------------------------------------------------- */
+
+/* Borrows the sign-in column, one step wider: the lines here are sentences
+   about what is happening rather than field labels. */
+.updating { max-width: 26rem; }
+
+/* The mark is the only thing on the screen that cannot report a percentage, so
+   it carries the fact that the process is alive — and, at the end, how it went.
+   The three marks are stacked in one fixed box rather than swapped in the DOM,
+   so the outcome crossfades in place instead of the page jumping. */
+.update-mark {
+  position: relative;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: 0 auto 1.5rem;
+}
+.update-mark .mark {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transition: opacity 300ms ease, transform 300ms cubic-bezier(0.2, 0.9, 0.3, 1.5);
+}
+.update-mark > .mark:not(.outcome) { animation: pulse 1.8s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.5; } }
+
+/* Waiting in place, at nothing, until one of them is called for. */
+.update-mark .outcome {
+  opacity: 0;
+  transform: scale(0.55);
+}
+/* Scoped past .auth-mark .mark, which paints every mark in the text colour. */
+.update-mark .outcome-ok { color: var(--ok); }
+.update-mark .outcome-err { color: var(--err); }
+
+/* The logo blooms out of the way as the outcome comes in. */
+.update-mark.is-ok > .mark:not(.outcome),
+.update-mark.is-failed > .mark:not(.outcome) {
+  animation: none;
+  opacity: 0;
+  transform: scale(1.5);
+}
+.update-mark.is-ok .outcome-ok,
+.update-mark.is-failed .outcome-err {
+  opacity: 1;
+  transform: scale(1);
+  filter: drop-shadow(0 0 10px color-mix(in srgb, currentColor 35%, transparent));
+}
+
+/* The tick and the cross are drawn rather than revealed: a stroke that arrives
+   over a fifth of a second reads as a verdict being delivered. */
+.update-mark.is-ok .outcome-ok .stroke-draw,
+.update-mark.is-failed .outcome-err .stroke-draw {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: stroke-draw 260ms 180ms ease forwards;
+}
+.update-mark.is-failed .outcome-err .stroke-draw:last-child { animation-delay: 300ms; }
+@keyframes stroke-draw { to { stroke-dashoffset: 0; } }
+
+.update-steps {
+  display: grid;
+  gap: 0.625rem;
+  border-top: var(--border-w) solid var(--border);
+  padding-top: 1rem;
+}
+
+.update-step {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.875rem;
+  color: var(--text-faint);
+}
+.update-step.is-active { color: var(--text); }
+.update-step.is-done { color: var(--text-muted); }
+.update-step.is-failed { color: var(--err); }
+
+/* Empty while the step is still ahead, spinning while it runs, ticked once it
+   is behind, crossed out where it broke: one mark in four states, so no row
+   moves as they advance. */
+.step-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+  border: var(--border-w) solid var(--border-strong);
+  border-radius: var(--radius-badge);
+  color: var(--ok);
+}
+.step-mark .spinner,
+.step-mark .step-ok,
+.step-mark .step-no { display: none; }
+.step-mark .ico {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+.update-step.is-active .step-mark { border-color: transparent; color: var(--accent); }
+.update-step.is-active .step-mark .spinner { display: inline-block; }
+.update-step.is-done .step-mark { border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+.update-step.is-done .step-mark .step-ok { display: block; }
+.update-step.is-failed .step-mark {
+  border-color: color-mix(in srgb, var(--err) 50%, transparent);
+  color: var(--err);
+}
+.update-step.is-failed .step-mark .step-no { display: block; }
+
+/* Nothing to measure yet: the transfer has not been announced, or the container
+   is being replaced and cannot be asked. The bar fills the track and its stripe
+   drifts, so the wait reads as work rather than as a stall. */
+.meter.is-waiting > div {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--info) 85%, transparent) 0 0.375rem,
+    color-mix(in srgb, var(--info) 35%, transparent) 0.375rem 0.75rem
+  );
+  background-size: 1.0607rem 100%; /* 0.75rem × √2: one period of a 45° stripe */
+  animation: drift 700ms linear infinite;
+}
+@keyframes drift { to { background-position: 1.0607rem 0; } }
+
+/* Percentages arrive about once a second; without this the bar steps. */
+.meter > div { transition: width 250ms ease; }
+
+/* The light that answers the update. It is off until the outcome is known,
+   then fills the bottom of the screen and falls back to a level it holds: the
+   surge is the announcement, what stays is the state.
+
+   It is built like liquid in a vessel rather than as a bar of colour. A pool
+   lying across the full width, two walls it climbs at the left and right edges
+   the way a meniscus does, and three plumes turning over inside it. Every
+   layer moves on its own period — 7s, 9s, 11s, 12.5s, 13s, which share no
+   common multiple worth waiting for — so the surface never settles into a loop
+   the eye can follow. Fixed and pointer-transparent, below every card, which is
+   opaque and keeps the text over it readable. */
+.glow {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: -1;
+  height: 58vh;
+  pointer-events: none;
+  opacity: 0;
+  color: transparent;
+}
+.glow.is-ok { color: var(--ok); }
+.glow.is-failed { color: var(--err); }
+.glow.is-ok,
+.glow.is-failed { animation: glow-flare 2.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+/* Poured in, not faded in: it surges past its level, drops most of the way
+   back inside half a second, then settles the rest of the way slowly. */
+@keyframes glow-flare {
+  0%   { opacity: 0;    transform: translateY(26%); }
+  7%   { opacity: 1;    transform: translateY(-7%); }
+  22%  { opacity: 0.76; transform: translateY(3%); }
+  45%  { opacity: 0.52; transform: translateY(-1%); }
+  100% { opacity: 0.42; transform: translateY(0); }
+}
+
+/* The body of it, lying flat across the whole width. */
+.glow-pool {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 30vh;
+  transform-origin: bottom;
+  background: linear-gradient(to top,
+    color-mix(in srgb, currentColor 62%, transparent),
+    color-mix(in srgb, currentColor 20%, transparent) 52%,
+    transparent 100%);
+  filter: blur(22px);
+  animation: pool-level 11s ease-in-out infinite;
+}
+@keyframes pool-level {
+  0%, 100% { transform: scaleY(1); }
+  50%      { transform: scaleY(1.14); }
+}
+
+/* Where the liquid meets the sides of the screen it rides up them, which is
+   what makes the surface read as curved rather than as a straight edge. The
+   source of each is off-screen past the corner, so only the climb shows. */
+.glow-wall {
+  position: absolute;
+  bottom: 0;
+  width: 30%;
+  height: 100%;
+  transform-origin: bottom;
+  filter: blur(26px);
+}
+.glow-wall-l {
+  left: 0;
+  background: radial-gradient(74% 128% at 0% 100%,
+    color-mix(in srgb, currentColor 72%, transparent),
+    color-mix(in srgb, currentColor 22%, transparent) 46%,
+    transparent 74%);
+  animation: wall-l 9s ease-in-out infinite;
+}
+.glow-wall-r {
+  right: 0;
+  background: radial-gradient(74% 128% at 100% 100%,
+    color-mix(in srgb, currentColor 72%, transparent),
+    color-mix(in srgb, currentColor 22%, transparent) 46%,
+    transparent 74%);
+  animation: wall-r 12.5s ease-in-out infinite;
+}
+@keyframes wall-l {
+  0%, 100% { transform: scaleY(1) translateX(0); }
+  45%      { transform: scaleY(1.16) translateX(2%); }
+}
+@keyframes wall-r {
+  0%, 100% { transform: scaleY(1.08) translateX(0); }
+  55%      { transform: scaleY(0.92) translateX(-2%); }
+}
+
+/* What is turning over inside the pool. Anchored below the edge of the screen
+   so what shows is the light thrown up, never the shape making it. */
+.glow-plume {
+  position: absolute;
+  bottom: -20vh;
+  border-radius: 50%;
+  background: radial-gradient(closest-side,
+    color-mix(in srgb, currentColor 62%, transparent),
+    color-mix(in srgb, currentColor 18%, transparent) 62%,
+    transparent 100%);
+  filter: blur(46px);
+}
+
+.glow-a {
+  left: 4%;
+  width: 40%;
+  height: 52vh;
+  animation: plume-a 9s ease-in-out infinite;
+}
+.glow-b {
+  left: 32%;
+  width: 36%;
+  height: 62vh;
+  animation: plume-b 13s ease-in-out infinite;
+}
+.glow-c {
+  right: 2%;
+  width: 38%;
+  height: 46vh;
+  animation: plume-c 7s ease-in-out infinite;
+}
+
+/* Each leans, swells and dips on its own, and none returns to where it started
+   at the same moment as another. */
+@keyframes plume-a {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.85; }
+  40%      { transform: translate(7%, -5%) scale(1.16); opacity: 1; }
+  70%      { transform: translate(-5%, 3%) scale(0.92); opacity: 0.65; }
+}
+@keyframes plume-b {
+  0%, 100% { transform: translate(0, 2%) scale(1.05); opacity: 0.7; }
+  35%      { transform: translate(-9%, 3%) scale(0.88); opacity: 0.95; }
+  65%      { transform: translate(6%, -6%) scale(1.22); opacity: 0.8; }
+}
+@keyframes plume-c {
+  0%, 100% { transform: translate(0, 0) scale(0.96); opacity: 0.9; }
+  50%      { transform: translate(-6%, -4%) scale(1.18); opacity: 0.6; }
+}
+
+/* A light theme has no darkness for light to show up against: the same layers
+   read as a wash of colour instead, so they are kept weaker there. */
+[data-theme="paper"] .glow-plume,
+[data-theme="solarized"] .glow-plume,
+[data-theme="nord"] .glow-plume {
+  background: radial-gradient(closest-side,
+    color-mix(in srgb, currentColor 34%, transparent),
+    color-mix(in srgb, currentColor 10%, transparent) 62%,
+    transparent 100%);
+}
+[data-theme="paper"] .glow-pool,
+[data-theme="solarized"] .glow-pool,
+[data-theme="nord"] .glow-pool {
+  background: linear-gradient(to top,
+    color-mix(in srgb, currentColor 34%, transparent),
+    color-mix(in srgb, currentColor 11%, transparent) 52%,
+    transparent 100%);
+}
+[data-theme="paper"] .glow-wall-l,
+[data-theme="solarized"] .glow-wall-l,
+[data-theme="nord"] .glow-wall-l {
+  background: radial-gradient(58% 88% at 0% 100%,
+    color-mix(in srgb, currentColor 34%, transparent),
+    color-mix(in srgb, currentColor 9%, transparent) 52%,
+    transparent 76%);
+}
+[data-theme="paper"] .glow-wall-r,
+[data-theme="solarized"] .glow-wall-r,
+[data-theme="nord"] .glow-wall-r {
+  background: radial-gradient(58% 88% at 100% 100%,
+    color-mix(in srgb, currentColor 34%, transparent),
+    color-mix(in srgb, currentColor 9%, transparent) 52%,
+    transparent 76%);
+}
+
+.update-note {
+  margin-top: 1.5rem;
+  text-align: center;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
 /* --- Motion ---------------------------------------------------------------- */
 
 /* Short enough to feel like the control responding rather than an animation

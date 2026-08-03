@@ -45,6 +45,11 @@ type Server struct {
 	// edgeAttempts caps how fast one address may guess at one application's
 	// password on the public login page.
 	edgeAttempts *edgeThrottle
+
+	// update is the self-update in flight, if any: the pull runs detached from
+	// the request that asked for it, and this is where the page waiting on it
+	// reads how far it has got.
+	update updateRun
 }
 
 func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) (*Server, error) {
@@ -257,6 +262,10 @@ func (s *Server) routes() {
 	s.admin("POST /system/certs/{domain}/delete", s.handleCertDelete)
 	s.admin("POST /system/update/check", s.handleUpdateCheck)
 	s.admin("POST /system/update/apply", s.handleUpdateApply)
+	// The page that waits out an update, and what it polls. Admin-only like the
+	// update itself: nobody else can start one, so nobody else is waiting.
+	s.admin("GET /system/updating", s.handleUpdating)
+	s.admin("GET /system/update/status", s.handleUpdateStatus)
 
 	s.viewer("GET /apps/{id}", s.handleAppDetail)
 	s.viewer("GET /apps/{id}/logs", s.handleAppLogs)
