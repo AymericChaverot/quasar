@@ -41,11 +41,14 @@ type Client struct {
 	askPassPath string
 	askPassErr  error
 
-	mu      sync.Mutex
-	deploys map[string]*DeployState // app ID -> in-flight/last deploy state
+	mu   sync.Mutex
+	runs map[string]*deployRun // app ID -> in-flight/last deploy
 }
 
-// DeployState tracks an asynchronous deploy so the UI can show progress.
+// DeployState is the part of a deploy the status panel and the API care about:
+// whether one is running, and what the last one ended as. Everything else it
+// recorded — the output, the step, the percentage — is read through
+// WatchDeploy.
 type DeployState struct {
 	Running bool
 	Err     string
@@ -65,7 +68,7 @@ func New(cfg config.Config, database *sql.DB, keyring *secrets.Keyring) (*Client
 		socketNet:   cfg.SocketNetwork,
 		appsDir:     cfg.AppsDir,
 		edgeAuthURL: cfg.EdgeAuthURL,
-		deploys:     map[string]*DeployState{},
+		runs:        map[string]*deployRun{},
 	}, nil
 }
 
@@ -280,21 +283,26 @@ func refRegistry(ref string) string {
 	return "docker.io"
 }
 
-func (c *Client) setDeploy(appID string, running bool, errMsg string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.deploys[appID] = &DeployState{Running: running, Err: errMsg}
-}
-
-// Deploying returns the deploy state for an app (nil if never deployed this boot).
+// Deploying returns the deploy state for an app (nil if never deployed this
+// boot). A record exists as soon as anything watches the app, so what answers
+// "never deployed" is the generation rather than the record's absence.
 func (c *Client) Deploying(appID string) *DeployState {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.deploys[appID]
+	r := c.runs[appID]
+	c.mu.Unlock()
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.gen == 0 {
+		return nil
+	}
+	return &DeployState{Running: r.running, Err: r.err}
 }
 
 func (c *Client) forgetDeploy(appID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	delete(c.deploys, appID)
+	delete(c.runs, appID)
 }

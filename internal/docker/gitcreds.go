@@ -42,13 +42,17 @@ func (c *Client) askPassHelper() (string, error) {
 	return c.askPassPath, c.askPassErr
 }
 
-// gitRun runs a git command that may need to authenticate against repoURL.
+// gitErrLines is how much of a failed git command's output is quoted back.
+const gitErrLines = 20
+
+// gitRun runs a git command that may need to authenticate against repoURL,
+// passing each line it prints to out as it arrives (out may be nil).
 //
 // Credentials are resolved from the URL's host and handed over through the
 // environment; the arguments carry the URL exactly as the operator wrote it.
 // Terminal prompting is off, so a rejected token fails immediately instead of
 // blocking on a username nobody is there to type.
-func (c *Client) gitRun(ctx context.Context, repoURL string, args ...string) error {
+func (c *Client) gitRun(ctx context.Context, out func(string), repoURL string, args ...string) error {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	env, cred, err := c.gitEnv(repoURL)
 	if err != nil {
@@ -56,8 +60,12 @@ func (c *Client) gitRun(ctx context.Context, repoURL string, args ...string) err
 	}
 	cmd.Env = env
 
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git: %s: %w", redactURLs(strings.TrimSpace(string(out))), err)
+	sink := &lineSink{emit: out, keep: gitErrLines}
+	cmd.Stdout, cmd.Stderr = sink, sink
+	err = cmd.Run()
+	sink.flush()
+	if err != nil {
+		return fmt.Errorf("git: %s: %w", redactURLs(sink.text()), err)
 	}
 	if cred != nil {
 		// Recorded only on success, so "last used" means the token worked.
@@ -133,7 +141,7 @@ func (c *Client) CheckGitAccess(ctx context.Context, repoURL string) (string, er
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if err := c.gitRun(ctx, repoURL, "ls-remote", "--heads", repoURL); err != nil {
+	if err := c.gitRun(ctx, nil, repoURL, "ls-remote", "--heads", repoURL); err != nil {
 		return "", fmt.Errorf("%s", firstLine(err.Error()))
 	}
 	if cred == nil {

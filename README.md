@@ -139,6 +139,11 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
   déclenche pull + rebuild + redeploy (comme *Update*).
 - **Historique + rollback** : journal des déploiements (source, image, durée,
   résultat), rétention des 4 dernières images buildées, rollback en un clic.
+- **Deploy en direct** : sur la page de l'app, la sortie du clone, du build et
+  de `docker compose` défile pendant le déploiement (SSE), avec une barre de
+  progression par étape — pull, build, démarrage, health check. Le panneau
+  reste après coup : c'est là qu'on lit pourquoi un build a échoué. Réservé aux
+  admins, la sortie d'un build recrachant volontiers des secrets.
 - **Limites ressources** : CPU / RAM max par app (cgroups).
 - **Variables d'environnement** : éditeur intégré, écrites en base et dans
   `apps/<id>/.env`.

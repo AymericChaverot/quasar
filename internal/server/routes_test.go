@@ -30,6 +30,7 @@ var privilegedReads = []string{
 	"GET /apps/{id}/terminal",    // root shell in a container
 	"GET /apps/{id}/terminal/ws", //
 	"GET /apps/new",              // leads only to a mutation
+	"GET /apps/{id}/deploy-log",  // build output, which echoes build args and env
 }
 
 // newTestServer registers the real route table so the guards map reflects

@@ -282,6 +282,10 @@ func (s *Server) routes() {
 	s.admin("POST /apps/{id}/redeploy", s.handleAppRedeploy)
 	s.admin("POST /apps/{id}/update", s.handleAppUpdate)
 	s.admin("POST /apps/{id}/rollback", s.handleAppRollback)
+	// The build's own output, which carries whatever the Dockerfile echoed and
+	// whatever compose interpolated — admin-only for the same reason the
+	// environment editor on the same page is.
+	s.admin("GET /apps/{id}/deploy-log", s.handleAppDeployLog)
 	s.admin("POST /apps/{id}/delete", s.handleAppDelete)
 	s.admin("POST /apps/{id}/env", s.handleAppEnvSave)
 	s.admin("POST /apps/{id}/domains", s.handleAppDomains)

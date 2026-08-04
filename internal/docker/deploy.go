@@ -49,7 +49,7 @@ var readyClient = &http.Client{Timeout: 5 * time.Second}
 // It runs in the background, is recorded in the deployment history and
 // notifies on failure. The UI polls Deploying().
 func (c *Client) DeployAsync(a *db.App, source string) {
-	c.runAsync(a, source, func(ctx context.Context) (string, error) {
+	c.runAsync(a, source, c.deployPlanFor(a), func(ctx context.Context) (string, error) {
 		return c.deploy(ctx, a, false)
 	})
 }
@@ -58,14 +58,14 @@ func (c *Client) DeployAsync(a *db.App, source string) {
 // image pull, a compose pull — and then deploys it. This is the one that
 // changes what the app runs.
 func (c *Client) UpdateAsync(a *db.App, source string) {
-	c.runAsync(a, source, func(ctx context.Context) (string, error) {
+	c.runAsync(a, source, c.deployPlanFor(a), func(ctx context.Context) (string, error) {
 		return c.deploy(ctx, a, true)
 	})
 }
 
 // RollbackAsync redeploys a previously used image tag.
 func (c *Client) RollbackAsync(a *db.App, tag string) {
-	c.runAsync(a, "rollback", func(ctx context.Context) (string, error) {
+	c.runAsync(a, "rollback", imagePlan, func(ctx context.Context) (string, error) {
 		if err := c.EnsureAppDirs(a); err != nil {
 			return tag, err
 		}
@@ -75,10 +75,60 @@ func (c *Client) RollbackAsync(a *db.App, tag string) {
 	})
 }
 
-func (c *Client) runAsync(a *db.App, source string, fn func(ctx context.Context) (string, error)) {
+// The steps each kind of deploy runs, and what each is worth on the progress
+// bar. A stack has no health check to wait on — Quasar does not know which of
+// its containers is the app — so what a single container spends waiting to
+// serve, a stack spends being brought up.
+var (
+	imagePlan = []deployPhase{
+		{phaseFetch, "Pulling the image", 45},
+		{phaseStart, "Starting the container", 30},
+		{phaseHealth, "Waiting for it to serve", 25},
+	}
+	gitImagePlan = []deployPhase{
+		{phaseFetch, "Fetching the repository", 12},
+		{phaseBuild, "Building the image", 48},
+		{phaseStart, "Starting the container", 20},
+		{phaseHealth, "Waiting for it to serve", 20},
+	}
+	gitStackPlan = []deployPhase{
+		{phaseFetch, "Fetching the repository", 12},
+		{phaseBuild, "Building the stack", 53},
+		{phaseStart, "Starting the stack", 35},
+	}
+	composePlan = []deployPhase{
+		{phaseFetch, "Pulling images", 25},
+		{phaseBuild, "Building the stack", 40},
+		{phaseStart, "Starting the stack", 35},
+	}
+)
+
+// deployPlanFor is the sequence of steps a deploy of this app will run.
+//
+// A git app with nothing checked out yet cannot say which of the two it is, and
+// is planned as the single-container build: it is the commoner shape, and being
+// wrong costs a bar that finishes a step early rather than one that lies about
+// having more to do.
+func (c *Client) deployPlanFor(a *db.App) []deployPhase {
+	switch {
+	case a.DeployType == "compose":
+		return composePlan
+	case a.DeployType != "git":
+		return imagePlan
+	case c.GitBuildFor(a).Mode == db.GitBuildCompose:
+		return gitStackPlan
+	default:
+		return gitImagePlan
+	}
+}
+
+func (c *Client) runAsync(a *db.App, source string, plan []deployPhase, fn func(ctx context.Context) (string, error)) {
 	depID := db.StartDeployment(c.dbc, a.ID, source)
-	c.setDeploy(a.ID, true, "")
+	run := c.deployRunFor(a.ID)
+	run.start(plan)
+	c.note(a.ID, "%s: %s", a.Name, source)
 	go func() {
+		started := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), deployTimeout)
 		defer cancel()
 		tag, err := fn(ctx)
@@ -86,11 +136,13 @@ func (c *Client) runAsync(a *db.App, source string, fn func(ctx context.Context)
 			log.Printf("deploy %s (%s): %v", a.Name, a.ID, err)
 			db.FinishDeployment(c.dbc, depID, "failed", err.Error(), tag)
 			notify.Send(c.dbc, fmt.Sprintf("Quasar: deploy failed for %s (%s): %v", a.Name, a.Subdomain, err))
-			c.setDeploy(a.ID, false, err.Error())
+			c.note(a.ID, "deploy failed after %s: %v", time.Since(started).Round(time.Second), err)
+			run.finish(err.Error())
 			return
 		}
 		db.FinishDeployment(c.dbc, depID, "success", "", tag)
-		c.setDeploy(a.ID, false, "")
+		c.note(a.ID, "deployed in %s", time.Since(started).Round(time.Second))
+		run.finish("")
 	}()
 }
 
@@ -110,6 +162,25 @@ func (c *Client) deploy(ctx context.Context, a *db.App, fetch bool) (string, err
 		return "", c.deployCompose(ctx, a, fetch)
 	default:
 		return "", fmt.Errorf("unknown deploy type %q", a.DeployType)
+	}
+}
+
+// pullReporter turns an image pull's progress into the deploy's bar.
+//
+// The daemon reports several times a second and the pane would be unreadable
+// with a line each, so only the change from downloading to unpacking is written
+// down; the rest of what it says is the percentage, which belongs on the bar
+// and not in the log.
+func (c *Client) pullReporter(appID string) func(PullStatus) {
+	said := ""
+	return func(p PullStatus) {
+		if p.Total > 0 {
+			c.progress(appID, float64(p.Current)/float64(p.Total))
+		}
+		if p.Phase != "" && p.Phase != said {
+			said = p.Phase
+			c.note(appID, "%s layers…", strings.ToLower(p.Phase))
+		}
 	}
 }
 
@@ -143,6 +214,8 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 		}
 	}
 	if pull {
+		c.stage(a.ID, phaseFetch)
+		c.note(a.ID, "pulling %s", imageRef)
 		rc, err := c.api.ImagePull(ctx, imageRef, image.PullOptions{RegistryAuth: c.registryAuth(imageRef)})
 		if err != nil {
 			return fmt.Errorf("pull %s: %w", imageRef, err)
@@ -151,11 +224,12 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 		// succeed and reports a bad tag or a rejected credential inside the
 		// stream, so draining it without reading is how a deploy ended up
 		// failing later with a confusing "No such image".
-		if err := drainPull(rc, nil); err != nil {
+		if err := drainPull(rc, c.pullReporter(a.ID)); err != nil {
 			return fmt.Errorf("pull %s: %w", imageRef, err)
 		}
 	}
 
+	c.stage(a.ID, phaseStart)
 	previous := c.appContainers(ctx, a.ID)
 
 	// Two containers writing one data directory at the same time can corrupt
@@ -221,6 +295,7 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 		rollback()
 		return fmt.Errorf("start container: %w", err)
 	}
+	c.note(a.ID, "started %s from %s", name, imageRef)
 	if err := c.waitServing(ctx, a, name, created.ID); err != nil {
 		c.removeContainer(context.WithoutCancel(ctx), created.ID)
 		rollback()
@@ -233,7 +308,18 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 	for _, ct := range previous {
 		c.removeContainer(done, ct.ID)
 	}
+	if len(previous) > 0 {
+		c.note(a.ID, "retired %d %s", len(previous), plural(len(previous), "container", "containers"))
+	}
 	return nil
+}
+
+// plural picks the word that agrees with a count.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // waitServing blocks until a freshly started container is actually serving, so
@@ -249,9 +335,27 @@ func (c *Client) waitServing(ctx context.Context, a *db.App, name, id string) er
 		probeURL = fmt.Sprintf("http://%s:%d%s", name, a.Port, a.HealthPath)
 	}
 
-	deadline := time.Now().Add(readyTimeout)
+	c.stage(a.ID, phaseHealth)
+	if probeURL == "" {
+		c.note(a.ID, "watching it stay up for %s", settleDelay)
+	} else {
+		c.note(a.ID, "probing %s until it answers", a.HealthPath)
+	}
+
+	// Nothing here knows how long the app needs, only how long it is allowed, so
+	// the step is measured against the deadline it is actually held to: the
+	// settle delay when that is all there is to wait out, the probe timeout when
+	// the app has a health path to answer on.
+	budget := readyTimeout
+	if probeURL == "" {
+		budget = settleDelay
+	}
+
+	start := time.Now()
+	deadline := start.Add(readyTimeout)
 	var lastErr error
 	for {
+		c.progress(a.ID, time.Since(start).Seconds()/budget.Seconds())
 		info, err := c.api.ContainerInspect(ctx, id)
 		if err != nil {
 			return fmt.Errorf("inspect new container: %w", err)
@@ -306,6 +410,7 @@ func probeOnce(url string) error {
 // without re-cloning.
 func (c *Client) syncSource(ctx context.Context, a *db.App, pull bool) (string, error) {
 	src := c.sourceDir(a.ID)
+	c.stage(a.ID, phaseFetch)
 
 	var args []string
 	switch _, err := os.Stat(filepath.Join(src, ".git")); {
@@ -318,14 +423,18 @@ func (c *Client) syncSource(ctx context.Context, a *db.App, pull bool) (string, 
 			args = append(args, "--branch", a.GitBranch)
 		}
 		args = append(args, a.GitURL, src)
+		c.note(a.ID, "cloning %s (%s)", a.GitURL, a.GitBranch)
 	case pull:
 		args = []string{"-C", src, "pull", "--ff-only"}
+		c.note(a.ID, "pulling %s", a.GitBranch)
 	default:
+		c.note(a.ID, "building the commit already checked out")
 		return src, nil // rebuild the commit already there
 	}
-	if err := c.gitRun(ctx, a.GitURL, args...); err != nil {
+	if err := c.gitRun(ctx, func(line string) { c.output(a.ID, line) }, a.GitURL, args...); err != nil {
 		return "", err
 	}
+	c.note(a.ID, "at %s", headCommit(ctx, src))
 	c.dropStoredCredential(ctx, src, a.GitURL)
 	return src, nil
 }
@@ -421,6 +530,17 @@ func (c *Client) writeSourceEnv(ctx context.Context, src string, a *db.App) erro
 	return os.WriteFile(filepath.Join(src, ".env"), []byte(a.EnvContent+"\n"), 0o600)
 }
 
+// headCommit describes the commit a checkout sits on, for the deploy log. A
+// checkout that will not answer is not worth failing a deploy over, so this
+// says so and lets the build go ahead.
+func headCommit(ctx context.Context, src string) string {
+	out, err := exec.CommandContext(ctx, "git", "-C", src, "log", "-1", "--format=%h %s").Output()
+	if err != nil {
+		return "an unknown commit"
+	}
+	return strings.TrimSpace(string(out))
+}
+
 // gitTracks reports whether a checkout has the given path under version
 // control (as opposed to it being absent, or present but untracked).
 func gitTracks(ctx context.Context, src, path string) bool {
@@ -437,11 +557,18 @@ func (c *Client) buildImage(ctx context.Context, a *db.App, src string) (string,
 	}
 	defer buildCtx.Close()
 
+	c.stage(a.ID, phaseBuild)
 	tag := fmt.Sprintf("%s:%d", buildTagPrefix(a.ID), time.Now().Unix())
+	c.note(a.ID, "building %s from the Dockerfile", tag)
 	resp, err := c.api.ImageBuild(ctx, buildCtx, types.ImageBuildOptions{
 		Tags:       []string{tag},
 		Dockerfile: "Dockerfile",
 		Remove:     true,
+		// Pinned rather than left to the daemon, because this is what makes the
+		// output readable: the classic builder narrates itself in "Step 3/12"
+		// lines, which is both what reaches the pane and what moves the bar.
+		// BuildKit answers the same request with a binary trace instead.
+		Version: types.BuilderV1,
 	})
 	if err != nil {
 		return "", fmt.Errorf("build: %w", err)
@@ -449,7 +576,8 @@ func (c *Client) buildImage(ctx context.Context, a *db.App, src string) (string,
 	defer resp.Body.Close()
 	// The build only actually runs while the response stream is consumed;
 	// scan it for an error message as we drain.
-	if err := drainBuildOutput(resp.Body); err != nil {
+	if err := drainBuildOutput(resp.Body, func(line string) { c.output(a.ID, line) },
+		func(frac float64) { c.progress(a.ID, frac) }); err != nil {
 		return "", err
 	}
 	return tag, nil
@@ -517,12 +645,16 @@ func (c *Client) composeUp(ctx context.Context, a *db.App, pull bool) error {
 		return err
 	}
 	if pull {
+		c.stage(a.ID, phaseFetch)
+		c.note(a.ID, "pulling the stack's images")
 		// --ignore-buildable: a service with a build context has no image to
 		// pull, and its absence from the registry is not an error.
 		if err := c.compose(ctx, a, "pull", "--ignore-buildable"); err != nil {
 			return err
 		}
 	}
+	c.stage(a.ID, phaseBuild)
+	c.note(a.ID, "bringing the stack up")
 	return c.compose(ctx, a, "up", "-d", "--build", "--remove-orphans")
 }
 
@@ -545,16 +677,42 @@ func (c *Client) composeCmd(ctx context.Context, a *db.App, args ...string) (*ex
 	return cmd, nil
 }
 
-// compose runs `docker compose` for an app.
+// compose runs `docker compose` for an app, streaming its output into the
+// deploy log line by line. A stack build is the longest thing Quasar does and
+// the one with the most to say while it does it, so it is watched as it runs
+// rather than reported once it is over.
 func (c *Client) compose(ctx context.Context, a *db.App, args ...string) error {
 	cmd, err := c.composeCmd(ctx, a, args...)
 	if err != nil {
 		return err
 	}
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("docker compose %s: %s: %w", args[0], composeTail(out), err)
+	sink := &lineSink{emit: c.composeWatcher(a.ID), keep: composeErrLines}
+	// The same sink for both, which is also what has os/exec give the command a
+	// single pipe: interleaved as the operator would see them in a terminal, and
+	// with no two goroutines writing to it.
+	cmd.Stdout, cmd.Stderr = sink, sink
+	err = cmd.Run()
+	sink.flush()
+	if err != nil {
+		return fmt.Errorf("docker compose %s: %s: %w", args[0], sink.text(), err)
 	}
 	return nil
+}
+
+// composeWatcher reads a compose command's output for the two things the
+// progress bar can take from it: how far into a build stage it is, and the
+// moment it stops building and starts putting containers up.
+func (c *Client) composeWatcher(appID string) func(string) {
+	return func(line string) {
+		c.output(appID, line)
+		if composeStarting.MatchString(line) {
+			c.stage(appID, phaseStart)
+			return
+		}
+		if frac, ok := buildLineFrac(line); ok {
+			c.progress(appID, frac)
+		}
+	}
 }
 
 // composeOutput runs `docker compose` and returns its stdout alone, keeping

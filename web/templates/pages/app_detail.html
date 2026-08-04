@@ -25,6 +25,10 @@
   {{template "app_status_panel" .}}
 </div>
 
+{{/* Directly under the buttons that start a deploy, because it is the answer
+     to having pressed one. Admin-only, like the stream behind it. */}}
+{{if $.IsAdmin}}{{template "deploy_progress" .ID}}{{end}}
+
 {{if eq .DeployType "git"}}
 <section class="mt-8">
   <h2 class="h-label mb-3">Build</h2>

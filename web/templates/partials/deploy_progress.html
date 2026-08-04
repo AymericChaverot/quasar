@@ -1,0 +1,114 @@
+{{/* The deploy as it happens: which step it is on, how far through it is, and
+     what the clone, the build and compose are printing while they run.
+
+     Given the app's ID. It stays out of the way until there is something to
+     say — a page opened on an app nobody has deployed this boot shows nothing
+     at all — and stays on screen once a deploy has ended, because the lines
+     that explain a failure are worth more after it than during it. */}}
+{{define "deploy_progress"}}
+<section id="deploy-panel" class="mt-6" data-stream="/apps/{{.}}/deploy-log" hidden>
+  <div class="mb-3 flex items-center justify-between">
+    <h2 class="h-label mb-0!">Deploy</h2>
+    <button type="button" id="deploy-toggle" class="link text-sm">Hide output</button>
+  </div>
+  <div class="card space-y-3 p-4">
+    <div class="flex items-baseline justify-between gap-4">
+      <p id="deploy-phase" class="text-sm">Waiting…</p>
+      <span id="deploy-percent" class="mono muted text-xs"></span>
+    </div>
+    <div id="deploy-meter" class="meter is-waiting"><div class="fill-info" style="width: 0"></div></div>
+    <div id="deploy-error" class="alert-err mono text-xs" hidden></div>
+    <div id="deploy-output" class="relative">
+      <div id="deploy-log" class="log-pane log-pane-short"></div>
+      <button type="button" id="deploy-tail" class="btn absolute bottom-3 right-3 py-1! text-xs" hidden>
+        Jump to latest
+      </button>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  var panel = document.getElementById("deploy-panel");
+  if (!panel) return;
+  var phaseEl = document.getElementById("deploy-phase");
+  var pctEl = document.getElementById("deploy-percent");
+  var meter = document.getElementById("deploy-meter");
+  var bar = meter.firstElementChild;
+  var errEl = document.getElementById("deploy-error");
+  var output = document.getElementById("deploy-output");
+  var pane = document.getElementById("deploy-log");
+  var jump = document.getElementById("deploy-tail");
+  var toggle = document.getElementById("deploy-toggle");
+
+  // The pane follows the newest line until the reader scrolls up, and stops
+  // until they ask to come back: being yanked to the tail mid-read is worse
+  // than falling behind.
+  var follow = true;
+  function tail() { pane.scrollTop = pane.scrollHeight; }
+  function sync() {
+    follow = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 32;
+    jump.hidden = follow;
+  }
+  pane.addEventListener("scroll", sync);
+  jump.addEventListener("click", tail);
+  new MutationObserver(function () { if (follow) tail(); }).observe(pane, { childList: true });
+
+  toggle.addEventListener("click", function () {
+    output.hidden = !output.hidden;
+    toggle.textContent = output.hidden ? "Show output" : "Hide output";
+    if (!output.hidden) tail();
+  });
+
+  var src = new EventSource(panel.dataset.stream);
+
+  src.addEventListener("reset", function () { pane.replaceChildren(); });
+
+  src.addEventListener("line", function (e) {
+    var row = document.createElement("div");
+    row.innerHTML = e.data;
+    pane.append(row.firstElementChild || row);
+  });
+
+  var wasRunning = null;
+
+  src.addEventListener("state", function (e) {
+    var s = JSON.parse(e.data);
+    panel.hidden = !s.active;
+    if (!s.active) return;
+
+    // The output opens for a deploy that is running and stays shut for one that
+    // has already ended — a page opened hours later is about the application,
+    // not about the build that put it there — but it is still one click away,
+    // and a deploy starting while the page is open opens it.
+    if (wasRunning !== s.running) {
+      if (wasRunning === null || s.running) {
+        output.hidden = !s.running;
+        toggle.textContent = s.running ? "Hide output" : "Show output";
+      }
+      wasRunning = s.running;
+      if (s.running) tail();
+    }
+
+    // A percentage nothing is feeding is shown as movement rather than as a
+    // number that has stopped: the width still says how much of the deploy is
+    // behind it, and the stripe says the step it is in has no count to give.
+    bar.style.width = Math.min(100, Math.max(0, s.percent)) + "%";
+    meter.classList.toggle("is-waiting", s.running && !s.measured);
+    pctEl.textContent = s.measured || !s.running ? Math.round(s.percent) + "%" : "";
+
+    errEl.hidden = !s.error;
+    errEl.textContent = s.error || "";
+    if (s.running) {
+      phaseEl.textContent = s.phase || "Starting…";
+    } else if (s.error) {
+      phaseEl.textContent = "The deploy stopped.";
+    } else {
+      phaseEl.textContent = "Deployed.";
+    }
+    bar.classList.toggle("fill-info", !s.error);
+    bar.classList.toggle("fill-err", !!s.error);
+  });
+})();
+</script>
+{{end}}

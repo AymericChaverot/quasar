@@ -1107,6 +1107,10 @@ input[type="checkbox"]:focus-visible {
 }
 [data-theme="terminal"] .log-pane { color: var(--text); }
 
+/* The deploy pane sits above the page rather than being the point of it, and a
+   build's last few lines are the ones worth reading. */
+.log-pane-short { height: 15rem; }
+
 /* --- Log colouring --------------------------------------------------------- */
 
 /* Every theme's --log-bg is dark, so one palette tuned for a dark surface
@@ -1153,6 +1157,20 @@ input[type="checkbox"]:focus-visible {
 .ansi-dim       { opacity: 0.6; }
 .ansi-italic    { font-style: italic; }
 .ansi-underline { text-decoration: underline; }
+
+/* Quasar's own commentary in a deploy pane — "pulling nginx:latest", "deployed
+   in 41s" — set apart from the build output it is interleaved with. The colour
+   sits on the row, so a note that names a failure still comes through red: the
+   severity class below lands on a span inside it and wins by being what the
+   text is actually in. */
+.log-note {
+  color: var(--text-faint);
+  font-style: italic;
+}
+.log-note::before {
+  content: "» ";
+  opacity: 0.7;
+}
 
 /* Severity inferred from a line that brought no colour of its own. Kept to the
    theme's own status colours rather than the ANSI palette: this is Quasar
