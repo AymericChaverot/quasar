@@ -11,8 +11,9 @@
        paint lands in a fallback face at a different width. */}}
   <link rel="preload" href="/static/fonts/space-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/static/fonts/jetbrains-mono-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
-  <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/sse.js"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.10/dist/htmx.min.js"></script>
+  {{/* htmx 2 moved the SSE extension out of the core package. */}}
+  <script src="https://unpkg.com/htmx-ext-sse@2.2.4/dist/sse.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/static/themes.css">
 </head>
