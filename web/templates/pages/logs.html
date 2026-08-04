@@ -3,7 +3,7 @@
 
 <form class="mb-6 flex flex-wrap items-end gap-4" hx-get="/partials/logs" hx-target="#log-results" hx-swap="innerHTML">
   <div>
-    <label for="app" class="label !mb-1">Application</label>
+    <label for="app" class="label mb-1!">Application</label>
     <select id="app" name="app" class="input">
       <option value="">All applications</option>
       {{range .Apps}}
@@ -12,7 +12,7 @@
     </select>
   </div>
   <div class="min-w-64 flex-1">
-    <label for="q" class="label !mb-1">Search</label>
+    <label for="q" class="label mb-1!">Search</label>
     <input id="q" name="q" type="text" value="{{.Query}}" placeholder="error, exception, ..." class="input mono">
   </div>
   <button type="submit" class="btn-primary">Search</button>

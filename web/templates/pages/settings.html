@@ -61,7 +61,7 @@
           <form method="post" action="/settings/2fa/enable" class="flex items-end gap-3">
             <div>
               <label for="totp_code" class="label">Code</label>
-              <input id="totp_code" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required class="input mono !w-32">
+              <input id="totp_code" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required class="input mono w-32!">
             </div>
             <button type="submit" class="btn-primary">Activate 2FA</button>
           </form>
@@ -100,11 +100,11 @@
             {{if eq .ID $.UserID}}<span class="chip">you</span>{{end}}
           </div>
           <form method="post" action="/settings/users/{{.ID}}/role">
-            <select name="role" class="input !w-24 !py-1 text-xs">
+            <select name="role" class="input w-24! py-1! text-xs">
               <option value="admin" {{if eq .Role "admin"}}selected{{end}}>admin</option>
               <option value="viewer" {{if eq .Role "viewer"}}selected{{end}}>viewer</option>
             </select>
-            <button type="submit" class="btn !py-1 text-xs">Set role</button>
+            <button type="submit" class="btn py-1! text-xs">Set role</button>
           </form>
           {{/* Your own password is changed under Account, where it takes the
                current one — the only version of the operation that proves the
@@ -112,12 +112,12 @@
                weaker of the two. */}}
           {{if ne .ID $.UserID}}
           <form method="post" action="/settings/users/{{.ID}}/password">
-            <input name="password" type="password" placeholder="new password" class="input !w-32 !py-1 text-xs">
-            <button type="submit" class="btn !py-1 text-xs">Reset</button>
+            <input name="password" type="password" placeholder="new password" class="input w-32! py-1! text-xs">
+            <button type="submit" class="btn py-1! text-xs">Reset</button>
           </form>
           <form method="post" action="/settings/users/{{.ID}}/delete"
                 onsubmit="return confirm('Delete the account {{.Username}}?')">
-            <button type="submit" class="btn-danger !py-1 text-xs">Delete</button>
+            <button type="submit" class="btn-danger py-1! text-xs">Delete</button>
           </form>
           {{end}}
         </li>
@@ -125,16 +125,16 @@
       </ul>
       <form method="post" action="/settings/users" class="flex flex-wrap items-end gap-3 border-t pt-4" style="border-color: var(--border)">
         <div>
-          <label for="new_username" class="label !mb-1">New user</label>
-          <input id="new_username" name="username" type="text" placeholder="username" class="input mono !w-40" required>
+          <label for="new_username" class="label mb-1!">New user</label>
+          <input id="new_username" name="username" type="text" placeholder="username" class="input mono w-40!" required>
         </div>
         <div>
-          <label for="new_user_password" class="label !mb-1">Password</label>
-          <input id="new_user_password" name="password" type="password" placeholder="min 8 characters" class="input !w-48" required>
+          <label for="new_user_password" class="label mb-1!">Password</label>
+          <input id="new_user_password" name="password" type="password" placeholder="min 8 characters" class="input w-48!" required>
         </div>
         <div>
-          <label for="new_user_role" class="label !mb-1">Role</label>
-          <select id="new_user_role" name="role" class="input !w-32">
+          <label for="new_user_role" class="label mb-1!">Role</label>
+          <select id="new_user_role" name="role" class="input w-32!">
             <option value="viewer">viewer</option>
             <option value="admin">admin</option>
           </select>
@@ -173,7 +173,7 @@
             </span>
             <form method="post" action="/settings/tokens/{{.ID}}/delete"
                   onsubmit="return confirm('Revoke the token {{.Name}}? Anything using it stops working immediately.')">
-              <button type="submit" class="btn-danger !py-1 text-xs">Revoke</button>
+              <button type="submit" class="btn-danger py-1! text-xs">Revoke</button>
             </form>
           </div>
         </li>
@@ -182,12 +182,12 @@
       {{end}}
       <form method="post" action="/settings/tokens" class="flex flex-wrap items-end gap-3 border-t pt-4" style="border-color: var(--border)">
         <div>
-          <label for="token_name" class="label !mb-1">New token</label>
-          <input id="token_name" name="name" type="text" placeholder="github-actions" class="input mono !w-48" required>
+          <label for="token_name" class="label mb-1!">New token</label>
+          <input id="token_name" name="name" type="text" placeholder="github-actions" class="input mono w-48!" required>
         </div>
         <div>
-          <label for="token_role" class="label !mb-1">Role</label>
-          <select id="token_role" name="role" class="input !w-32">
+          <label for="token_role" class="label mb-1!">Role</label>
+          <select id="token_role" name="role" class="input w-32!">
             <option value="viewer">viewer</option>
             <option value="admin">admin</option>
           </select>
@@ -224,7 +224,7 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
             No token stored
           {{end}}
         </span>
-        <span class="help block !mt-0">
+        <span class="help block mt-0!">
           Tokens for cloning private repositories, one per forge host — with the links and scopes
           needed to create them.
         </span>
@@ -242,7 +242,7 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
         <li class="flex items-center justify-between text-sm">
           <span><span class="mono">{{.Server}}</span> <span class="faint">as {{.Username}}</span></span>
           <form method="post" action="/settings/registries/{{.ID}}/delete">
-            <button type="submit" class="btn-danger !py-1 text-xs">Remove</button>
+            <button type="submit" class="btn-danger py-1! text-xs">Remove</button>
           </form>
         </li>
         {{end}}
@@ -338,7 +338,7 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
       </div>
     </form>
     <form method="post" action="/settings/notify-test" class="card flex items-center justify-between gap-4 p-4">
-      <p class="help !mt-0">
+      <p class="help mt-0!">
         Send a test message through every configured channel. A webhook that broke weeks ago looks
         exactly like a platform with nothing to report, so this is worth doing after any change.
       </p>

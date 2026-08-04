@@ -1316,6 +1316,13 @@ input[type="checkbox"]:focus-visible {
 .btn-primary.htmx-request .ico,
 .btn-danger.htmx-request .ico { display: none; }
 
+/* Tailwind's reset stopped giving buttons the hand cursor in v4, so every
+   button on the page would fall back to the arrow. Restored here rather than
+   class by class, since nothing in this interface uses a button that is not
+   meant to be clicked. The :not() keeps the disabled rule below in charge. */
+button:not(:disabled),
+[role="button"]:not(:disabled) { cursor: pointer; }
+
 /* A button htmx has disabled for the duration of its request must stop looking
    pressable, or the second click that does nothing reads as the interface
    ignoring it. */

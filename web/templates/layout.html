@@ -14,8 +14,17 @@
   <script src="https://unpkg.com/htmx.org@2.0.10/dist/htmx.min.js"></script>
   {{/* htmx 2 moved the SSE extension out of the core package. */}}
   <script src="https://unpkg.com/htmx-ext-sse@2.2.4/dist/sse.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="/static/themes.css">
+  <script src="https://unpkg.com/@tailwindcss/browser@4.3.3"></script>
+  {{/* Tailwind 4 emits every utility inside @layer utilities, and an unlayered
+       sheet outranks every layer no matter how weak its selectors are — loading
+       themes.css plainly would hand it every contest it used to lose, silently
+       undoing the utility on any element where the two set the same property.
+       Declaring the order here and pulling the sheet into `components` puts
+       utilities back on top, which is where they sat under Tailwind 3. */}}
+  <style>
+    @layer theme, base, components, utilities;
+    @import url("/static/themes.css") layer(components);
+  </style>
 </head>
 <body class="h-full antialiased">
   {{if not .HideNav}}

@@ -6,8 +6,8 @@
   </div>
   <form method="get" action="/audit" class="flex items-end gap-2">
     <div>
-      <label for="q" class="label !mb-1">Filter</label>
-      <input id="q" name="q" type="text" value="{{.Query}}" placeholder="user, action or target" class="input mono !w-64">
+      <label for="q" class="label mb-1!">Filter</label>
+      <input id="q" name="q" type="text" value="{{.Query}}" placeholder="user, action or target" class="input mono w-64!">
     </div>
     <button type="submit" class="btn">Search</button>
     {{if .Query}}<a href="/audit" class="btn">Clear</a>{{end}}

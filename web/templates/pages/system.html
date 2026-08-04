@@ -133,7 +133,7 @@
               {{else if and $.IsAdmin $.CertsWritable}}
               <form method="post" action="/system/certs/{{$domain}}/delete"
                     onsubmit="return confirm('Delete the certificate for {{$domain}}? Traefik restarts, so every site is briefly unavailable.')">
-                <button type="submit" class="btn-danger !py-1 text-xs">{{template "icon_trash"}}Delete</button>
+                <button type="submit" class="btn-danger py-1! text-xs">{{template "icon_trash"}}Delete</button>
               </form>
               {{else}}
               <span class="faint text-sm">unused</span>
@@ -207,7 +207,7 @@
       <span class="sweep-mark is-clear" aria-hidden="true">{{template "icon_sweep"}}</span>
       <div>
         <p class="text-sm">Nothing to reclaim.</p>
-        <p class="help !mt-0">Every image, container, network and volume on this server is still spoken for.</p>
+        <p class="help mt-0!">Every image, container, network and volume on this server is still spoken for.</p>
       </div>
     </div>
     {{else}}
@@ -216,7 +216,7 @@
         <span class="sweep-mark" aria-hidden="true">{{template "icon_sweep"}}</span>
         <div class="min-w-0">
           <p class="text-sm font-medium">Reclaimable</p>
-          <p class="help !mt-0">Left behind by deploys, updates and deleted applications.</p>
+          <p class="help mt-0!">Left behind by deploys, updates and deleted applications.</p>
         </div>
         <p class="sweep-total mono">{{humanSize .Bytes}}</p>
       </div>
@@ -301,8 +301,8 @@
           <span>Daily automatic backup</span>
         </label>
         <div>
-          <label for="retention" class="label !mb-1">Keep last</label>
-          <input id="retention" name="retention" type="number" min="1" value="{{if .Retention}}{{.Retention}}{{else}}7{{end}}" class="input !w-24">
+          <label for="retention" class="label mb-1!">Keep last</label>
+          <input id="retention" name="retention" type="number" min="1" value="{{if .Retention}}{{.Retention}}{{else}}7{{end}}" class="input w-24!">
         </div>
         <button type="submit" class="btn">Save</button>
       </form>
@@ -356,7 +356,7 @@
         </form>
         <form method="post" action="/system/offsite-test" class="mt-2">
           <button type="submit" class="btn">Send test upload</button>
-          <span class="help !mt-0 ml-2">
+          <span class="help mt-0! ml-2">
             Writes a small probe object. A wrong endpoint or a missing PutObject permission is
             otherwise discovered the night you need the backup.
           </span>
@@ -390,18 +390,18 @@
             <td class="mono muted">{{.Date.Format "2006-01-02 15:04"}}</td>
             <td class="mono muted">{{printf "%.1f" .SizeMB}} MB</td>
             <td class="flex items-center gap-2">
-              <a href="/system/backups/{{.Name}}" class="btn !py-1 text-xs">Download</a>
+              <a href="/system/backups/{{.Name}}" class="btn py-1! text-xs">Download</a>
               <form method="post" action="/system/backups/{{.Name}}/restore" enctype="multipart/form-data"
                     onsubmit="return confirm('Restore this backup? Current app configuration and data will be overwritten; redeploy applications afterwards.')">
-                <label class="btn !py-1 cursor-pointer text-xs" title="Only needed for an archive from another server: its master.key file">
+                <label class="btn py-1! cursor-pointer text-xs" title="Only needed for an archive from another server: its master.key file">
                   Key…
                   <input type="file" name="master_key" class="hidden" onchange="this.form.querySelector('[data-restore]').textContent = this.files.length ? 'Restore with key' : 'Restore'">
                 </label>
-                <button type="submit" data-restore class="btn !py-1 text-xs">Restore</button>
+                <button type="submit" data-restore class="btn py-1! text-xs">Restore</button>
               </form>
               <form method="post" action="/system/backups/{{.Name}}/delete"
                     onsubmit="return confirm('Delete this backup?')">
-                <button type="submit" class="btn-danger !py-1 text-xs">Delete</button>
+                <button type="submit" class="btn-danger py-1! text-xs">Delete</button>
               </form>
             </td>
           </tr>

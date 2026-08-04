@@ -81,7 +81,7 @@
       <div class="flex items-center gap-3">
         <button type="submit" class="btn">Save</button>
         <span id="env-feedback"></span>
-        <span class="help !mt-0">Redeploy to apply changes.</span>
+        <span class="help mt-0!">Redeploy to apply changes.</span>
       </div>
     </form>
   </section>
@@ -98,7 +98,7 @@
       <div class="flex items-center gap-3">
         <button type="submit" class="btn">Save</button>
         <span id="domains-feedback"></span>
-        <span class="help !mt-0">Redeploy to apply. Point DNS at this server first.</span>
+        <span class="help mt-0!">Redeploy to apply. Point DNS at this server first.</span>
       </div>
     </form>
   </section>
@@ -121,7 +121,7 @@
       <div class="flex items-center gap-3">
         <button type="submit" class="btn">Save</button>
         <span id="health-feedback"></span>
-        <span class="help !mt-0">HTTP path probed every 30s; 3 failures restart the container. Empty disables.</span>
+        <span class="help mt-0!">HTTP path probed every 30s; 3 failures restart the container. Empty disables.</span>
       </div>
     </form>
   </section>
@@ -131,17 +131,21 @@
     <form hx-post="/apps/{{.ID}}/pre-backup" hx-target="#prebackup-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
       <input name="pre_backup_cmd" type="text" value="{{.PreBackupCmd}}" class="input mono"
              placeholder="pg_dump -U &quot;$POSTGRES_USER&quot; &quot;$POSTGRES_DB&quot;">
-      <div class="flex items-center gap-3">
-        <button type="submit" class="btn">Save</button>
-        <span id="prebackup-feedback"></span>
+      {{/* The note belongs to the row above it, so the two are one item of the
+           stack rather than two spaced apart. */}}
+      <div>
+        <div class="flex items-center gap-3">
+          <button type="submit" class="btn">Save</button>
+          <span id="prebackup-feedback"></span>
+        </div>
+        <p class="help">
+          Run in the container before each backup; its output is archived as <span class="mono">dump.sql</span>.
+          Set this for anything holding a database: copying a running database's files gives an archive
+          that may not reload. The command runs with the container's own environment, so reference
+          <span class="mono">$POSTGRES_USER</span> and friends instead of hardcoding credentials.
+          A failing command fails the backup. Empty means the data directory is copied as-is.
+        </p>
       </div>
-      <p class="help !mt-0">
-        Run in the container before each backup; its output is archived as <span class="mono">dump.sql</span>.
-        Set this for anything holding a database: copying a running database's files gives an archive
-        that may not reload. The command runs with the container's own environment, so reference
-        <span class="mono">$POSTGRES_USER</span> and friends instead of hardcoding credentials.
-        A failing command fails the backup. Empty means the data directory is copied as-is.
-      </p>
     </form>
   </section>
 
@@ -149,12 +153,12 @@
     <h2 class="h-label mb-3">Edge protection</h2>
     <form hx-post="/apps/{{.ID}}/protection" hx-target="#protection-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
       <div>
-        <label class="label !mb-1">Rate limit (requests/second per client)</label>
-        <input name="rate_limit" type="number" min="0" value="{{.RateLimit}}" class="input mono !w-32">
+        <label class="label mb-1!">Rate limit (requests/second per client)</label>
+        <input name="rate_limit" type="number" min="0" value="{{.RateLimit}}" class="input mono w-32!">
         <p class="help">0 disables it. Bursts of three times this value are allowed, so a single page load does not trip its own limit.</p>
       </div>
       <div>
-        <label class="label !mb-1">Allowed addresses</label>
+        <label class="label mb-1!">Allowed addresses</label>
         <input name="ip_allow_cidrs" type="text" value="{{.IPAllowCIDRs}}" class="input mono"
                placeholder="203.0.113.4, 10.0.0.0/8">
         <p class="help">Comma-separated addresses or CIDR blocks; a bare address is treated as a single host. Empty allows everyone. Traefik compares against the address connecting to it, so another proxy in front of it (Cloudflare) would need its own configuration.</p>
@@ -163,7 +167,7 @@
         <input type="checkbox" name="security_headers" {{if .SecurityHeaders}}checked{{end}} class="mt-1">
         <span>
           Security headers
-          <span class="help !mt-0 block">HSTS for one year including subdomains, no MIME sniffing, no framing, and a strict referrer policy. Leave off if the app sets its own.</span>
+          <span class="help mt-0! block">HSTS for one year including subdomains, no MIME sniffing, no framing, and a strict referrer policy. Leave off if the app sets its own.</span>
         </span>
       </label>
       <div class="flex items-center gap-3">
@@ -196,7 +200,7 @@
 
 <section class="mt-8">
   <div class="mb-3 flex items-center justify-between">
-    <h2 class="h-label !mb-0">Live logs</h2>
+    <h2 class="h-label mb-0!">Live logs</h2>
     <a href="/logs?app={{.ID}}" class="link text-sm">Search history</a>
   </div>
   {{template "log_pane" (printf "/apps/%s/logs" .ID)}}

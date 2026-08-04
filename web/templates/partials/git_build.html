@@ -46,28 +46,32 @@
        no deploy can honour. Unavailable is included so a choice made when the
        repository did have both can still be corrected after it lost one. */}}
   {{if and .IsAdmin (or .Build.Both .Build.Unavailable)}}
-  <form hx-post="/apps/{{.ID}}/git-build" hx-target="#git-build" hx-swap="outerHTML"
-        class="flex flex-wrap items-center gap-3">
-    <select name="git_build" class="input !w-auto">
-      <option value="" {{if eq .Build.Choice ""}}selected{{end}}>Automatic — compose file when the repository has one</option>
-      {{if .Build.HasCompose}}
-      <option value="compose" {{if eq .Build.Choice "compose"}}selected{{end}}>docker compose</option>
-      {{end}}
-      {{if .Build.HasDockerfile}}
-      <option value="dockerfile" {{if eq .Build.Choice "dockerfile"}}selected{{end}}>Dockerfile</option>
-      {{end}}
-    </select>
-    <button type="submit" class="btn">Save</button>
-    <span class="help !mt-0">Redeploy to apply.</span>
-  </form>
-  <p class="help !mt-0">
-    A repository holding a compose file describes a whole stack, and a Dockerfile beside it
-    describes one service of that stack — so compose wins by default. Choose Dockerfile when
-    the compose file is there for local development only. Switching removes the containers the
-    other mode left behind, but keeps their volumes.
-  </p>
+  {{/* Form and note are one item of the surrounding stack: the note explains the
+       control right above it and rides on its own margin. */}}
+  <div>
+    <form hx-post="/apps/{{.ID}}/git-build" hx-target="#git-build" hx-swap="outerHTML"
+          class="flex flex-wrap items-center gap-3">
+      <select name="git_build" class="input w-auto!">
+        <option value="" {{if eq .Build.Choice ""}}selected{{end}}>Automatic — compose file when the repository has one</option>
+        {{if .Build.HasCompose}}
+        <option value="compose" {{if eq .Build.Choice "compose"}}selected{{end}}>docker compose</option>
+        {{end}}
+        {{if .Build.HasDockerfile}}
+        <option value="dockerfile" {{if eq .Build.Choice "dockerfile"}}selected{{end}}>Dockerfile</option>
+        {{end}}
+      </select>
+      <button type="submit" class="btn">Save</button>
+      <span class="help mt-0!">Redeploy to apply.</span>
+    </form>
+    <p class="help">
+      A repository holding a compose file describes a whole stack, and a Dockerfile beside it
+      describes one service of that stack — so compose wins by default. Choose Dockerfile when
+      the compose file is there for local development only. Switching removes the containers the
+      other mode left behind, but keeps their volumes.
+    </p>
+  </div>
   {{else if .Build.Mode}}
-  <p class="help !mt-0">
+  <p class="help">
     The repository offers only this one way to build, so there is nothing to choose. Add
     {{if eq .Build.Mode "compose"}}a Dockerfile{{else}}a compose file{{end}} at its root and
     redeploy if you want the other.

@@ -7,7 +7,7 @@
 {{define "log_pane"}}
 <div class="relative" hx-ext="sse" sse-connect="{{.}}">
   <div id="log-pane" sse-swap="message" hx-swap="beforeend" class="log-pane"></div>
-  <button type="button" id="log-tail" class="btn absolute bottom-3 right-3 !py-1 text-xs" hidden>
+  <button type="button" id="log-tail" class="btn absolute bottom-3 right-3 py-1! text-xs" hidden>
     Jump to latest
   </button>
 </div>

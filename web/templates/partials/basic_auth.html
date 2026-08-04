@@ -77,7 +77,9 @@
 {{/* The form is outside the polled fragment, but its Disable button depends on
      the same state — so a save swaps the whole panel, not just the state. */}}
 {{define "basic_auth_form"}}
-<div class="space-y-3">
+{{/* No stack spacing here: the note below explains the form and is meant to sit
+     against it, on its own small margin. */}}
+<div>
   <form hx-post="/apps/{{.ID}}/basic-auth" hx-target="#basic-auth" hx-swap="outerHTML"
         class="space-y-3">
     <div class="grid grid-cols-2 gap-3">
@@ -94,11 +96,11 @@
       {{if .BasicAuthUser}}
       <button type="submit" name="disable" value="1" formnovalidate class="btn-danger">Disable</button>
       {{end}}
-      <span class="help !mt-0">Redeploy to apply.</span>
+      <span class="help mt-0!">Redeploy to apply.</span>
     </div>
   </form>
 
-  <p class="help !mt-0">
+  <p class="help">
     The password is kept as a bcrypt hash and is never shown again, so changing the username means
     setting the password again with it. Saving replaces whatever was there. A visitor stays signed
     in for seven days, on that one hostname.

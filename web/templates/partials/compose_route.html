@@ -78,25 +78,29 @@
        service has nothing to choose, and one its author wired up themselves is
        not Quasar's to route. */}}
   {{if and .IsAdmin (not .Compose.Author) (gt (len .Compose.Services) 1)}}
-  <form hx-post="/apps/{{.ID}}/compose-service" hx-target="#compose-route" hx-swap="outerHTML"
-        class="flex flex-wrap items-center gap-3">
-    <select name="compose_service" class="input !w-auto">
-      <option value="" {{if eq .Compose.Choice ""}}selected{{end}}>Automatic — the service that fronts the stack</option>
-      {{$choice := .Compose.Choice}}
-      {{range .Compose.Services}}
-      <option value="{{.}}" {{if eq $choice .}}selected{{end}}>{{.}}</option>
-      {{end}}
-    </select>
-    <button type="submit" class="btn">Save</button>
-    <span class="help !mt-0">Redeploy to apply.</span>
-  </form>
-  <p class="help !mt-0">
-    Left automatic, Quasar takes the service that binds the host's HTTP port — on a laptop that is
-    what the browser talks to, so it is what Traefik should talk to here. Failing that, the service
-    the rest of the stack sits behind: the one that <span class="mono">depends_on</span> others and
-    that nothing depends on. Failing that, the one offering the port configured for this
-    application. No service name and no image is ever matched on, so nothing here assumes an nginx.
-  </p>
+  {{/* Form and note are one item of the surrounding stack: the note explains the
+       control right above it and rides on its own margin. */}}
+  <div>
+    <form hx-post="/apps/{{.ID}}/compose-service" hx-target="#compose-route" hx-swap="outerHTML"
+          class="flex flex-wrap items-center gap-3">
+      <select name="compose_service" class="input w-auto!">
+        <option value="" {{if eq .Compose.Choice ""}}selected{{end}}>Automatic — the service that fronts the stack</option>
+        {{$choice := .Compose.Choice}}
+        {{range .Compose.Services}}
+        <option value="{{.}}" {{if eq $choice .}}selected{{end}}>{{.}}</option>
+        {{end}}
+      </select>
+      <button type="submit" class="btn">Save</button>
+      <span class="help mt-0!">Redeploy to apply.</span>
+    </form>
+    <p class="help">
+      Left automatic, Quasar takes the service that binds the host's HTTP port — on a laptop that is
+      what the browser talks to, so it is what Traefik should talk to here. Failing that, the service
+      the rest of the stack sits behind: the one that <span class="mono">depends_on</span> others and
+      that nothing depends on. Failing that, the one offering the port configured for this
+      application. No service name and no image is ever matched on, so nothing here assumes an nginx.
+    </p>
+  </div>
   {{end}}
 </div>
 {{end}}
