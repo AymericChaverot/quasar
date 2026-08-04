@@ -12,7 +12,7 @@ RUN CGO_ENABLED=0 go build \
 # --- Runtime stage -----------------------------------------------------------
 # git is needed for "Git build" deploys; docker-cli + compose plugin for
 # "Docker Compose" deploys (both talk to the socket proxy via DOCKER_HOST).
-FROM alpine:3.20
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates git docker-cli docker-cli-compose
 COPY --from=build /quasar /usr/local/bin/quasar
 EXPOSE 8080
