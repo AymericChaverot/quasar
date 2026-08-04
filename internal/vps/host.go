@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shirou/gopsutil/v3/host"
+	"github.com/shirou/gopsutil/v4/host"
 )
 
 // HostInfo describes the machine Quasar runs on. Inside the dashboard
