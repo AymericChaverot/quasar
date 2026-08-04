@@ -45,7 +45,7 @@ services:
   traefik:
     # v3.7+ required: older Traefik fails Docker API negotiation against
     # recent daemons ("client version 1.24 is too old").
-    image: traefik:v3.7
+    image: traefik:v3.7.10
     container_name: quasar-traefik
     restart: unless-stopped
     depends_on:
