@@ -68,6 +68,11 @@
       <div class="card h-20 animate-pulse"></div>
     </div>
     <div class="mt-4" hx-get="/partials/apps/{{.ID}}/metrics" hx-trigger="load, every 60s" hx-swap="innerHTML"></div>
+    {{/* Directly under the usage it bounds: above is what the application takes,
+         here is the most it may. */}}
+    {{if $.IsAdmin}}
+    <div class="mt-4">{{template "limits_panel" .}}</div>
+    {{end}}
   </section>
 
   {{/* Env content and the compose file hold the app's secrets, so a viewer

@@ -112,6 +112,20 @@ func (s *Server) handleAppBasicAuthPartial(w http.ResponseWriter, r *http.Reques
 	s.renderPartial(w, "basic_auth_state", s.appDetailView(r, a))
 }
 
+// handleAppLimitsPartial re-reports what the running container allows itself.
+// The panel polls it so a redeploy — the only thing that can lift a limit —
+// is seen to have done so, rather than leaving "redeploy owed" on screen until
+// someone reloads the page.
+func (s *Server) handleAppLimitsPartial(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	v := s.appView(r, a)
+	v.Limits = s.dock.Limits(r.Context(), a)
+	s.renderPartial(w, "limits_state", v)
+}
+
 // TLSView is the certificate state of every hostname an app answers on, next
 // to the route Traefik actually holds for it.
 type TLSView struct {

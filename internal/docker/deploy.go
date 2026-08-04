@@ -261,10 +261,7 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 
 	hostCfg := &container.HostConfig{
 		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
-		Resources: container.Resources{
-			NanoCPUs: int64(a.CPULimit * 1e9),
-			Memory:   a.MemLimitMB << 20,
-		},
+		Resources:     appResources(a),
 	}
 	if a.DataMount != "" {
 		hostCfg.Binds = []string{c.hostDataDir(a.ID) + ":" + a.DataMount}

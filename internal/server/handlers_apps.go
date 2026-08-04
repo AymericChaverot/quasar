@@ -59,6 +59,14 @@ type AppView struct {
 	// previous setting. Only filled in for the detail pages, which is where
 	// the setting is changed.
 	AuthPending bool
+	// Limits is what the running container really allows itself, which the
+	// panel that sets them reports next to what is stored. Only filled in for
+	// the detail pages, for the same reason AuthPending is.
+	Limits docker.LimitsState
+	// LimitsError is the Engine refusing a live change to those limits. The
+	// save itself still landed, so this is shown inside the panel rather than
+	// returned as an error.
+	LimitsError string
 	First       bool
 	Last        bool
 	// IsAdmin gates the controls inside partials, which are rendered without
@@ -110,8 +118,12 @@ func (s *Server) appDetailView(r *http.Request, a *db.App) AppView {
 	v := s.appView(r, a)
 	v.Compose = s.dock.ComposeAdaptationFor(a)
 	v.AuthPending = s.dock.ProtectionPending(r.Context(), a)
+	v.Limits = s.dock.Limits(r.Context(), a)
 	return v
 }
+
+// LimitsText names the limits stored for the app, "unlimited" for none.
+func (v AppView) LimitsText() string { return docker.LimitsText(v.CPULimit, v.MemLimitMB) }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "dashboard", map[string]any{"Title": "Dashboard", "Domain": s.cfg.Domain})
@@ -240,6 +252,14 @@ func (s *Server) validateNewApp(a *db.App) string {
 	}
 	if a.DataMount != "" && !strings.HasPrefix(a.DataMount, "/") {
 		return "The persistent data mount must be an absolute container path (e.g. /data)."
+	}
+	// A limit under Docker's own floor is refused by the Engine, so accepting
+	// one here would only produce an application whose every deploy fails.
+	if a.CPULimit > 0 && a.CPULimit < minCPULimit {
+		return fmt.Sprintf("The smallest CPU limit Docker accepts is %g cores.", minCPULimit)
+	}
+	if a.MemLimitMB > 0 && a.MemLimitMB < minMemLimitMB {
+		return fmt.Sprintf("The smallest memory limit Docker accepts is %d MB.", minMemLimitMB)
 	}
 	for _, d := range a.CustomDomainList() {
 		if !domainRe.MatchString(d) {
@@ -606,6 +626,81 @@ func (s *Server) handleAppHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderPartial(w, "env_saved", nil)
+}
+
+// Docker's own floors for a limit. Below them the Engine refuses the container
+// outright, so a form that accepted 2 MB would only produce a deploy that fails
+// later — or, worse, a live change rejected by a daemon the operator never sees.
+const (
+	minMemLimitMB = 6
+	minCPULimit   = 0.01
+)
+
+// MinMemLimitMB and MinCPULimit let the form state the floors it enforces.
+func (v AppView) MinMemLimitMB() int64 { return minMemLimitMB }
+func (v AppView) MinCPULimit() float64 { return minCPULimit }
+
+// handleAppLimits saves the app's CPU and memory ceilings and puts them on the
+// running container at once.
+//
+// It re-renders its own panel rather than a "saved" marker because the answer
+// to the save is not "stored" but what the container ended up enforcing: a
+// tightened limit applies immediately, a lifted one cannot and leaves a
+// redeploy owed, and only the panel can tell the operator which happened.
+func (s *Server) handleAppLimits(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	cpu, memMB, problem := parseLimits(r)
+	if problem != "" {
+		http.Error(w, problem, http.StatusBadRequest)
+		return
+	}
+	if err := db.UpdateAppLimits(s.db, a.ID, cpu, memMB); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	a.CPULimit, a.MemLimitMB = cpu, memMB
+	s.audit(r, "app.limits", a.Name, docker.LimitsText(cpu, memMB))
+
+	v := s.appView(r, a)
+	state, err := s.dock.ApplyLimits(r.Context(), a)
+	v.Limits = state
+	if err != nil {
+		// Stored but not applied: the panel says so and offers the redeploy
+		// that would carry it out. Failing the request would swap nothing in
+		// and leave the form claiming the save never happened.
+		v.LimitsError = err.Error()
+	}
+	s.renderPartial(w, "limits_panel", v)
+}
+
+// parseLimits reads the two limit fields, returning the problem to report when
+// either is not a limit Docker would accept. An empty field means unlimited,
+// which is what the placeholder 0 says.
+func parseLimits(r *http.Request) (cpu float64, memMB int64, problem string) {
+	if v := strings.TrimSpace(r.FormValue("cpu_limit")); v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		switch {
+		case err != nil || f < 0:
+			return 0, 0, "the CPU limit must be a number of cores, or 0 for unlimited"
+		case f > 0 && f < minCPULimit:
+			return 0, 0, fmt.Sprintf("the smallest CPU limit Docker accepts is %g cores", minCPULimit)
+		}
+		cpu = f
+	}
+	if v := strings.TrimSpace(r.FormValue("mem_limit_mb")); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		switch {
+		case err != nil || n < 0:
+			return 0, 0, "the memory limit must be a whole number of MB, or 0 for unlimited"
+		case n > 0 && n < minMemLimitMB:
+			return 0, 0, fmt.Sprintf("the smallest memory limit Docker accepts is %d MB", minMemLimitMB)
+		}
+		memMB = n
+	}
+	return cpu, memMB, ""
 }
 
 // handleAppBasicAuth enables/disables Traefik basic auth (applied at redeploy).

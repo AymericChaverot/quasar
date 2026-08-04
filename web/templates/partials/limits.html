@@ -1,0 +1,97 @@
+{{/* How much CPU and memory an application may use: what is stored, and what
+     the container running it really allows itself. Rendered with an AppView;
+     replaces itself on save, because a save can land in two quite different
+     places — on the running container at once, or waiting for a redeploy — and
+     the panel is where the operator finds out which. */}}
+{{define "limits_panel"}}
+<div id="limits" class="card space-y-3 p-4">
+  {{template "limits_state" .}}
+  {{template "limits_form" .}}
+</div>
+{{end}}
+
+{{/* Polled on its own, so a redeploy started elsewhere on the page clears
+     "redeploy owed" without a reload. Only the state refreshes: re-fetching the
+     form under an operator would wipe the figure they are halfway through
+     typing. */}}
+{{define "limits_state"}}
+<div id="limits-state" class="space-y-3"
+     hx-get="/partials/apps/{{.ID}}/limits" hx-trigger="every 5s" hx-swap="outerHTML">
+  <div class="flex flex-wrap items-center gap-2">
+    {{if or .CPULimit .MemLimitMB}}
+    <span class="badge badge-ok"><span class="dot"></span>{{.LimitsText}}</span>
+    {{else}}
+    <span class="badge badge-muted"><span class="dot"></span>unlimited</span>
+    {{end}}
+    {{if and .Limits.Pending (not .Stack)}}<span class="chip">redeploy owed</span>{{end}}
+  </div>
+
+  {{/* A stack is described by its compose file, which Quasar does not write
+       resource limits into. Whatever is stored here is never put on its
+       containers, and no redeploy will change that. */}}
+  {{if .Stack}}
+  <p class="text-sm" style="color: var(--warn)">
+    This application runs as a compose stack, so what each container may use is its compose file's
+    business — <span class="mono">deploy.resources.limits</span> on a service — and nothing set here
+    is applied to it.
+  </p>
+
+  {{else if .LimitsError}}
+  <p class="text-sm" style="color: var(--warn)">
+    Saved, but the change was refused: {{.LimitsError}}. The container is still running under
+    {{.Limits.Text}}.
+  </p>
+
+  {{else if .Limits.Pending}}
+  <p class="text-sm" style="color: var(--warn)">
+    Saved, but the container is still running under {{.Limits.Text}}: Docker can tighten a limit on a
+    running container, and cannot remove one. Redeploy and it will start with what is stored here.
+  </p>
+
+  {{else if .Limits.Known}}
+  <p class="muted text-sm">
+    The running container enforces this. Tightening a limit, or raising one, takes effect at once —
+    no redeploy needed. Removing one altogether is the exception: Docker cannot lift a limit from a
+    running container, so that much waits for the next deploy.
+  </p>
+
+  {{else}}
+  <p class="muted text-sm">
+    Stored. The container will be created with this from the next deploy of this application onwards.
+  </p>
+  {{end}}
+</div>
+{{end}}
+
+{{/* The form is outside the polled fragment, and posts to a handler that
+     answers with the whole panel — the state above it is the answer to the
+     save, not the values in the fields. */}}
+{{define "limits_form"}}
+<div>
+  <form hx-post="/apps/{{.ID}}/limits" hx-target="#limits" hx-swap="outerHTML" class="space-y-3">
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="label mb-1!">CPU (cores)</label>
+        <input name="cpu_limit" type="number" step="0.1" min="0" placeholder="0 = unlimited"
+               value="{{if .CPULimit}}{{.CPULimit}}{{end}}" class="input mono">
+      </div>
+      <div>
+        <label class="label mb-1!">Memory (MB)</label>
+        <input name="mem_limit_mb" type="number" step="1" min="0" placeholder="0 = unlimited"
+               value="{{if .MemLimitMB}}{{.MemLimitMB}}{{end}}" class="input mono">
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <button type="submit" class="btn">Save</button>
+      <span class="help mt-0!">Applied to the running container.</span>
+    </div>
+  </form>
+
+  <p class="help">
+    Keeps one application from starving the server: a runaway process is throttled to its share of
+    the CPU, and a leaking one is killed by the kernel at its memory ceiling rather than taking the
+    whole machine down with it. Empty or 0 lifts the limit. Docker's own floors are
+    {{.MinCPULimit}} cores and {{.MinMemLimitMB}} MB.
+  </p>
+</div>
+{{end}}

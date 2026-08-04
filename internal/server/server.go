@@ -292,6 +292,8 @@ func (s *Server) routes() {
 	s.admin("POST /apps/{id}/git-build", s.handleAppGitBuild)
 	s.admin("POST /apps/{id}/compose-service", s.handleAppComposeService)
 	s.admin("POST /apps/{id}/health", s.handleAppHealth)
+	// Applied to the running container, not merely stored for the next deploy.
+	s.admin("POST /apps/{id}/limits", s.handleAppLimits)
 	s.admin("POST /apps/{id}/pre-backup", s.handleAppPreBackup)
 	s.admin("POST /apps/{id}/protection", s.handleAppProtection)
 	s.admin("POST /apps/{id}/basic-auth", s.handleAppBasicAuth)
@@ -321,6 +323,9 @@ func (s *Server) routes() {
 	// Admin-only like the panel it refreshes: it names the account the app is
 	// protected with, which a viewer is not shown.
 	s.admin("GET /partials/apps/{id}/basic-auth", s.handleAppBasicAuthPartial)
+	// Admin-only like the panel it refreshes, which sits inside the form that
+	// sets the limits it reports.
+	s.admin("GET /partials/apps/{id}/limits", s.handleAppLimitsPartial)
 	s.viewer("GET /partials/metrics", s.handleServerMetricsPartial)
 	s.viewer("GET /partials/apps/{id}/metrics", s.handleAppMetricsPartial)
 }

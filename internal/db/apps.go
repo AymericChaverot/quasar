@@ -174,6 +174,15 @@ func UpdateAppComposeService(db *sql.DB, id, service string) error {
 	return err
 }
 
+// UpdateAppLimits stores the CPU and memory ceilings the app's container runs
+// under, 0 for unlimited. Unlike the settings around it these are not a
+// deploy's business: Docker can retighten a running container's cgroup, so the
+// caller applies them to the container that is already serving.
+func UpdateAppLimits(db *sql.DB, id string, cpuLimit float64, memLimitMB int64) error {
+	_, err := db.Exec("UPDATE apps SET cpu_limit = ?, mem_limit_mb = ? WHERE id = ?", cpuLimit, memLimitMB, id)
+	return err
+}
+
 func UpdateAppHealth(db *sql.DB, id, healthPath string) error {
 	_, err := db.Exec("UPDATE apps SET health_path = ? WHERE id = ?", healthPath, id)
 	return err
