@@ -1348,29 +1348,45 @@ input[type="checkbox"]:focus-visible {
    measured across the text rather than across a whole row of it. */
 @supports (background-clip: text) or (-webkit-background-clip: text) {
   .shimmer {
+    /* Full strength is held across a plateau rather than touched at a single
+       point: a lone peak with ramps either side spends most of its width part
+       lit, so the band reads as a thin bright line with a wide dull halo and
+       the sweep looks narrower and weaker than its stops suggest.
+
+       The lit span comes to a little over one box width, so something is always
+       under way somewhere in the text — below that the band leaves on the right
+       before the next has entered on the left, and the sweep reads as a pulse
+       with a pause rather than as travel. Both ends of the gradient are the dim
+       ground, which is what lets it tile without a seam. */
     background-image: linear-gradient(
       100deg,
-      color-mix(in srgb, currentColor 62%, transparent) 42%,
-      currentColor 50%,
-      color-mix(in srgb, currentColor 62%, transparent) 58%
+      color-mix(in srgb, currentColor 55%, transparent) 20%,
+      currentColor 40%,
+      currentColor 60%,
+      color-mix(in srgb, currentColor 55%, transparent) 80%
     );
     background-size: 200% 100%;
-    background-repeat: no-repeat;
+    background-repeat: repeat-x;
     -webkit-background-clip: text;
     background-clip: text;
     /* Not `color: transparent`, which would resolve the currentColor the
        gradient is built from to transparent and paint nothing at all. This
        empties the glyphs while leaving the colour itself in place. */
     -webkit-text-fill-color: transparent;
-    animation: shimmer 2.4s linear infinite;
+    animation: shimmer 1s linear infinite;
   }
 }
 
-/* The image is twice the box wide, so 100% holds its bright middle against the
-   left edge and 0 carries it to the right one. */
+/* One tile is twice the box wide and the sweep travels exactly one tile, so the
+   frame the loop ends on is the frame it began on: the band leaves to the right
+   while its neighbour is already entering from the left, and the restart falls
+   in the middle of that with nothing to see.
+
+   Travelling less than a whole tile — or tiling turned off — is what made the
+   band reappear at the left edge fully formed each time round. */
 @keyframes shimmer {
-  from { background-position: 100% 0; }
-  to   { background-position: 0 0; }
+  from { background-position: 0 0; }
+  to   { background-position: -200% 0; }
 }
 
 /* The blanket reduced-motion rule further down only stops the sweep, and a
