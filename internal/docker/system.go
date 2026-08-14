@@ -25,6 +25,13 @@ type DiskUsage struct {
 	CacheBytes      int64
 }
 
+// Total is everything Docker is holding on disk. A sweep is measured as the
+// difference between this before it runs and after, which is the only figure
+// that cannot disagree with what the System page goes on to show.
+func (d DiskUsage) Total() int64 {
+	return d.ImagesBytes + d.ContainersBytes + d.VolumesBytes + d.CacheBytes
+}
+
 // SystemContainer is one of Quasar's own infrastructure containers, listed
 // read-only on the dashboard.
 type SystemContainer struct {

@@ -228,14 +228,7 @@ func (c *Client) resolve(ctx context.Context, appIDs []string) (sweep, error) {
 		return s, err
 	}
 	k := c.protect(appIDs, du.Containers)
-
-	s.usage = DiskUsage{
-		ImagesCount:     len(du.Images),
-		ImagesBytes:     du.LayersSize,
-		ContainersCount: len(du.Containers),
-		VolumesCount:    len(du.Volumes),
-		CacheCount:      len(du.BuildCache),
-	}
+	s.usage = usageOf(du)
 
 	for _, img := range du.Images {
 		if k.image(img) {
@@ -248,33 +241,53 @@ func (c *Client) resolve(ctx context.Context, appIDs []string) (sweep, error) {
 		}
 	}
 	for _, rec := range du.BuildCache {
-		// A shared record is one the daemon also counts under another; adding it
-		// here would charge the same layer to the total twice. This is the same
-		// arithmetic `docker system df` does.
-		if rec.Shared {
-			continue
-		}
-		s.usage.CacheBytes += rec.Size
-		if !rec.InUse {
+		if !rec.Shared && !rec.InUse {
 			s.cache = append(s.cache, rec)
 		}
 	}
 	for _, ct := range du.Containers {
-		s.usage.ContainersBytes += ct.SizeRw
 		if !k.container(ct) {
 			s.containers = append(s.containers, ct)
 		}
 	}
 	for _, v := range du.Volumes {
-		if v.UsageData != nil && v.UsageData.Size > 0 {
-			s.usage.VolumesBytes += v.UsageData.Size
-		}
 		if !k.volume(v) {
 			s.volumes = append(s.volumes, v)
 		}
 	}
 	s.networks = c.strayNetworks(ctx, k)
 	return s, nil
+}
+
+// usageOf reduces the daemon's disk report to the totals the System page shows.
+// Both the scan and the measurement of what a sweep freed go through it, so the
+// before and after of a sweep are counted the same way and their difference
+// means something.
+func usageOf(du types.DiskUsage) DiskUsage {
+	u := DiskUsage{
+		ImagesCount:     len(du.Images),
+		ImagesBytes:     du.LayersSize,
+		ContainersCount: len(du.Containers),
+		VolumesCount:    len(du.Volumes),
+		CacheCount:      len(du.BuildCache),
+	}
+	for _, rec := range du.BuildCache {
+		// A shared record is one the daemon also counts under another; adding it
+		// here would charge the same layer to the total twice. This is the same
+		// arithmetic `docker system df` does.
+		if !rec.Shared {
+			u.CacheBytes += rec.Size
+		}
+	}
+	for _, ct := range du.Containers {
+		u.ContainersBytes += ct.SizeRw
+	}
+	for _, v := range du.Volumes {
+		if v.UsageData != nil && v.UsageData.Size > 0 {
+			u.VolumesBytes += v.UsageData.Size
+		}
+	}
+	return u
 }
 
 // strayNetworks lists local networks nothing is attached to and the platform
@@ -446,85 +459,142 @@ func examples(names []string) string {
 	return fmt.Sprintf("%s and %d more", strings.Join(names[:show], ", "), len(names)-show)
 }
 
+// cleanupPasses bounds how many times a sweep looks again at what is left.
+//
+// Removal cascades. The container removed in one pass is what frees the image
+// it was created from; the image removed by its last tag is what turns its
+// layers into the untagged leftovers of the next. A single pass therefore
+// always stops short of what it set out to do, and the page it returns to says
+// so — a sweep reporting success over a breakdown still offering a few hundred
+// megabytes, which is the state this bound exists to clear.
+//
+// Four is past the depth of that chain (containers, their images, the layers
+// those images held). The loop stops early on the pass that removes nothing,
+// so the bound is only ever reached by a daemon that keeps finding more.
+const cleanupPasses = 4
+
 // Cleanup removes everything a scan found disposable, and the orphaned volumes
-// too if the operator asked for those separately.
+// too if the operator asked for those separately. It repeats until a pass finds
+// nothing left to take, so what the operator is shown afterwards is a sweep
+// that finished rather than one that ran out of turns.
 //
 // Every removal is attempted on its own rather than through Docker's own prune
 // endpoints, which take no exclusions: the whole difference between this and
 // `docker system prune -a` is what it refuses to touch.
 func (c *Client) Cleanup(ctx context.Context, appIDs []string, withVolumes bool) (CleanupReport, error) {
-	s, err := c.resolve(ctx, appIDs)
+	before, err := c.api.DiskUsage(ctx, types.DiskUsageOptions{})
 	if err != nil {
 		return CleanupReport{}, err
 	}
-	var rep CleanupReport
 
-	// An image whose last container this removes only becomes disposable once
-	// the container is gone, so it is left for the next sweep rather than taken
-	// here: what the page previewed and what the button does stay the same set.
+	var rep CleanupReport
+	for pass := 0; pass < cleanupPasses; pass++ {
+		s, err := c.resolve(ctx, appIDs)
+		if err != nil {
+			if pass == 0 {
+				return CleanupReport{}, err
+			}
+			break // what the earlier passes removed still stands, and is reported
+		}
+		removed, failed := c.sweepOnce(ctx, s, withVolumes, &rep)
+		// Only the latest pass's failures are kept: an object an earlier pass
+		// could not remove was tried again, and either went or is counted here.
+		// Summing them would report one stubborn image as four.
+		rep.Failed = failed
+		if removed == 0 {
+			break
+		}
+	}
+
+	// Measured rather than added up. The per-object sizes are estimates that
+	// double-count shared layers and credit an image whose removal only dropped
+	// one of its tags, which is how a sweep came to claim more than the disk
+	// gave back. A negative difference means something else grew while this ran
+	// — a deploy, most likely — and is not this sweep's to report.
+	if after, err := c.api.DiskUsage(ctx, types.DiskUsageOptions{}); err == nil {
+		if freed := usageOf(before).Total() - usageOf(after).Total(); freed > 0 {
+			rep.Bytes = freed
+		}
+	}
+	return rep, nil
+}
+
+// sweepOnce removes everything one resolution found disposable, adding what
+// went to rep. It returns how much it removed and how much the daemon refused,
+// which is what tells the caller whether another pass is worth making.
+func (c *Client) sweepOnce(ctx context.Context, s sweep, withVolumes bool, rep *CleanupReport) (removed, failed int) {
 	for _, ct := range s.containers {
 		if err := c.api.ContainerRemove(ctx, ct.ID, container.RemoveOptions{}); err != nil {
-			rep.Failed++
+			failed++
 			continue
 		}
 		rep.Containers++
-		rep.Bytes += ct.SizeRw
+		removed++
 	}
 
 	for _, img := range append(append([]*image.Summary{}, s.images...), s.dangling...) {
 		if c.removeImage(ctx, img) {
 			rep.Images++
-			rep.Bytes += imageBytes(img)
+			removed++
 			continue
 		}
-		rep.Failed++
+		failed++
 	}
 
 	// The build cache has no per-record delete, and its own prune already keeps
 	// what is in use — the same set the scan counted.
 	if len(s.cache) > 0 {
 		if out, err := c.api.BuildCachePrune(ctx, build.CachePruneOptions{All: true}); err == nil {
-			rep.Cache = len(out.CachesDeleted)
-			rep.Bytes += int64(out.SpaceReclaimed)
+			rep.Cache += len(out.CachesDeleted)
+			removed += len(out.CachesDeleted)
 		} else {
-			rep.Failed++
+			failed++
 		}
 	}
 
 	for _, name := range s.networks {
 		if err := c.api.NetworkRemove(ctx, name); err != nil {
-			rep.Failed++
+			failed++
 			continue
 		}
 		rep.Networks++
+		removed++
 	}
 
 	if withVolumes {
 		for _, v := range s.volumes {
 			if err := c.api.VolumeRemove(ctx, v.Name, false); err != nil {
-				rep.Failed++
+				failed++
 				continue
 			}
 			rep.Volumes++
-			if v.UsageData != nil {
-				rep.Bytes += v.UsageData.Size
-			}
+			removed++
 		}
 	}
-	return rep, nil
+	return removed, failed
 }
 
-// removeImage deletes an image the way `docker rmi` does: by each of its tags,
-// so the daemon drops the references first and the image with the last one.
-// Deleting a multi-tagged image by ID fails unless forced, and forcing it would
-// defeat the daemon's own last check that nothing is using it.
+// removeImage deletes an image and reports whether the daemon took it. How it
+// has to be asked depends on whether the image still carries a name.
 func (c *Client) removeImage(ctx context.Context, img *image.Summary) bool {
-	refs := img.RepoTags
 	if untagged(img) {
-		refs = []string{img.ID}
+		// An untagged image has no name to delete it by, only its ID — and the
+		// daemon refuses an ID that is still referenced somewhere, which for one
+		// of these is a digest left over from the pull or rebuild that untagged
+		// it. That refusal is what kept "untagged layers left by rebuilds" on
+		// the page after every sweep. Forcing is what `docker image prune`
+		// itself does here, and it is safe for the same reason: an image any
+		// container still uses never reaches this, keep.image holds it back.
+		_, err := c.api.ImageRemove(ctx, img.ID, image.RemoveOptions{Force: true, PruneChildren: true})
+		return err == nil
 	}
+	// A tagged image is deleted the way `docker rmi` does it: by each of its
+	// tags, so the daemon drops the references first and the image with the
+	// last one. Deleting a multi-tagged image by ID would need forcing, and
+	// forcing it there would defeat the daemon's own last check that nothing is
+	// using it.
 	ok := false
-	for _, ref := range refs {
+	for _, ref := range img.RepoTags {
 		if _, err := c.api.ImageRemove(ctx, ref, image.RemoveOptions{PruneChildren: true}); err == nil {
 			ok = true
 		}
