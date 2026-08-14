@@ -167,31 +167,46 @@ func (c *Client) HealthURL(ctx context.Context, a *db.App) string {
 		return ""
 	}
 	if !c.UsesCompose(a) {
-		if a.Port <= 0 {
+		list := c.appContainers(ctx, a.ID)
+		if len(list) == 0 {
 			return ""
 		}
-		return fmt.Sprintf("http://%s:%d%s", ContainerName(a.ID), a.Port, a.HealthPath)
+		port := labelledPort(list[0].Labels, a.Port)
+		if port <= 0 {
+			return ""
+		}
+		return fmt.Sprintf("http://%s:%d%s", ContainerName(a.ID), port, a.HealthPath)
 	}
 
-	// A compose app's containers are named by compose, not by Quasar, and the
-	// port lives in the Traefik label its author wrote — which is more
-	// trustworthy than a.Port, since nothing makes them agree.
+	// A compose app's containers are named by compose, not by Quasar.
 	web, ok := c.composeWebContainer(ctx, a.ID)
 	if !ok || len(web.Names) == 0 {
 		return ""
 	}
-	port := a.Port
-	for k, v := range web.Labels {
-		if strings.HasSuffix(k, ".loadbalancer.server.port") {
-			if n, err := strconv.Atoi(v); err == nil && n > 0 {
-				port = n
-			}
-			break
-		}
-	}
+	port := labelledPort(web.Labels, a.Port)
 	if port <= 0 {
 		return ""
 	}
 	// Container names come back from the API with a leading slash.
 	return fmt.Sprintf("http://%s:%d%s", strings.TrimPrefix(web.Names[0], "/"), port, a.HealthPath)
+}
+
+// labelledPort is the port a container told Traefik it serves on, falling back
+// to the given one when it carries no such label.
+//
+// That label is what actually decides where requests land, for a stack whose
+// author wrote it and for a single container Quasar labelled from the image's
+// exposed port alike. Probing anything else means the health check can fail on
+// an app visitors are being served perfectly well, or pass on one they are not.
+func labelledPort(labels map[string]string, fallback int) int {
+	for k, v := range labels {
+		if !strings.HasSuffix(k, ".loadbalancer.server.port") {
+			continue
+		}
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+		break
+	}
+	return fallback
 }

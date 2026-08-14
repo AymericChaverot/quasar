@@ -230,6 +230,14 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 	}
 
 	c.stage(a.ID, phaseStart)
+
+	// Read after the pull, so a deploy that moves the app to a new port is
+	// routed at the port of the image it is actually starting.
+	port, why := servedPort(a.Port, c.imageExposedPorts(ctx, imageRef))
+	if why != "" {
+		c.note(a.ID, "%s", why)
+	}
+
 	previous := c.appContainers(ctx, a.ID)
 
 	// Two containers writing one data directory at the same time can corrupt
@@ -272,7 +280,7 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 		&container.Config{
 			Image:  imageRef,
 			Env:    envLines(a.EnvContent),
-			Labels: c.traefikLabels(a),
+			Labels: c.traefikLabelsPort(a, port),
 		},
 		hostCfg,
 		&network.NetworkingConfig{
@@ -293,7 +301,7 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 		return fmt.Errorf("start container: %w", err)
 	}
 	c.note(a.ID, "started %s from %s", name, imageRef)
-	if err := c.waitServing(ctx, a, name, created.ID); err != nil {
+	if err := c.waitServing(ctx, a, name, created.ID, port); err != nil {
 		c.removeContainer(context.WithoutCancel(ctx), created.ID)
 		rollback()
 		return err
@@ -326,10 +334,13 @@ func plural(n int, one, many string) string {
 // name — not by the shared alias, which would round-robin onto the container
 // being replaced and pass even if the new one is broken. Without a health path
 // the most we can verify is that it did not exit on startup.
-func (c *Client) waitServing(ctx context.Context, a *db.App, name, id string) error {
+//
+// It probes the port the container was labelled with rather than the app's
+// configured one, so the check and Traefik agree on where the app serves.
+func (c *Client) waitServing(ctx context.Context, a *db.App, name, id string, port int) error {
 	probeURL := ""
-	if a.HealthPath != "" && a.Port > 0 {
-		probeURL = fmt.Sprintf("http://%s:%d%s", name, a.Port, a.HealthPath)
+	if a.HealthPath != "" && port > 0 {
+		probeURL = fmt.Sprintf("http://%s:%d%s", name, port, a.HealthPath)
 	}
 
 	c.stage(a.ID, phaseHealth)
