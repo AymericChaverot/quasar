@@ -100,6 +100,17 @@ func (c *Client) portConflictError(conflict portConflict, rep ComposeAdaptation)
 		"put it on the external %s network and give it the Traefik labels (a Host rule, the websecure "+
 		"entrypoint, tls.certresolver=letsencrypt)", c.network)
 	switch {
+	case rep.Adapted():
+		// The rewrite ran, chose a service and put it behind Traefik — and the
+		// binding survived anyway. That means compose resolved this entry to a
+		// port the rewrite did not see in it: a ${VAR} coming from the shell
+		// compose inherits, say, rather than from the app's own environment.
+		// Telling the operator to do what Quasar just did would send them
+		// looking for something already there.
+		remedy = fmt.Sprintf("Quasar rewrote this file to run behind Traefik and routed %q through it, but "+
+			"compose still resolves this entry to port %d — most likely a variable Quasar cannot see the "+
+			"value of. Write the binding out of the compose file: Traefik reaches the service over the %s "+
+			"network, so it needs no host port at all", rep.Service, conflict.Port, c.network)
 	case rep.Author:
 		remedy = fmt.Sprintf("This compose file carries its own Traefik labels, so Quasar runs it exactly as "+
 			"written and left the binding alone. Remove it — Traefik reaches %q over the %s network, which "+

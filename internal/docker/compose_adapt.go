@@ -81,6 +81,9 @@ type adaptOptions struct {
 	Network string // the external network Traefik watches
 	Choice  string // the service the operator picked, "" to work it out
 	Port    int    // the port configured for the app, preferred over a guess
+	// Env is what compose interpolates the file's ${VAR} references with, so a
+	// file parameterising its host port is read as the port it will really bind.
+	Env map[string]string
 	// Labels builds the Traefik labels for the routed service, given the
 	// container port the adaptation settled on. It is a function because that
 	// port is only known once the file has been read.
@@ -107,7 +110,7 @@ func adaptCompose(src []byte, opt adaptOptions) ([]byte, ComposeAdaptation, erro
 		return nil, ComposeAdaptation{Err: err.Error()}, err
 	}
 
-	services := readServices(servicesNode)
+	services := readServices(servicesNode, opt.Env)
 	rep := ComposeAdaptation{Choice: opt.Choice}
 	for _, s := range services {
 		rep.Services = append(rep.Services, s.name)
@@ -189,6 +192,9 @@ func (c *Client) adaptOptionsFor(a *db.App) adaptOptions {
 		Network: c.network,
 		Choice:  a.ComposeService,
 		Port:    a.Port,
+		// The same environment compose is handed as --env-file, so the rewrite
+		// and compose itself read one file the same way.
+		Env: envMap(a.EnvContent),
 		Labels: func(port int) map[string]string {
 			labels := c.traefikLabelsPort(a, port)
 			// The label marking a single-container app is deliberately not
@@ -260,6 +266,7 @@ type composeService struct {
 	name  string
 	node  *yaml.Node
 	ports []composePort
+	env   map[string]string // what its ${VAR} references resolve to
 }
 
 // composePort is one entry of a service's ports list, in either of the two
@@ -270,7 +277,7 @@ type composePort struct {
 	text           string // the entry as written, for the report
 }
 
-func readServices(servicesNode *yaml.Node) []composeService {
+func readServices(servicesNode *yaml.Node, env map[string]string) []composeService {
 	var out []composeService
 	for i := 0; i+1 < len(servicesNode.Content); i += 2 {
 		name := servicesNode.Content[i].Value
@@ -279,10 +286,10 @@ func readServices(servicesNode *yaml.Node) []composeService {
 			continue
 		}
 		expandMerges(node, 0)
-		s := composeService{name: name, node: node}
+		s := composeService{name: name, node: node, env: env}
 		if ports := mapValue(node, "ports"); ports != nil && ports.Kind == yaml.SequenceNode {
 			for _, entry := range ports.Content {
-				s.ports = append(s.ports, parsePortEntry(entry))
+				s.ports = append(s.ports, parsePortEntry(entry, env))
 			}
 		}
 		out = append(out, s)
@@ -380,10 +387,16 @@ func expandMerges(m *yaml.Node, depth int) {
 
 // parsePortEntry reads one ports entry: the short string form
 // ("127.0.0.1:8080:80/tcp") or the long mapping form.
-func parsePortEntry(n *yaml.Node) composePort {
+//
+// The entry is interpolated before it is read, since "${HTTP_PORT:-80}:80" is
+// only a host binding once compose has substituted it — and splitting it on ":"
+// unsubstituted finds a colon inside the default value rather than the one
+// separating host from container. The text kept for the report stays as the
+// author wrote it, so it can be found in the file.
+func parsePortEntry(n *yaml.Node, env map[string]string) composePort {
 	switch n.Kind {
 	case yaml.ScalarNode:
-		s := n.Value
+		s := resolveVars(n.Value, env)
 		if i := strings.IndexByte(s, '/'); i >= 0 {
 			s = s[:i]
 		}
@@ -396,17 +409,18 @@ func parsePortEntry(n *yaml.Node) composePort {
 		}
 		return p
 	case yaml.MappingNode:
-		p := composePort{}
+		p, written := composePort{}, ""
 		if t := mapValue(n, "target"); t != nil {
-			p.container = t.Value
+			written = t.Value
+			p.container = resolveVars(t.Value, env)
 		}
 		published := ""
 		if v := mapValue(n, "published"); v != nil {
 			published = v.Value
 		}
-		p.hostLo, p.hostHi = publishedRange(published)
-		if p.text = published + ":" + p.container; published == "" {
-			p.text = p.container
+		p.hostLo, p.hostHi = publishedRange(resolveVars(published, env))
+		if p.text = published + ":" + written; published == "" {
+			p.text = written
 		}
 		return p
 	}
@@ -477,7 +491,7 @@ func (s composeService) containerPorts() []int {
 	}
 	if exposed := mapValue(s.node, "expose"); exposed != nil {
 		for _, n := range exposed.Content {
-			add(n.Value)
+			add(resolveVars(n.Value, s.env))
 		}
 	}
 	return out
