@@ -1334,6 +1334,56 @@ input[type="checkbox"]:focus-visible {
 .btn-primary.htmx-request .ico,
 .btn-danger.htmx-request .ico { display: none; }
 
+/* A word that names something happening right now: DEPLOYING on a badge, the
+   heading over an update, the line naming the step a deploy is on. A band of
+   full-strength colour travels along the letters over a slightly dimmed ground,
+   so the text itself carries the sense of work under way and nothing has to be
+   found room for beside it.
+
+   Built from currentColor alone, which is what lets one class serve all of
+   them: it shimmers an amber badge, a muted phase line and the page's own text
+   colour, each in its own colour and in every theme, with nothing to keep in
+   step. It goes on the element that holds the words and nothing else — a span
+   inside a badge, the paragraph that is only the phase line — so the sweep is
+   measured across the text rather than across a whole row of it. */
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .shimmer {
+    background-image: linear-gradient(
+      100deg,
+      color-mix(in srgb, currentColor 62%, transparent) 42%,
+      currentColor 50%,
+      color-mix(in srgb, currentColor 62%, transparent) 58%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    /* Not `color: transparent`, which would resolve the currentColor the
+       gradient is built from to transparent and paint nothing at all. This
+       empties the glyphs while leaving the colour itself in place. */
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 2.4s linear infinite;
+  }
+}
+
+/* The image is twice the box wide, so 100% holds its bright middle against the
+   left edge and 0 carries it to the right one. */
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to   { background-position: 0 0; }
+}
+
+/* The blanket reduced-motion rule further down only stops the sweep, and a
+   sweep stopped partway leaves the text dimmed and lit from one side for good.
+   So the effect is undone here instead of frozen. */
+@media (prefers-reduced-motion: reduce) {
+  .shimmer {
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+    animation: none;
+  }
+}
+
 /* Tailwind's reset stopped giving buttons the hand cursor in v4, so every
    button on the page would fall back to the arrow. Restored here rather than
    class by class, since nothing in this interface uses a button that is not

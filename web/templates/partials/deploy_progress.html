@@ -106,6 +106,9 @@
     } else {
       phaseEl.textContent = "Deployed.";
     }
+    // The phase names what is happening while it is happening; once the deploy
+    // has ended the same line is a verdict, and a verdict must sit still.
+    phaseEl.classList.toggle("shimmer", !!s.running);
     bar.classList.toggle("fill-info", !s.error);
     bar.classList.toggle("fill-err", !!s.error);
   });

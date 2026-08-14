@@ -29,12 +29,14 @@
       <line class="stroke-draw" x1="9" y1="9" x2="15" y2="15"/>
     </svg>
   </div>
-  <h1 class="auth-brand">Updating</h1>
+  {{/* The heading is the present participle of something in flight, so it is
+       swept while the update runs and stilled the moment there is an outcome. */}}
+  <h1 id="update-brand" class="auth-brand shimmer">Updating</h1>
   <p class="auth-sub"><span class="mono">{{.Current}}</span> → <span class="mono">{{.Target}}</span></p>
 
   <div class="card auth-card space-y-4">
     <div>
-      <p id="update-phase" class="text-sm">Starting the update…</p>
+      <p id="update-phase" class="text-sm shimmer">Starting the update…</p>
       <div id="update-meter" class="meter is-waiting mt-3"><div class="fill-info" style="width: 100%"></div></div>
     </div>
     <ol class="update-steps">
@@ -88,6 +90,7 @@
   var backEl = document.getElementById('update-back');
   var markEl = document.getElementById('update-mark');
   var glowEl = document.getElementById('update-glow');
+  var brandEl = document.getElementById('update-brand');
   var steps = {};
   root.querySelectorAll('[data-step]').forEach(function (el) { steps[el.dataset.step] = el; });
 
@@ -115,8 +118,17 @@
     }
   }
 
+  // Everything that was moving because work was under way stops together with
+  // the work. Leaving the heading swept under a cross would say the update is
+  // still going, which is the one thing the outcome has just settled.
+  function still() {
+    brandEl.classList.remove('shimmer');
+    phaseEl.classList.remove('shimmer');
+  }
+
   function fail(msg) {
     finished = true;
+    still();
     meter.hidden = true;
     markEl.classList.add('is-failed');
     glowEl.classList.add('is-failed', 'is-flare');
@@ -137,6 +149,7 @@
 
   function done(v) {
     finished = true;
+    still();
     stage('done', 'done', 'done');
     progress(100);
     markEl.classList.add('is-ok');
