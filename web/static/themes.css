@@ -226,6 +226,47 @@ body {
   font-family: var(--font-body);
 }
 
+/* Scrollbars. Left to the platform they come out a white trough with a grey
+   thumb — a light-mode widget parked down the side of a near-black log pane on
+   every theme but Paper, and the one part of the page that never got the memo.
+   Both syntaxes are given because they are drawn by different machinery:
+   Firefox and Chromium 121 or later take `scrollbar-color`, and older WebKit
+   only understands the pseudo-elements. Where both are understood the standard
+   properties win and the pseudo-element rules are simply ignored, so the two
+   are set to the same colours rather than to a fallback that would look
+   different from the real thing.
+
+   The thumb is the strong border colour rather than the accent: these sit
+   beside something being read, and an accent-coloured bar the height of a log
+   pane would be the loudest thing on screen. The trough stays transparent so
+   the scrollbar takes the colour of whatever it is scrolling — surface inside
+   a card, --log-bg inside a log. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track { background: transparent; }
+/* Padded by a transparent border rather than by a narrower bar, so the thumb
+   sits off the edge of its trough the way the standard one does. */
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--radius-badge);
+  background: var(--border-strong);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  background-clip: content-box;
+}
+/* Where a horizontal and a vertical bar meet; unset it is the same platform
+   grey square the rest of this rules out. */
+::-webkit-scrollbar-corner { background: transparent; }
+
 /* Nearly every number on screen sits in a column that refreshes on a timer —
    CPU percentages, memory, uptimes. Proportional digits make those columns
    twitch on each poll, so figures are locked to one width everywhere. */
