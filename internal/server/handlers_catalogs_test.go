@@ -12,6 +12,7 @@ import (
 
 	"quasar/internal/catalog"
 	"quasar/internal/db"
+	"quasar/internal/secrets"
 )
 
 // catalogTestServer is a server with a real database and the real templates,
@@ -231,6 +232,47 @@ func TestFetchRefusesSomethingTooLarge(t *testing.T) {
 
 	if _, err := fetchCatalog(origin.URL); err == nil {
 		t.Error("a response larger than the cap was accepted")
+	}
+}
+
+// Deploying the same entry twice is now the expected thing to do, and two raw
+// servers on one host port is the way it fails: the second stack comes up,
+// cannot bind, and stops — with the reason in a log nobody is watching. The
+// form is where that gets said.
+func TestSecondServerOnTheSamePortIsRefused(t *testing.T) {
+	s, database := catalogTestServer(t)
+	keyring, err := secrets.LoadOrCreateKey(filepath.Join(t.TempDir(), "master.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.keyring = keyring
+
+	const stack = "services:\n  mc:\n    image: itzg/minecraft-server\n    ports:\n      - \"${HOST_PORT}:25565\"\n"
+	first := &db.App{
+		ID: "aaaa0001", Name: "Vanilla", Subdomain: "mc-vanilla", DeployType: "compose",
+		ComposeYAML: stack, EnvContent: "HOST_PORT=25565", Port: 25565,
+	}
+	if err := db.InsertApp(database, keyring, first); err != nil {
+		t.Fatal(err)
+	}
+
+	clash := &db.App{
+		Name: "Modded", Subdomain: "mc-modded", DeployType: "compose",
+		ComposeYAML: stack, EnvContent: "HOST_PORT=25565", Port: 25565,
+	}
+	if msg := s.validateNewApp(clash); msg == "" {
+		t.Error("a second server on the same host port was accepted")
+	} else if !strings.Contains(msg, "25565") || !strings.Contains(msg, "Vanilla") {
+		t.Errorf("the message names neither the port nor who holds it: %q", msg)
+	}
+
+	// The same entry on a port of its own is the whole point, and has to pass.
+	ok := &db.App{
+		Name: "Modded", Subdomain: "mc-modded", DeployType: "compose",
+		ComposeYAML: stack, EnvContent: "HOST_PORT=25566", Port: 25565,
+	}
+	if msg := s.validateNewApp(ok); msg != "" {
+		t.Errorf("a second server on its own port was refused: %q", msg)
 	}
 }
 

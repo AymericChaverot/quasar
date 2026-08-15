@@ -301,6 +301,9 @@ func (s *Server) validateNewApp(a *db.App) string {
 		if strings.TrimSpace(a.ComposeYAML) == "" {
 			return "A docker-compose.yml content is required."
 		}
+		if msg := s.portConflict(a); msg != "" {
+			return msg
+		}
 	default:
 		return "Invalid deployment type."
 	}
@@ -318,6 +321,43 @@ func (s *Server) validateNewApp(a *db.App) string {
 	for _, d := range a.CustomDomainList() {
 		if !domainRe.MatchString(d) {
 			return "Invalid custom domain: " + d
+		}
+	}
+	return ""
+}
+
+// portConflict reports a host port this stack would bind that another
+// application already binds, naming both.
+//
+// Only the servers that do not speak HTTP ever reach this: a web app is routed
+// by Host header and binds nothing on the host, and Quasar's compose adaptation
+// drops the bindings on 80 and 443 that Traefik holds. What is left is the game
+// servers and the databases, which are exactly the entries somebody deploys
+// several of. Two Minecraft servers on 25565 is a stack that comes up, fails to
+// bind, and stops — with the reason in a log nobody is watching, since the
+// dashboard would have shown the deploy as done.
+func (s *Server) portConflict(a *db.App) string {
+	wanted := docker.PublishedPorts(a.ComposeYAML, docker.EnvMap(a.EnvContent))
+	if len(wanted) == 0 {
+		return ""
+	}
+	apps, err := db.ListApps(s.db, s.keyring)
+	if err != nil {
+		return ""
+	}
+	held := map[int]string{}
+	for _, other := range apps {
+		if other.ID == a.ID || other.DeployType != "compose" {
+			continue
+		}
+		for _, p := range docker.PublishedPorts(other.ComposeYAML, docker.EnvMap(other.EnvContent)) {
+			held[p] = other.Name
+		}
+	}
+	for _, p := range wanted {
+		if name, ok := held[p]; ok {
+			return fmt.Sprintf("Port %d is already published by %q. Two containers cannot bind the same host port — "+
+				"give this one a different port, in the compose file or in the variable it reads it from.", p, name)
 		}
 	}
 	return ""
