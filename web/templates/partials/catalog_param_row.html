@@ -1,0 +1,46 @@
+{{/* One parameter of a catalogue entry, as a row of the form. The fields are
+     named without indices on purpose: the browser sends one value per field per
+     row in document order, so the server zips the parallel lists back together
+     and a row added or removed in the page needs no renumbering. */}}
+{{define "catalog_param_row"}}
+<div class="param-row card space-y-3 p-3">
+  <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div>
+      <label class="label">Name</label>
+      <input name="param_name" type="text" class="input mono" value="{{.Name}}" placeholder="VERSION">
+    </div>
+    <div>
+      <label class="label">Label</label>
+      <input name="param_label" type="text" class="input" value="{{.Label}}" placeholder="Minecraft version">
+    </div>
+    <div>
+      <label class="label">Kind</label>
+      {{$kind := .Type}}
+      <select name="param_kind" class="input">
+        {{range $k := .Kinds}}
+        <option value="{{$k}}" {{if eq $k $kind}}selected{{end}}>{{$k}}</option>
+        {{end}}
+      </select>
+    </div>
+    <div>
+      <label class="label">Default</label>
+      <input name="param_default" type="text" class="input mono" value="{{.Default}}" placeholder="1.20.1">
+    </div>
+  </div>
+  <div class="grid grid-cols-2 gap-3">
+    <div>
+      <label class="label">Options</label>
+      <input name="param_options" type="text" class="input mono"
+             value="{{range $i, $o := .Options}}{{if $i}}, {{end}}{{$o}}{{end}}"
+             placeholder="FABRIC, FORGE, NEOFORGE">
+      <p class="help">Comma-separated, and only for a choice of kind “select”.</p>
+    </div>
+    <div>
+      <label class="label">Help</label>
+      <input name="param_help" type="text" class="input" value="{{.Help}}"
+             placeholder="Shown under the field.">
+    </div>
+  </div>
+  <button type="button" class="remove-param btn py-1! text-xs">{{template "icon_x"}}Remove</button>
+</div>
+{{end}}

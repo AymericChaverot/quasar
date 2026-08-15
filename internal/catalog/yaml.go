@@ -215,14 +215,13 @@ func validateParams(t Template, where string) []error {
 		}
 		declared = append(declared, p.Name)
 
-		switch p.Type() {
-		case "text", "number", "port":
-		case "select":
+		switch {
+		case p.Type() == "select":
 			if len(p.Options) == 0 {
 				add("parameter %q offers a choice with no options", p.Name)
 			}
-		default:
-			add("parameter %q has kind %q; use text, select, number or port", p.Name, p.Kind)
+		case !slices.Contains(ParamKinds, p.Type()):
+			add("parameter %q has kind %q; use one of %s", p.Name, p.Kind, strings.Join(ParamKinds, ", "))
 		}
 
 		// A default that the parameter itself would reject leaves the form

@@ -238,6 +238,11 @@ func (s *Server) routes() {
 	s.admin("POST /settings/catalogs/{id}/fetch", s.handleCatalogFetch)
 	s.admin("POST /settings/catalogs/{id}/toggle", s.handleCatalogToggle)
 	s.admin("POST /settings/catalogs/{id}/delete", s.handleCatalogDelete)
+	// The same document, edited an entry at a time rather than as text.
+	s.admin("POST /settings/catalogs/start", s.handleCatalogStart)
+	s.admin("GET /settings/catalogs/{id}/entries/{entry}", s.handleCatalogEntryForm)
+	s.admin("POST /settings/catalogs/{id}/entries/{entry}", s.handleCatalogEntrySave)
+	s.admin("POST /settings/catalogs/{id}/entries/{entry}/delete", s.handleCatalogEntryDelete)
 	s.admin("POST /settings/notify-test", s.handleNotifyTest)
 	s.admin("POST /settings/users", s.handleUserCreate)
 	s.admin("POST /settings/users/{id}/role", s.handleUserRole)

@@ -44,6 +44,7 @@
           </p>
         </div>
         <div class="flex shrink-0 flex-wrap gap-2">
+          <a href="/settings/catalogs/{{.ID}}/entries/new" class="btn py-1! text-xs">{{template "icon_plus"}}Add an entry</a>
           {{if .SourceURL}}
           <form method="post" action="/settings/catalogs/{{.ID}}/fetch">
             <button type="submit" class="btn py-1! text-xs">{{template "icon_restart"}}Re-fetch</button>
@@ -76,9 +77,12 @@
       {{end}}
 
       {{if .Entries}}
+      {{$id := .ID}}
       <div class="flex flex-wrap gap-1.5">
         {{range .Entries}}
-        <span class="chip chip-name">{{.Name}}{{if .Params}} · {{len .Params}} {{plural (len .Params) "choice" "choices"}}{{end}}</span>
+        <a href="/settings/catalogs/{{$id}}/entries/{{.ID}}" class="chip chip-name hover:underline">
+          {{.Name}}{{if .Params}} · {{len .Params}} {{plural (len .Params) "choice" "choices"}}{{end}}
+        </a>
         {{end}}
       </div>
       {{end}}
@@ -112,6 +116,18 @@
       <p class="help mt-1!">The {{.BuiltinN}} built-in entries are offered on their own until you add one.</p>
     </div>
     {{end}}
+
+    {{/* The way in for somebody who would rather fill in a form than learn a
+         YAML schema: an empty catalogue, then entries added one at a time. */}}
+    <form method="post" action="/settings/catalogs/start"
+          class="card flex flex-wrap items-end gap-3 p-4">
+      <div class="min-w-0 flex-1">
+        <label class="label" for="start-name">Start an empty one</label>
+        <input id="start-name" name="name" type="text" required class="input" placeholder="My catalogue">
+        <p class="help">Then add entries in a form, a field at a time — no YAML involved.</p>
+      </div>
+      <button type="submit" class="btn px-4 py-2">{{template "icon_plus"}}Start</button>
+    </form>
   </section>
 
   <section class="space-y-4">

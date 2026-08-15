@@ -1,0 +1,226 @@
+{{define "content"}}
+{{$new := .IsNew}}{{$cat := .Catalog}}{{$e := .Entry}}
+<div class="mb-8">
+  <a href="/settings/catalogs" class="back-link">Catalogues</a>
+  <h1 class="page-title mt-2">{{if $new}}New entry{{else}}{{$e.Name}}{{end}}</h1>
+  <p class="help max-w-3xl mt-2!">
+    An entry in <span class="font-medium">{{$cat.Name}}</span>. This is the same document the
+    text editor shows — filled in here, written back there — so it can be started in either and
+    finished in the other.
+  </p>
+</div>
+
+{{if .Errors}}
+<div class="alert-err mb-6 max-w-3xl">
+  <p class="font-medium">This entry was not saved:</p>
+  <ul class="mt-2 list-disc space-y-1 pl-5">
+    {{range .Errors}}<li class="mono text-xs">{{.}}</li>{{end}}
+  </ul>
+</div>
+{{end}}
+
+<form method="post" action="/settings/catalogs/{{$cat.ID}}/entries/{{if $new}}new{{else}}{{$e.ID}}{{end}}"
+      class="max-w-3xl space-y-8">
+
+  <section class="space-y-4">
+    <h2 class="h-label">The card</h2>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label for="id" class="label">Id</label>
+        <input id="id" name="id" type="text" required class="input mono" value="{{with $e}}{{.ID}}{{end}}"
+               placeholder="minecraft-modded">
+        <p class="help">
+          Lowercase letters, digits and hyphens. Proposed as the subdomain, and reusing a built-in
+          id replaces that entry.
+        </p>
+      </div>
+      <div>
+        <label for="name" class="label">Name</label>
+        <input id="name" name="name" type="text" required class="input" value="{{with $e}}{{.Name}}{{end}}"
+               placeholder="Modded Minecraft">
+        <p class="help">On the card, before anything is picked — so no placeholders here.</p>
+      </div>
+    </div>
+    <div>
+      <label for="description" class="label">Description</label>
+      <input id="description" name="description" type="text" required class="input"
+             value="{{with $e}}{{.Description}}{{end}}" placeholder="Forge or Fabric server, version of your choosing">
+      <p class="help">The line under the name. It is all the card says about the entry.</p>
+    </div>
+    <div>
+      <label for="category" class="label">Category</label>
+      <input id="category" name="category" type="text" required class="input" list="known-categories"
+             value="{{with $e}}{{.Category}}{{end}}" placeholder="Minecraft">
+      <datalist id="known-categories">
+        {{range .Categories}}<option value="{{.}}">{{end}}
+      </datalist>
+      <p class="help">
+        An existing one files the entry beside its neighbours; a new one becomes a filter button of
+        its own.
+      </p>
+    </div>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Deployment</h2>
+    {{$deploy := "image"}}{{with $e}}{{if .DeployType}}{{$deploy = .DeployType}}{{end}}{{end}}
+    <div class="flex gap-6 text-sm">
+      <label class="flex items-center gap-2">
+        <input type="radio" name="deploy_type" value="image" class="deploy-pick" {{if eq $deploy "image"}}checked{{end}}>
+        <span>Docker image</span>
+      </label>
+      <label class="flex items-center gap-2">
+        <input type="radio" name="deploy_type" value="compose" class="deploy-pick" {{if eq $deploy "compose"}}checked{{end}}>
+        <span>Docker Compose</span>
+      </label>
+    </div>
+
+    <div id="image-fields" class="space-y-4 {{if eq $deploy "compose"}}hidden{{end}}">
+      <div>
+        <label for="image_ref" class="label">Image</label>
+        <input id="image_ref" name="image_ref" type="text" class="input mono"
+               value="{{with $e}}{{.ImageRef}}{{end}}" placeholder="ghcr.io/owner/app:latest">
+      </div>
+      <div>
+        <label for="data_mount" class="label">Persistent data mount (optional)</label>
+        <input id="data_mount" name="data_mount" type="text" class="input mono"
+               value="{{with $e}}{{.DataMount}}{{end}}" placeholder="/data">
+      </div>
+    </div>
+
+    <div id="compose-fields" class="space-y-4 {{if ne $deploy "compose"}}hidden{{end}}">
+      <div>
+        <label for="compose" class="label">Compose file</label>
+        <textarea id="compose" name="compose" rows="14" spellcheck="false"
+                  class="input mono text-xs">{{with $e}}{{.Compose}}{{end}}</textarea>
+        <p class="help">
+          Bind state under <span class="mono">./data</span> so the backup archive picks it up.
+          <span class="mono">${VAR}</span> is read from the env below at run time.
+        </p>
+      </div>
+      <div>
+        <label for="compose_service" class="label">Routed service (optional)</label>
+        <input id="compose_service" name="compose_service" type="text" class="input mono"
+               value="{{with $e}}{{.ComposeService}}{{end}}" placeholder="app">
+        <p class="help">Which service the domain points at. Leave empty when only one could be it.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label for="port" class="label">Port</label>
+        <input id="port" name="port" type="number" min="1" max="65535" required class="input"
+               value="{{if $e}}{{$e.Port}}{{else}}80{{end}}">
+        <p class="help">The port inside the container the domain is routed to.</p>
+      </div>
+      <div class="self-end">
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="raw" value="1" {{with $e}}{{if .Raw}}checked{{end}}{{end}}>
+          <span>Not an HTTP app</span>
+        </label>
+        <p class="help">
+          A game server or a database, reached at the server's own address and port rather than at
+          the subdomain. Says so on the card.
+        </p>
+      </div>
+    </div>
+    <div>
+      <label for="note" class="label">Note (optional)</label>
+      <input id="note" name="note" type="text" class="input" value="{{with $e}}{{.Note}}{{end}}"
+             placeholder="The one thing worth reading before the form is submitted.">
+    </div>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Choices</h2>
+    <p class="help mt-0!">
+      What the entry asks before it prefills anything. Each answer is substituted for
+      <span class="mono">{{"{{NAME}}"}}</span> below — which is how one entry stands for a fleet of
+      servers rather than a single installation.
+    </p>
+    <div id="params" class="space-y-3">
+      {{range $e.Params}}
+      {{template "catalog_param_row" .}}
+      {{end}}
+    </div>
+    <button type="button" id="add-param" class="btn">{{template "icon_plus"}}Add a choice</button>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">What gets prefilled</h2>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label for="app_name" class="label">Application name (optional)</label>
+        <input id="app_name" name="app_name" type="text" class="input" value="{{with $e}}{{.AppName}}{{end}}"
+               placeholder="Minecraft {{"{{VERSION}}"}} ({{"{{TYPE}}"}})">
+        <p class="help">The name proposed for the app. Defaults to the card's name.</p>
+      </div>
+      <div>
+        <label for="subdomain" class="label">Subdomain (optional)</label>
+        <input id="subdomain" name="subdomain" type="text" class="input mono"
+               value="{{with $e}}{{.Subdomain}}{{end}}" placeholder="mc-{{"{{TYPE}}"}}-{{"{{VERSION}}"}}">
+        <p class="help">
+          Defaults to the id. Parameterise it when the entry is meant to be deployed more than
+          once — otherwise every server proposes the same address.
+        </p>
+      </div>
+    </div>
+    <div>
+      <label for="env" class="label">Environment variables</label>
+      <textarea id="env" name="env" rows="6" spellcheck="false"
+                class="input mono text-xs">{{with $e}}{{.Env}}{{end}}</textarea>
+      <p class="help">
+        One KEY=value per line. Quasar answers <span class="mono">{{"{{RANDOM}}"}}</span> with a
+        fresh secret, and <span class="mono">{{"{{HOST}}"}}</span> and
+        <span class="mono">{{"{{URL}}"}}</span> with the address the app will be served on.
+      </p>
+    </div>
+  </section>
+
+  <div class="flex items-center gap-4">
+    <button type="submit" class="btn-primary px-4 py-2">Save entry</button>
+    <a href="/settings/catalogs" class="link text-sm">Cancel</a>
+  </div>
+</form>
+
+{{if not $new}}
+<form method="post" action="/settings/catalogs/{{$cat.ID}}/entries/{{$e.ID}}/delete" class="mt-8"
+      onsubmit="return confirm('Remove this entry from the catalogue? Applications already deployed from it are unaffected.')">
+  <button type="submit" class="btn-danger px-4 py-2">{{template "icon_trash"}}Remove this entry</button>
+</form>
+{{end}}
+
+{{/* The blank row the Add button clones. It is markup rather than a string in
+     the script so the two spellings of a parameter row cannot drift apart. */}}
+<template id="param-row-template">
+  {{template "catalog_param_row" .Blank}}
+</template>
+
+<script>
+  (function () {
+    const picks = document.querySelectorAll(".deploy-pick");
+    const image = document.getElementById("image-fields");
+    const compose = document.getElementById("compose-fields");
+    for (const p of picks) {
+      p.addEventListener("change", function () {
+        image.classList.toggle("hidden", p.value !== "image");
+        compose.classList.toggle("hidden", p.value !== "compose");
+      });
+    }
+
+    const rows = document.getElementById("params");
+    const blank = document.getElementById("param-row-template");
+    document.getElementById("add-param").addEventListener("click", function () {
+      rows.appendChild(blank.content.cloneNode(true));
+      const added = rows.lastElementChild.querySelector("input");
+      if (added) added.focus();
+    });
+    // Removing a row is delegated: the rows that arrive later have to answer
+    // to it too, and they do not exist when this runs.
+    rows.addEventListener("click", function (e) {
+      const button = e.target.closest(".remove-param");
+      if (button) button.closest(".param-row").remove();
+    });
+  })();
+</script>
+{{end}}

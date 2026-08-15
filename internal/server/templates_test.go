@@ -191,6 +191,26 @@ func TestExecuteTemplates(t *testing.T) {
 				},
 			},
 		}},
+		// Both states of the entry form: a new entry, which has no dot to read
+		// from, and an existing one with a parameter row already on it.
+		{"catalog_entry", map[string]any{
+			"Title": "New entry", "IsAdmin": true, "IsNew": true,
+			"Catalog": &db.Catalog{ID: 1, Name: "My servers"},
+			"Blank":   catalog.Param{}, "Categories": catalog.Builtin().Categories,
+		}},
+		{"catalog_entry", map[string]any{
+			"Title": "Modded Minecraft", "IsAdmin": true,
+			"Catalog": &db.Catalog{ID: 1, Name: "My servers"},
+			"Entry": &catalog.Template{
+				ID: "minecraft-modded", Name: "Modded Minecraft", Description: "Fabric or Forge",
+				Category: "Minecraft", DeployType: "compose", Port: 25565, Raw: true,
+				Params: []catalog.Param{
+					{Name: "TYPE", Kind: "select", Default: "FABRIC", Options: []string{"FABRIC", "FORGE"}},
+				},
+			},
+			"Blank": catalog.Param{}, "Categories": catalog.Builtin().Categories,
+			"Errors": []string{"minecraft-modded: a compose entry needs a compose file"},
+		}},
 		{"git_credentials", map[string]any{
 			"Title": "Git credentials", "IsAdmin": true,
 			"AnyScope": db.AnyScope, "DefaultUser": db.DefaultGitUsername, "Providers": gitProviders,

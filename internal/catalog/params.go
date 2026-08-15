@@ -37,13 +37,22 @@ type Param struct {
 	Help string `yaml:"help,omitempty"`
 }
 
+// ParamKinds are the kinds of field a parameter may be, in the order a form
+// offers them. Kept here rather than spelled out again in the template and once
+// more in the validation, which is how the three would come to disagree.
+var ParamKinds = []string{"text", "select", "number", "port"}
+
 // Type is the kind of field to draw, defaulting to free text.
 func (p Param) Type() string {
 	if p.Kind == "" {
-		return "text"
+		return ParamKinds[0]
 	}
 	return p.Kind
 }
+
+// Kinds is ParamKinds, reachable from a template that has only a parameter in
+// hand — the form draws a kind picker per row.
+func (p Param) Kinds() []string { return ParamKinds }
 
 // Title is what the form labels the field.
 func (p Param) Title() string {
