@@ -15,14 +15,33 @@
      opens over the page rather than sitting above the fields it fills in. Laid
      out inline it took the top of the page whether or not it was wanted, and
      pushed the form it prefills below the fold. */}}
+{{/* One button per catalogue rather than one for all of them. An operator who
+     wrote a catalogue of their own opens this page to pick from that one, and
+     pouring six of their entries into the sixty Quasar ships would bury them —
+     so each opens the same dialog scoped to itself. */}}
 <section class="mb-10">
   <h2 class="h-label mb-3">App catalogue</h2>
-  <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-    <button type="button" id="catalog-open" class="btn">{{template "icon_grid"}}See the catalogue</button>
+  <div class="flex flex-wrap items-center gap-2">
+    <button type="button" class="btn catalog-open" data-source="" data-label="App catalogue">
+      {{template "icon_grid"}}See the catalogue
+    </button>
+    {{range .Sources}}
+    <button type="button" class="btn catalog-open" data-source="{{.Name}}" data-label="{{.Name}}">
+      {{template "icon_grid"}}{{.Name}}
+      <span class="faint">{{len .Templates}}</span>
+    </button>
+    {{end}}
+  </div>
+  <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
     {{with .Picked}}
-    <p class="text-sm">Prefilled from <span class="font-medium">{{.Name}}</span>.</p>
+    <p class="text-sm">Prefilled from <span class="font-medium">{{.Name}}</span>{{with .Source}} · {{.}}{{end}}.</p>
     {{else}}
     <p class="faint text-sm">Ready-made images and stacks. Picking one prefills the form below.</p>
+    {{end}}
+    {{if .IsAdmin}}
+    <a href="/settings/catalogs" class="link text-sm">
+      {{if .Sources}}Manage your catalogues{{else}}Add a catalogue of your own{{end}}
+    </a>
     {{end}}
   </div>
 </section>
@@ -59,7 +78,8 @@
           <a {{if .Params}}href="#catalog-params-{{.ID}}" data-params="catalog-params-{{.ID}}"
              {{else}}href="/apps/new?template={{.ID}}"{{end}}
              class="catalog-card card block p-3 transition-colors hover:border-[var(--border-strong)]"
-             data-cat="{{.Category}}" data-search="{{.Name}} {{.Description}} {{.Category}} {{.Source}}">
+             data-cat="{{.Category}}" data-source="{{.Source}}"
+             data-search="{{.Name}} {{.Description}} {{.Category}} {{.Source}}">
             <p class="text-sm font-medium">{{.Name}}</p>
             <p class="faint mt-0.5 text-xs">{{.Description}}</p>
             {{if .Source}}<span class="chip chip-name mt-2 inline-block">{{.Source}}</span>{{end}}
@@ -121,12 +141,28 @@
     const empty = document.getElementById("catalog-empty");
     if (!dialog || !box) return;
 
+    // The catalogue being shown: "" for the entries Quasar ships, otherwise the
+    // name of one of the operator's. Every button on the page opens this same
+    // dialog and only changes what it is looking at.
+    let source = "";
+    const title = document.getElementById("catalog-modal-title");
+
     // showModal rather than show: it is what puts the page behind inert, draws
     // the backdrop, and makes the escape key close this — none of which the
     // open attribute alone does.
-    document.getElementById("catalog-open").addEventListener("click", function () {
-      dialog.showModal();
-    });
+    for (const button of document.querySelectorAll(".catalog-open")) {
+      button.addEventListener("click", function () {
+        source = button.dataset.source;
+        title.textContent = button.dataset.label;
+        // A category picked in one catalogue means nothing in the next, and
+        // leaving it on would open the dialog looking empty.
+        pickCategory("");
+        box.value = "";
+        showList();
+        filter();
+        dialog.showModal();
+      });
+    }
     document.getElementById("catalog-close").addEventListener("click", function () {
       dialog.close();
     });
@@ -147,7 +183,8 @@
     function filter() {
       const q = box.value.trim().toLowerCase();
       for (const c of cards) {
-        const hit = (q === "" || c.dataset.search.toLowerCase().includes(q)) &&
+        const hit = c.dataset.source === source &&
+                    (q === "" || c.dataset.search.toLowerCase().includes(q)) &&
                     (category === "" || c.dataset.cat === category);
         c.classList.toggle("hidden", !hit);
       }
@@ -155,20 +192,32 @@
       for (const g of groups) {
         g.classList.toggle("hidden", !g.querySelector(".catalog-card:not(.hidden)"));
       }
+      // And a category this catalogue has nothing in should not be offered as
+      // a filter — the row is otherwise mostly chips that empty the list.
+      // Measured against the source alone, so a chip does not disappear from
+      // under the pointer as the search narrows what is left.
+      for (const chip of chips) {
+        chip.classList.toggle("hidden", chip.dataset.cat !== "" &&
+          !cards.some(c => c.dataset.source === source && c.dataset.cat === chip.dataset.cat));
+      }
       empty.classList.toggle("hidden", !!document.querySelector(".catalog-card:not(.hidden)"));
     }
     box.addEventListener("input", filter);
 
-    for (const chip of document.querySelectorAll(".chip-filter")) {
+    const chips = [...document.querySelectorAll(".chip-filter")];
+    function pickCategory(next) {
+      category = next;
+      for (const chip of chips) {
+        const on = chip.dataset.cat === category;
+        chip.classList.toggle("is-on", on);
+        chip.setAttribute("aria-pressed", on);
+      }
+    }
+    for (const chip of chips) {
       chip.addEventListener("click", function () {
         // Clicking the category already showing goes back to all of them,
         // so the row never traps you with no way out but the All chip.
-        category = chip.dataset.cat === category ? "" : chip.dataset.cat;
-        for (const other of document.querySelectorAll(".chip-filter")) {
-          const on = other.dataset.cat === category;
-          other.classList.toggle("is-on", on);
-          other.setAttribute("aria-pressed", on);
-        }
+        pickCategory(chip.dataset.cat === category ? "" : chip.dataset.cat);
         filter();
       });
     }

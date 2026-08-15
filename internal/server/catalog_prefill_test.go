@@ -152,6 +152,46 @@ func TestPickedParametersReachTheForm(t *testing.T) {
 	}
 }
 
+// Each catalogue gets its own way in. An operator who wrote one came here to
+// pick from it, and a button per catalogue is what keeps their six entries from
+// being poured into the sixty Quasar ships.
+func TestEachCatalogueHasItsOwnButton(t *testing.T) {
+	s := testServer(t)
+	mine, err := catalog.Parse("Mes serveurs", `
+entries:
+  - {id: mc, name: My Minecraft, description: d, category: Modded, port: 25565, image_ref: itzg/minecraft-server}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat := catalog.Builtin().Merge(mine)
+
+	var buf bytes.Buffer
+	err = s.pages["app_new"].ExecuteTemplate(&buf, "layout", map[string]any{
+		"Title": "New", "Domain": "example.com",
+		"Catalog": cat.Grouped(), "Sources": []catalog.Catalog{mine},
+	})
+	if err != nil {
+		t.Fatalf("render app_new: %v", err)
+	}
+	page := buf.String()
+
+	if !strings.Contains(page, `data-source="Mes serveurs" data-label="Mes serveurs"`) {
+		t.Error("the operator's catalogue has no button of its own")
+	}
+	if !strings.Contains(page, `data-source="" data-label="App catalogue"`) {
+		t.Error("the built-in catalogue lost its button")
+	}
+	// The scoping is done on the cards, so they have to say where they came
+	// from — an entry with no source belongs to the built-in catalogue.
+	if !strings.Contains(page, `data-source="Mes serveurs"`) {
+		t.Error("the operator's card does not carry its source")
+	}
+	if !strings.Contains(page, `data-cat="Media" data-source=""`) {
+		t.Error("a built-in card does not carry an empty source, so nothing would show it")
+	}
+}
+
 // The category row is the second way through the catalogue, and it filters on
 // data-cat — which the cards have to carry for it to match anything.
 func TestCategoryFilterHasSomethingToFilterOn(t *testing.T) {

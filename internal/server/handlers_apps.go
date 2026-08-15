@@ -141,6 +141,11 @@ func (s *Server) handleAppNew(w http.ResponseWriter, r *http.Request) {
 		"Title":   "New application",
 		"Domain":  s.cfg.Domain,
 		"Catalog": cat.Grouped(),
+		// The operator's catalogues, named, so the page can offer each of them
+		// as its own way in rather than pouring them all into one long list
+		// with the sixty entries Quasar ships. Somebody who wrote a catalogue
+		// of their own came here to pick from that one.
+		"Sources": s.customCatalogs(),
 	}
 	// ?template=<id> prefills the form from a one-click catalog entry, and
 	// ?p.NAME=value answers the choices that entry offers — which version of a
