@@ -10,43 +10,85 @@
 {{end}}{{end}}
 
 {{if .Catalog}}
+{{/* The catalogue is a chooser, not a part of the form: worth most of the
+     screen while you are picking from it and none of it once you have, so it
+     opens over the page rather than sitting above the fields it fills in. Laid
+     out inline it took the top of the page whether or not it was wanted, and
+     pushed the form it prefills below the fold. */}}
 <section class="mb-10">
   <h2 class="h-label mb-3">App catalogue</h2>
-  <input type="search" id="catalog-search" class="input mb-4" autocomplete="off"
-         placeholder="Search the catalogue — jellyfin, minecraft, postgres…">
-  {{/* Scrolled rather than paged: the form underneath is the point of the
-       page, and a catalogue that pushed it off screen would bury it. */}}
-  <div id="catalog" class="max-h-[26rem] space-y-5 overflow-y-auto pr-1">
-    {{range .Catalog}}
-    <div class="catalog-group">
-      <h3 class="h-label mb-2">{{.Category}}</h3>
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {{range .Templates}}
-        <a href="/apps/new?template={{.ID}}"
-           class="catalog-card card block p-3 transition-colors hover:border-[var(--border-strong)]"
-           data-search="{{.Name}} {{.Description}} {{.Category}}">
-          <p class="text-sm font-medium">{{.Name}}</p>
-          <p class="faint mt-0.5 text-xs">{{.Description}}</p>
-        </a>
-        {{end}}
-      </div>
-    </div>
+  <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <button type="button" id="catalog-open" class="btn">{{template "icon_grid"}}See the catalogue</button>
+    {{with .Picked}}
+    <p class="text-sm">Prefilled from <span class="font-medium">{{.Name}}</span>.</p>
+    {{else}}
+    <p class="faint text-sm">Ready-made images and stacks. Picking one prefills the form below.</p>
     {{end}}
-    <p id="catalog-empty" class="faint hidden py-6 text-center text-sm">Nothing matches that.</p>
   </div>
-  <p class="help mt-2">Selecting a template prefills the form below — review it, then create.</p>
 </section>
 
+<dialog id="catalog-modal" class="modal" aria-labelledby="catalog-modal-title">
+  <div class="modal-head">
+    <h2 id="catalog-modal-title" class="modal-title">App catalogue</h2>
+    <button type="button" id="catalog-close" class="modal-close" aria-label="Close the catalogue">{{template "icon_x"}}</button>
+  </div>
+  {{/* Focused on open: the catalogue is long enough that typing is the way
+       through it, and the dialog hands focus to this by itself. */}}
+  <div class="modal-tools">
+    <input type="search" id="catalog-search" class="input" autocomplete="off" autofocus
+           placeholder="Search the catalogue — jellyfin, minecraft, postgres…">
+  </div>
+  <div class="modal-body">
+    <div id="catalog" class="space-y-5">
+      {{range .Catalog}}
+      <div class="catalog-group">
+        <h3 class="h-label mb-2">{{.Category}}</h3>
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {{range .Templates}}
+          <a href="/apps/new?template={{.ID}}"
+             class="catalog-card card block p-3 transition-colors hover:border-[var(--border-strong)]"
+             data-search="{{.Name}} {{.Description}} {{.Category}}">
+            <p class="text-sm font-medium">{{.Name}}</p>
+            <p class="faint mt-0.5 text-xs">{{.Description}}</p>
+          </a>
+          {{end}}
+        </div>
+      </div>
+      {{end}}
+      <p id="catalog-empty" class="faint hidden py-6 text-center text-sm">Nothing matches that.</p>
+    </div>
+  </div>
+  <p class="modal-foot">Selecting a template reloads the page with the form prefilled — review it, then create.</p>
+</dialog>
+
 <script>
-  // Filtering happens here rather than over the wire: the whole catalogue is
-  // already on the page, and a round trip per keystroke would be slower than
-  // the typing.
   (function () {
+    const dialog = document.getElementById("catalog-modal");
     const box = document.getElementById("catalog-search");
     const cards = [...document.querySelectorAll(".catalog-card")];
     const groups = [...document.querySelectorAll(".catalog-group")];
     const empty = document.getElementById("catalog-empty");
-    if (!box) return;
+    if (!dialog || !box) return;
+
+    // showModal rather than show: it is what puts the page behind inert, draws
+    // the backdrop, and makes the escape key close this — none of which the
+    // open attribute alone does.
+    document.getElementById("catalog-open").addEventListener("click", function () {
+      dialog.showModal();
+    });
+    document.getElementById("catalog-close").addEventListener("click", function () {
+      dialog.close();
+    });
+    // A click that lands on the backdrop is reported against the dialog itself,
+    // since the panel has no padding for it to land in — so this is the click
+    // outside, and nothing else reaches it.
+    dialog.addEventListener("click", function (e) {
+      if (e.target === dialog) dialog.close();
+    });
+
+    // Filtering happens here rather than over the wire: the whole catalogue is
+    // already on the page, and a round trip per keystroke would be slower than
+    // the typing.
     box.addEventListener("input", function () {
       const q = box.value.trim().toLowerCase();
       for (const c of cards) {

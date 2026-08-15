@@ -904,6 +904,135 @@ input[type="checkbox"]:focus-visible {
   color: var(--warn);
 }
 
+/* --- Modal ----------------------------------------------------------------- */
+
+/* Built on <dialog>, so the escape key, the focus trap and the inert page
+   behind come from the browser rather than from script. The panel is the
+   dialog element itself and carries no padding of its own — its three bands
+   pad themselves — which is what lets a click be tested against the element:
+   anything landing on the dialog and not on a band landed on the backdrop.
+
+   The height is capped rather than fixed. A catalogue of six entries should be
+   a short box; it is only the long one that needs to scroll, and the body is
+   the part that gives, so the heading and the footer stay put while it does. */
+.modal {
+  margin: auto; /* centred in the top layer, where `auto` still means centre */
+  width: min(56rem, calc(100vw - 3rem));
+  max-height: min(42rem, calc(100vh - 6rem));
+  padding: 0;
+  overflow: hidden; /* the body scrolls, not the panel */
+  display: flex;
+  flex-direction: column;
+  border: var(--border-w) solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.45);
+}
+/* A dialog that is not open is display:none, and the flex above would override
+   that on source order alone. */
+.modal:not([open]) { display: none; }
+
+/* Dark enough to put the page out of play on Paper and Solarized too, where a
+   light wash would leave the form underneath still reading as available. */
+.modal::backdrop {
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(2px);
+}
+
+/* Opening and closing. Short and small on purpose: the panel rises the last few
+   pixels into place rather than flying in, which is enough to say where it came
+   from without making anyone wait for it.
+
+   Three things have to be in each transition list for the closing half to run
+   at all. `display` because the rule above takes the panel to none the instant
+   the attribute goes, and `overlay` because the browser drops it out of the top
+   layer just as fast — both are discrete properties, so `allow-discrete` is
+   what defers them to the end of the transition instead of applying them at
+   once. @starting-style supplies the other half: without a style to start from,
+   an element that has just been inserted into the top layer has nothing to move
+   from and simply appears. */
+.modal,
+.modal::backdrop {
+  transition: opacity 160ms ease, transform 160ms ease,
+              display 160ms allow-discrete, overlay 160ms allow-discrete;
+}
+.modal {
+  opacity: 0;
+  transform: translateY(-0.5rem) scale(0.98);
+}
+.modal[open] {
+  opacity: 1;
+  transform: none;
+}
+.modal::backdrop { opacity: 0; }
+.modal[open]::backdrop { opacity: 1; }
+@starting-style {
+  .modal[open] {
+    opacity: 0;
+    transform: translateY(-0.5rem) scale(0.98);
+  }
+  .modal[open]::backdrop { opacity: 0; }
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-shrink: 0;
+  border-bottom: var(--border-w) solid var(--border);
+  background: var(--surface-2);
+  padding: 0.875rem 1rem;
+}
+
+/* Set like a section heading rather than like a page title: this names a panel,
+   not the page you are on. */
+.modal-title {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.modal-close {
+  display: grid;
+  place-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  color: var(--text-faint);
+}
+.modal-close:hover { color: var(--text); background: var(--surface); }
+
+/* A band between the heading and the scroller, for whatever narrows what is in
+   it. It is kept out of the scroller on purpose: a filter that scrolled away
+   with its own results would be gone exactly when it is being used. */
+.modal-tools {
+  flex-shrink: 0;
+  border-bottom: var(--border-w) solid var(--border);
+  padding: 0.75rem 1rem;
+}
+
+.modal-body {
+  min-height: 0; /* or the flex item refuses to shrink and the panel scrolls */
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+.modal-foot {
+  flex-shrink: 0;
+  border-top: var(--border-w) solid var(--border);
+  background: var(--surface-2);
+  padding: 0.75rem 1rem;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
 /* --- Badges & meters ------------------------------------------------------- */
 
 /* A status is a machine word, not a sentence: mono and capitalised, so a column
@@ -1993,6 +2122,7 @@ button[disabled] { cursor: progress; opacity: 0.65; }
 .input,
 .select,
 .reorder-btn,
+.modal-close,
 .table-wrap tbody tr {
   transition: color 100ms ease, background-color 100ms ease,
               border-color 100ms ease, box-shadow 100ms ease;
@@ -2001,7 +2131,8 @@ button[disabled] { cursor: progress; opacity: 0.65; }
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
-  *::after {
+  *::after,
+  *::backdrop { /* the modal fades through its backdrop, which is not a child */
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
