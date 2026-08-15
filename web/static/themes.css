@@ -617,6 +617,25 @@ summary:focus-visible,
   color: var(--text-muted);
 }
 
+/* A chip that filters rather than labels: it is a button, so it answers to the
+   pointer and shows which one is holding the list down. */
+.chip-filter {
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: var(--font-body);
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.chip-filter:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.chip-filter.is-on {
+  background: var(--surface-2);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 /* A chip carrying a name rather than a status word. The uppercase tracking
    that makes "RUNNING" scan as a machine word makes "Landing" shout. */
 .chip-name {

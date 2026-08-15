@@ -34,10 +34,9 @@ func renderAppNewWith(t *testing.T, id string, picked catalog.Values) string {
 	f := e.Fill(v, sub, sub+".example.com")
 	data := map[string]any{
 		"Title": "New", "Domain": "example.com",
-		"Catalog":    cat.Grouped(),
-		"Categories": cat.Categories,
-		"Picked":     e,
-		"Values":     v,
+		"Catalog": cat.Grouped(),
+		"Picked":  e,
+		"Values":  v,
 		"Form": &db.App{
 			Name: f.Name, Subdomain: f.Subdomain, DeployType: f.DeployType,
 			ImageRef: f.ImageRef, ComposeYAML: f.Compose, ComposeService: f.ComposeService,
@@ -105,6 +104,66 @@ func TestNoteIsShownForEntriesThatCarryOne(t *testing.T) {
 	}
 	if !strings.Contains(html, "25565") {
 		t.Error("the raw port the server is actually reached on is not on the page")
+	}
+}
+
+// An entry that asks something has to ask it on the page: a panel with a field
+// per parameter, defaults filled in, submitting back to the same handler. If
+// the panel never renders, the entry is unreachable — its card does not link
+// anywhere.
+func TestParameterisedEntryOffersItsChoices(t *testing.T) {
+	page := renderAppNew(t, "minecraft")
+
+	if !strings.Contains(page, `id="catalog-params-minecraft"`) {
+		t.Fatal("no parameter panel for an entry that declares parameters")
+	}
+	if !strings.Contains(page, `name="p.VERSION"`) || !strings.Contains(page, `name="p.TYPE"`) {
+		t.Error("the parameters did not reach the panel as fields")
+	}
+	// A select has to offer its options, and start on the declared default.
+	if !strings.Contains(page, `<option value="PAPER"`) {
+		t.Error("a select parameter rendered without its options")
+	}
+	if !strings.Contains(page, `<option value="VANILLA" selected`) {
+		t.Error("the select did not start on the entry's default")
+	}
+	// The card must not link straight to the form, or the choices are skipped.
+	if strings.Contains(page, `href="/apps/new?template=minecraft"`) {
+		t.Error("the card links past the choices it is meant to ask")
+	}
+}
+
+// Picking values has to change what the form is prefilled with — the whole
+// point of the feature — including the address, so a second server from the
+// same entry does not land on the first one's subdomain.
+func TestPickedParametersReachTheForm(t *testing.T) {
+	page := renderAppNewWith(t, "minecraft", catalog.Values{"TYPE": "PAPER", "VERSION": "1.20.1"})
+
+	for _, want := range []string{"TYPE=PAPER", "MINECRAFT_VERSION=1.20.1"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("%q is not in the prefilled env", want)
+		}
+	}
+	if !strings.Contains(page, `value="mc-paper-1-20-1"`) {
+		t.Error("the subdomain does not carry what was picked")
+	}
+	if !strings.Contains(page, "Minecraft 1.20.1 (PAPER)") {
+		t.Error("the proposed application name does not carry what was picked")
+	}
+}
+
+// The category row is the second way through the catalogue, and it filters on
+// data-cat — which the cards have to carry for it to match anything.
+func TestCategoryFilterHasSomethingToFilterOn(t *testing.T) {
+	page := renderAppNew(t, "jellyfin")
+	if !strings.Contains(page, `class="chip chip-filter is-on" data-cat=""`) {
+		t.Error("no All chip, so a picked category could not be cleared")
+	}
+	for _, g := range catalog.Builtin().Grouped() {
+		want := `data-cat="` + html.EscapeString(g.Category) + `"`
+		if strings.Count(page, want) < 2 {
+			t.Errorf("category %q has a chip or its cards, not both", g.Category)
+		}
 	}
 }
 

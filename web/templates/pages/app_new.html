@@ -33,23 +33,36 @@
     <button type="button" id="catalog-close" class="modal-close" aria-label="Close the catalogue">{{template "icon_x"}}</button>
   </div>
   {{/* Focused on open: the catalogue is long enough that typing is the way
-       through it, and the dialog hands focus to this by itself. */}}
-  <div class="modal-tools">
+       through it, and the dialog hands focus to this by itself. The category
+       row is the other way through — the one for somebody who does not yet
+       know what they are looking for, and the one an operator's own categories
+       make worth having. */}}
+  <div class="modal-tools space-y-2.5">
     <input type="search" id="catalog-search" class="input" autocomplete="off" autofocus
            placeholder="Search the catalogue — jellyfin, minecraft, postgres…">
+    <div id="catalog-cats" class="flex flex-wrap gap-1.5">
+      <button type="button" class="chip chip-filter is-on" data-cat="" aria-pressed="true">All</button>
+      {{range .Catalog}}
+      <button type="button" class="chip chip-filter" data-cat="{{.Category}}" aria-pressed="false">{{.Category}}</button>
+      {{end}}
+    </div>
   </div>
   <div class="modal-body">
     <div id="catalog" class="space-y-5">
       {{range .Catalog}}
-      <div class="catalog-group">
+      <div class="catalog-group" data-cat="{{.Category}}">
         <h3 class="h-label mb-2">{{.Category}}</h3>
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {{range .Templates}}
-          <a href="/apps/new?template={{.ID}}"
+          {{/* An entry with choices to make cannot be a link: the answers are
+               part of the address, so it opens the panel below instead. */}}
+          <a {{if .Params}}href="#catalog-params-{{.ID}}" data-params="catalog-params-{{.ID}}"
+             {{else}}href="/apps/new?template={{.ID}}"{{end}}
              class="catalog-card card block p-3 transition-colors hover:border-[var(--border-strong)]"
-             data-search="{{.Name}} {{.Description}} {{.Category}}">
+             data-cat="{{.Category}}" data-search="{{.Name}} {{.Description}} {{.Category}} {{.Source}}">
             <p class="text-sm font-medium">{{.Name}}</p>
             <p class="faint mt-0.5 text-xs">{{.Description}}</p>
+            {{if .Source}}<span class="chip chip-name mt-2 inline-block">{{.Source}}</span>{{end}}
           </a>
           {{end}}
         </div>
@@ -57,6 +70,43 @@
       {{end}}
       <p id="catalog-empty" class="faint hidden py-6 text-center text-sm">Nothing matches that.</p>
     </div>
+
+    {{/* One panel per entry that asks something, each a plain GET form at the
+         same address the cards link to. Answering it is what turns one entry
+         into a particular server: this version, that much memory, that port. */}}
+    {{range .Catalog}}{{range .Templates}}{{if .Params}}
+    <form method="get" action="/apps/new" id="catalog-params-{{.ID}}" class="catalog-params hidden">
+      <input type="hidden" name="template" value="{{.ID}}">
+      <div class="mb-4 flex items-center gap-3">
+        <button type="button" class="btn catalog-params-back">{{template "icon_arrow_left"}}Back</button>
+        <div>
+          <p class="text-sm font-medium">{{.Name}}</p>
+          <p class="faint text-xs">{{.Description}}</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {{$id := .ID}}
+        {{range .Params}}
+        <div>
+          <label for="p-{{$id}}-{{.Name}}" class="label">{{.Title}}</label>
+          {{if eq .Type "select"}}
+          <select id="p-{{$id}}-{{.Name}}" name="p.{{.Name}}" class="input">
+            {{$def := .Default}}
+            {{range .Options}}<option value="{{.}}" {{if eq . $def}}selected{{end}}>{{.}}</option>{{end}}
+          </select>
+          {{else}}
+          <input id="p-{{$id}}-{{.Name}}" name="p.{{.Name}}" class="input"
+                 type="{{if or (eq .Type "number") (eq .Type "port")}}number{{else}}text{{end}}"
+                 {{if eq .Type "port"}}min="1" max="65535"{{end}}
+                 value="{{.Default}}" autocomplete="off">
+          {{end}}
+          {{with .Help}}<p class="help">{{.}}</p>{{end}}
+        </div>
+        {{end}}
+      </div>
+      <button type="submit" class="btn-primary mt-5 px-4 py-2">Use these settings</button>
+    </form>
+    {{end}}{{end}}{{end}}
   </div>
   <p class="modal-foot">Selecting a template reloads the page with the form prefilled — review it, then create.</p>
 </dialog>
@@ -65,6 +115,7 @@
   (function () {
     const dialog = document.getElementById("catalog-modal");
     const box = document.getElementById("catalog-search");
+    const list = document.getElementById("catalog");
     const cards = [...document.querySelectorAll(".catalog-card")];
     const groups = [...document.querySelectorAll(".catalog-group")];
     const empty = document.getElementById("catalog-empty");
@@ -89,17 +140,69 @@
     // Filtering happens here rather than over the wire: the whole catalogue is
     // already on the page, and a round trip per keystroke would be slower than
     // the typing.
-    box.addEventListener("input", function () {
+    //
+    // The two filters are one function because they compose: a category picked
+    // and a word typed means both, not whichever ran last.
+    let category = "";
+    function filter() {
       const q = box.value.trim().toLowerCase();
       for (const c of cards) {
-        c.classList.toggle("hidden", q !== "" && !c.dataset.search.toLowerCase().includes(q));
+        const hit = (q === "" || c.dataset.search.toLowerCase().includes(q)) &&
+                    (category === "" || c.dataset.cat === category);
+        c.classList.toggle("hidden", !hit);
       }
       // A category whose every card is hidden should take its heading with it.
       for (const g of groups) {
         g.classList.toggle("hidden", !g.querySelector(".catalog-card:not(.hidden)"));
       }
       empty.classList.toggle("hidden", !!document.querySelector(".catalog-card:not(.hidden)"));
-    });
+    }
+    box.addEventListener("input", filter);
+
+    for (const chip of document.querySelectorAll(".chip-filter")) {
+      chip.addEventListener("click", function () {
+        // Clicking the category already showing goes back to all of them,
+        // so the row never traps you with no way out but the All chip.
+        category = chip.dataset.cat === category ? "" : chip.dataset.cat;
+        for (const other of document.querySelectorAll(".chip-filter")) {
+          const on = other.dataset.cat === category;
+          other.classList.toggle("is-on", on);
+          other.setAttribute("aria-pressed", on);
+        }
+        filter();
+      });
+    }
+
+    // An entry that asks something opens its panel instead of navigating: the
+    // answers belong in the address, so the request is made once they are in.
+    const panels = [...document.querySelectorAll(".catalog-params")];
+    function showList() {
+      for (const p of panels) p.classList.add("hidden");
+      list.classList.remove("hidden");
+      box.parentElement.classList.remove("hidden");
+      box.focus();
+    }
+    for (const c of cards) {
+      if (!c.dataset.params) continue;
+      c.addEventListener("click", function (e) {
+        e.preventDefault();
+        const panel = document.getElementById(c.dataset.params);
+        if (!panel) return;
+        list.classList.add("hidden");
+        // The search box and the category row filter the list that is no
+        // longer showing, so they go with it.
+        box.parentElement.classList.add("hidden");
+        panel.classList.remove("hidden");
+        const first = panel.querySelector("input:not([type=hidden]), select");
+        if (first) first.focus();
+      });
+    }
+    for (const b of document.querySelectorAll(".catalog-params-back")) {
+      b.addEventListener("click", showList);
+    }
+    // Reopening the catalogue should show the catalogue, not the panel that
+    // happened to be open when it was closed.
+    dialog.addEventListener("close", showList);
   })();
 </script>
 {{end}}

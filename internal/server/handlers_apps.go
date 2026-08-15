@@ -138,10 +138,9 @@ func (s *Server) catalog() catalog.Catalog {
 func (s *Server) handleAppNew(w http.ResponseWriter, r *http.Request) {
 	cat := s.catalog()
 	data := map[string]any{
-		"Title":      "New application",
-		"Domain":     s.cfg.Domain,
-		"Catalog":    cat.Grouped(),
-		"Categories": cat.Categories,
+		"Title":   "New application",
+		"Domain":  s.cfg.Domain,
+		"Catalog": cat.Grouped(),
 	}
 	// ?template=<id> prefills the form from a one-click catalog entry, and
 	// ?p.NAME=value answers the choices that entry offers — which version of a
