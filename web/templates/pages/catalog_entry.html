@@ -138,10 +138,13 @@
       <span class="mono">{{"{{NAME}}"}}</span> below — which is how one entry stands for a fleet of
       servers rather than a single installation.
     </p>
+    {{/* with, not a bare range: a new entry has no dot to read, and reaching
+         through the nil pointer aborts the render here — taking the rest of
+         the form, the template below and the script with it. */}}
     <div id="params" class="space-y-3">
-      {{range $e.Params}}
+      {{with $e}}{{range .Params}}
       {{template "catalog_param_row" .}}
-      {{end}}
+      {{end}}{{end}}
     </div>
     <button type="button" id="add-param" class="btn">{{template "icon_plus"}}Add a choice</button>
   </section>

@@ -74,6 +74,14 @@ func TestParseRejectsAKeyItDoesNotKnow(t *testing.T) {
 	if !strings.Contains(err.Error(), "deploytype") {
 		t.Errorf("the error does not name the offending key: %v", err)
 	}
+	// The message is shown to whoever wrote the document, so it has to be
+	// about the document — not about the Go types it was being read into.
+	if strings.Contains(err.Error(), "catalog.") || strings.Contains(err.Error(), "in type") {
+		t.Errorf("the error leaks Quasar's own types: %v", err)
+	}
+	if !strings.Contains(err.Error(), "line 3") {
+		t.Errorf("the error does not say where to look: %v", err)
+	}
 }
 
 func TestYAMLRoundTrips(t *testing.T) {

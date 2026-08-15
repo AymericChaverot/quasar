@@ -87,8 +87,8 @@
       </div>
       {{end}}
 
-      <details class="text-sm">
-        <summary class="cursor-pointer select-none">{{template "icon_pencil"}}Edit the document</summary>
+      <details class="doc-edit text-sm">
+        <summary>{{template "icon_pencil"}}Edit the document</summary>
         <form method="post" action="/settings/catalogs/{{.ID}}" class="mt-4 space-y-4">
           <div>
             <label class="label" for="name-{{.ID}}">Name</label>

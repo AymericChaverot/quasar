@@ -1233,6 +1233,22 @@ input[type="checkbox"]:focus-visible {
 .cred-edit[open] > summary { border-bottom: var(--border-w) solid var(--border); }
 .cred-edit-body { padding: 0.875rem 1rem; }
 
+/* The disclosure that opens a catalogue's document for editing. Same shape as
+   the credential editor above: an icon and a word on one line, which a bare
+   summary does not give — the marker, an .ico laid out as a block, and the text
+   stack into three lines instead. */
+.doc-edit > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.doc-edit > summary::-webkit-details-marker { display: none; }
+.doc-edit > summary:hover { color: var(--text); }
+
 /* --- Users -----------------------------------------------------------------
    One row per account, on tracks shared by the whole list rather than sized
    per row. Every account carries a different number of controls — the signed-in

@@ -56,7 +56,7 @@ func Parse(name, doc string) (Catalog, error) {
 	dec := yaml.NewDecoder(strings.NewReader(doc))
 	dec.KnownFields(true)
 	if err := dec.Decode(&d); err != nil {
-		return Catalog{}, fmt.Errorf("this is not a catalogue Quasar can read: %w", err)
+		return Catalog{}, fmt.Errorf("this is not a catalogue Quasar can read: %s", readable(err))
 	}
 	if d.Name != "" {
 		name = d.Name
@@ -66,6 +66,31 @@ func Parse(name, doc string) (Catalog, error) {
 		c.Templates[i].Source = name
 	}
 	return c, nil
+}
+
+// unknownKeyRe matches the decoder's way of reporting a key it does not know.
+var unknownKeyRe = regexp.MustCompile(`field (\S+) not found`)
+
+// goTypeNames turns the Go types the decoder names into the parts of a document
+// an operator wrote.
+var goTypeNames = strings.NewReplacer(
+	" in type catalog.Template", " on an entry",
+	" in type catalog.Param", " on a parameter",
+	" in type catalog.document", " at the top level",
+)
+
+// readable rewrites the decoder's message into something worth showing.
+// yaml.v3 reports a misspelled key as `field deploytype not found in type
+// catalog.Template` — accurate, and no help at all to somebody writing a
+// document, who has never heard of catalog.Template and does not care to.
+func readable(err error) string {
+	msg := strings.TrimPrefix(err.Error(), "yaml: unmarshal errors:\n")
+	msg = strings.TrimPrefix(msg, "yaml: ")
+	msg = unknownKeyRe.ReplaceAllString(msg, `there is no "$1" key`)
+	msg = goTypeNames.Replace(msg)
+	// Several complaints come back one per line, which is a list this will be
+	// shown as one item of.
+	return strings.TrimSpace(strings.ReplaceAll(msg, "\n", "; "))
 }
 
 // YAML writes the catalogue back out in the format Parse reads, which is how a
@@ -144,13 +169,14 @@ func (c Catalog) Validate() []error {
 				add("an image entry carries a compose file; set deploy_type: compose or drop it")
 			}
 		case "compose":
-			if t.Compose == "" {
-				add("a compose entry needs a compose file")
-			}
 			if t.ImageRef != "" {
 				add("a compose entry carries an image_ref; the images belong in the compose file")
 			}
-			if err := validateCompose(t); err != nil {
+			// Reading an empty file to report that it declares no services
+			// says the same thing twice about one missing field.
+			if t.Compose == "" {
+				add("a compose entry needs a compose file")
+			} else if err := validateCompose(t); err != nil {
 				add("%s", err)
 			}
 		default:

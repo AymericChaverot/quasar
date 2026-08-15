@@ -45,6 +45,38 @@ func minecraftForm() url.Values {
 	}
 }
 
+// A template that reaches through a nil pointer does not fail loudly: it
+// stops writing where it tripped and serves what it had already produced. The
+// new-entry form did exactly that — dying at the parameter rows and taking the
+// Add button, the row template and the whole script with it, so the page looked
+// nearly right and none of it worked. Rendering to io.Discard and checking for
+// an error is not enough to see that; the end of the page has to be asserted.
+func TestNewEntryFormIsWholePage(t *testing.T) {
+	s, database := catalogTestServer(t)
+	if _, err := db.InsertCatalog(database, &db.Catalog{Name: "Mine", YAML: "name: Mine\n", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	r := httptest.NewRequest("GET", "/settings/catalogs/1/entries/new", nil)
+	r.SetPathValue("id", "1")
+	r.SetPathValue("entry", "new")
+	w := httptest.NewRecorder()
+	s.handleCatalogEntryForm(w, r)
+
+	body := w.Body.String()
+	for _, want := range []string{
+		`id="add-param"`,          // the button that adds a choice
+		`id="param-row-template"`, // the row it clones
+		`id="image-fields"`,       // the panels the deploy picker swaps
+		`id="compose-fields"`,
+		"</script>", // the script that drives both
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the form stops short of %s — the render aborted before the end of the page", want)
+		}
+	}
+}
+
 // The form and the textarea edit the same document, so an entry written in one
 // has to come back out of the other — parameters, options and all.
 func TestEntryFormWritesTheDocument(t *testing.T) {

@@ -193,9 +193,13 @@ func TestExecuteTemplates(t *testing.T) {
 		}},
 		// Both states of the entry form: a new entry, which has no dot to read
 		// from, and an existing one with a parameter row already on it.
+		// The nil is typed, as the handler's is. An absent key reads as an
+		// untyped nil that the template walks straight past, which is how a
+		// render that aborted on the real page passed here.
 		{"catalog_entry", map[string]any{
 			"Title": "New entry", "IsAdmin": true, "IsNew": true,
 			"Catalog": &db.Catalog{ID: 1, Name: "My servers"},
+			"Entry":   (*catalog.Template)(nil),
 			"Blank":   catalog.Param{}, "Categories": catalog.Builtin().Categories,
 		}},
 		{"catalog_entry", map[string]any{
