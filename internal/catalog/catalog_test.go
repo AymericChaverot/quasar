@@ -57,7 +57,7 @@ func TestEveryEntryIsComplete(t *testing.T) {
 // a Category would silently remove the entry from the page.
 func TestEveryEntryIsReachableFromGrouped(t *testing.T) {
 	var n int
-	for _, g := range Grouped() {
+	for _, g := range Builtin().Grouped() {
 		n += len(g.Templates)
 	}
 	if n != len(Templates) {
@@ -138,7 +138,7 @@ func composeVars(s string) []string {
 func TestRenderEnvReplacesEveryPlaceholder(t *testing.T) {
 	const host = "app.example.com"
 	for _, e := range Templates {
-		got := e.RenderEnv(host)
+		got := e.RenderEnv(host, e.Resolve(nil))
 		// Any placeholder left is one the operator would have to notice and
 		// fix by hand, which is the thing this is meant to avoid.
 		if strings.Contains(got, "{{") {
@@ -156,7 +156,7 @@ func TestRenderEnvReplacesEveryPlaceholder(t *testing.T) {
 	// cannot start without something the operator supplies. Anywhere else it
 	// means an app that deploys and then sits there broken.
 	for _, e := range Templates {
-		if !strings.Contains(e.RenderEnv(host), "CHANGE-ME") {
+		if !strings.Contains(e.RenderEnv(host, e.Resolve(nil)), "CHANGE-ME") {
 			continue
 		}
 		if e.NeedsSetup == "" {
@@ -180,11 +180,11 @@ func TestEntriesNeedingSetupExplainThemselves(t *testing.T) {
 		}
 	}
 	// Two selections of the same template must not share a secret.
-	v := Get("postgres")
+	v := Builtin().Get("postgres")
 	if v == nil {
 		t.Fatal("postgres template went missing")
 	}
-	if v.RenderEnv("a.example.com") == v.RenderEnv("a.example.com") {
+	if v.RenderEnv("a.example.com", nil) == v.RenderEnv("a.example.com", nil) {
 		t.Error("RenderEnv returned the same secret twice")
 	}
 }

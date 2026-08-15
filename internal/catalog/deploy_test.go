@@ -82,7 +82,7 @@ func deployOne(t *testing.T, e Template) {
 		t.Fatalf("building the test compose file: %v", err)
 	}
 	write(t, filepath.Join(dir, "docker-compose.yml"), compose)
-	write(t, filepath.Join(dir, ".env"), e.RenderEnv(probeHost)+"\n")
+	write(t, filepath.Join(dir, ".env"), e.RenderEnv(probeHost, e.Resolve(nil))+"\n")
 	// The same directory Quasar creates before a first deploy.
 	if err := os.MkdirAll(filepath.Join(dir, "data"), 0o777); err != nil {
 		t.Fatal(err)
@@ -226,7 +226,7 @@ func probeCompose(e Template, hostPort int) (string, error) {
 		if e.DataMount != "" {
 			svc["volumes"] = []string{"./data:" + e.DataMount}
 		}
-		if env := envPairs(e.RenderEnv(probeHost)); len(env) > 0 {
+		if env := envPairs(e.RenderEnv(probeHost, e.Resolve(nil))); len(env) > 0 {
 			svc["environment"] = env
 		}
 		doc := map[string]any{"services": map[string]any{"app": svc}}

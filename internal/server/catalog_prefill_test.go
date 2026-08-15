@@ -11,22 +11,37 @@ import (
 )
 
 // renderAppNew renders the new-application page the way handleAppNew does for
-// a chosen catalogue entry.
+// a chosen catalogue entry, with the entry's parameters left at their defaults.
 func renderAppNew(t *testing.T, id string) string {
 	t.Helper()
+	return renderAppNewWith(t, id, nil)
+}
+
+// renderAppNewWith is the same for an entry whose parameters were answered.
+// It mirrors handleAppNew rather than calling it: the handler reaches for the
+// database to find a free subdomain, and none of what is asserted here needs
+// one.
+func renderAppNewWith(t *testing.T, id string, picked catalog.Values) string {
+	t.Helper()
 	s := testServer(t)
-	e := catalog.Get(id)
+	cat := catalog.Builtin()
+	e := cat.Get(id)
 	if e == nil {
 		t.Fatalf("catalogue has no entry %q", id)
 	}
+	v := e.Resolve(picked)
+	sub := e.SubdomainFor(v)
+	f := e.Fill(v, sub, sub+".example.com")
 	data := map[string]any{
 		"Title": "New", "Domain": "example.com",
-		"Catalog": catalog.Grouped(),
-		"Picked":  e,
+		"Catalog":    cat.Grouped(),
+		"Categories": cat.Categories,
+		"Picked":     e,
+		"Values":     v,
 		"Form": &db.App{
-			Name: e.Name, Subdomain: e.ID, DeployType: e.Type(),
-			ImageRef: e.ImageRef, ComposeYAML: e.Compose, ComposeService: e.ComposeService,
-			Port: e.Port, DataMount: e.DataMount, EnvContent: e.RenderEnv(e.ID + ".example.com"),
+			Name: f.Name, Subdomain: f.Subdomain, DeployType: f.DeployType,
+			ImageRef: f.ImageRef, ComposeYAML: f.Compose, ComposeService: f.ComposeService,
+			Port: f.Port, DataMount: f.DataMount, EnvContent: f.Env,
 		},
 	}
 	var buf bytes.Buffer
@@ -97,7 +112,7 @@ func TestNoteIsShownForEntriesThatCarryOne(t *testing.T) {
 // shrinks to whatever the template happens to loop over.
 func TestEveryCategoryReachesThePage(t *testing.T) {
 	page := renderAppNew(t, "jellyfin")
-	for _, g := range catalog.Grouped() {
+	for _, g := range catalog.Builtin().Grouped() {
 		// Half the category names contain an ampersand, which the template
 		// escaper writes as &amp;.
 		if !strings.Contains(page, html.EscapeString(g.Category)) {

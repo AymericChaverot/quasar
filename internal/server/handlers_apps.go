@@ -129,32 +129,79 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "dashboard", map[string]any{"Title": "Dashboard", "Domain": s.cfg.Domain})
 }
 
+// catalog is the catalogue as this install presents it: the one Quasar ships,
+// with the operator's own laid over it.
+func (s *Server) catalog() catalog.Catalog {
+	return catalog.Builtin().Merge(s.customCatalogs()...)
+}
+
 func (s *Server) handleAppNew(w http.ResponseWriter, r *http.Request) {
+	cat := s.catalog()
 	data := map[string]any{
-		"Title":   "New application",
-		"Domain":  s.cfg.Domain,
-		"Catalog": catalog.Grouped(),
+		"Title":      "New application",
+		"Domain":     s.cfg.Domain,
+		"Catalog":    cat.Grouped(),
+		"Categories": cat.Categories,
 	}
-	// ?template=<id> prefills the form from a one-click catalog entry. The
-	// subdomain it proposes is the entry's ID, so the public address the entry
-	// needs in its env is already known and can be filled in rather than left
-	// as a placeholder for the operator to paste back in.
-	if t := catalog.Get(r.URL.Query().Get("template")); t != nil {
-		host := appHost(&db.App{Subdomain: t.ID}, s.cfg.Domain)
+	// ?template=<id> prefills the form from a one-click catalog entry, and
+	// ?p.NAME=value answers the choices that entry offers — which version of a
+	// game server, how much memory, which host port. Carrying them in the query
+	// string keeps the selection stateless and shareable: the address of a
+	// prefilled form is the whole of what was picked.
+	if t := cat.Get(r.URL.Query().Get("template")); t != nil {
+		v := t.Resolve(pickedParams(r))
+		// The entry proposes an address, but a second server from the same
+		// entry would propose the one the first is already on. The public
+		// address has to be settled before the env is rendered, because
+		// {{URL}} resolves to it.
+		sub := s.freeSubdomain(t.SubdomainFor(v))
+		f := t.Fill(v, sub, appHost(&db.App{Subdomain: sub}, s.cfg.Domain))
 		data["Form"] = &db.App{
-			Name:           t.Name,
-			Subdomain:      t.ID,
-			DeployType:     t.Type(),
-			ImageRef:       t.ImageRef,
-			ComposeYAML:    t.Compose,
-			ComposeService: t.ComposeService,
-			Port:           t.Port,
-			DataMount:      t.DataMount,
-			EnvContent:     t.RenderEnv(host),
+			Name:           f.Name,
+			Subdomain:      f.Subdomain,
+			DeployType:     f.DeployType,
+			ImageRef:       f.ImageRef,
+			ComposeYAML:    f.Compose,
+			ComposeService: f.ComposeService,
+			Port:           f.Port,
+			DataMount:      f.DataMount,
+			EnvContent:     f.Env,
 		}
 		data["Picked"] = t
+		data["Values"] = v
 	}
 	s.render(w, r, "app_new", data)
+}
+
+// pickedParams reads the ?p.NAME=value pairs off the request. Nothing is
+// trusted here: Template.Resolve keeps only the parameters the entry declares
+// and only the values it accepts, so a hand-edited query string can pick from
+// what is offered and nothing else.
+func pickedParams(r *http.Request) catalog.Values {
+	out := catalog.Values{}
+	for k, vs := range r.URL.Query() {
+		if name, ok := strings.CutPrefix(k, "p."); ok && len(vs) > 0 {
+			out[name] = vs[0]
+		}
+	}
+	return out
+}
+
+// freeSubdomain returns want, or the first want-2, want-3… that no application
+// holds. One catalogue entry is now meant to be deployed several times over —
+// three Minecraft servers on three versions — and every one of them proposing
+// the same address would mean renaming all but the first by hand.
+func (s *Server) freeSubdomain(want string) string {
+	for n := 1; n < 100; n++ {
+		try := want
+		if n > 1 {
+			try = fmt.Sprintf("%s-%d", want, n)
+		}
+		if taken, err := db.SubdomainTaken(s.db, try); err != nil || !taken {
+			return try
+		}
+	}
+	return want
 }
 
 func (s *Server) handleAppCreate(w http.ResponseWriter, r *http.Request) {

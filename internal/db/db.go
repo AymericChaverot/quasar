@@ -133,6 +133,20 @@ CREATE TABLE IF NOT EXISTS settings (
 	value TEXT NOT NULL
 );
 
+-- An operator's own catalogue of one-click entries, kept as the YAML document
+-- it was written or imported as. position is the merge order: a later
+-- catalogue's entry replaces an earlier one with the same id, and any of them
+-- replaces the built-in entry of that id.
+CREATE TABLE IF NOT EXISTS catalogs (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	name       TEXT NOT NULL,
+	source_url TEXT NOT NULL DEFAULT '',
+	yaml       TEXT NOT NULL,
+	enabled    INTEGER NOT NULL DEFAULT 1,
+	position   INTEGER NOT NULL DEFAULT 0,
+	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS api_tokens (
 	id           INTEGER PRIMARY KEY AUTOINCREMENT,
 	name         TEXT NOT NULL,
