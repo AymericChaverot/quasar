@@ -92,7 +92,42 @@ func (s *Server) updateCardData() map[string]any {
 		"CheckedAt":   humanCheckedAt(db.GetSetting(s.db, updater.SettingCheckedAt)),
 		"UpdateAvail": updater.IsNewer(version.Version, latest),
 		"Repo":        s.cfg.GitHubRepo,
+		"CheckEvery":  humanInterval(updater.CheckInterval),
 	}
+}
+
+// humanInterval names a check cadence the way the card says it out loud, so the
+// sentence on the System page follows the constant instead of being a second
+// place the frequency is written down.
+func humanInterval(d time.Duration) string {
+	switch h := int(d.Hours()); {
+	case d < time.Hour:
+		return strconv.Itoa(int(d.Minutes())) + " minutes"
+	case h == 1:
+		return "hour"
+	default:
+		return strconv.Itoa(h) + " hours"
+	}
+}
+
+// updateBadgeData is what the header's update button renders from. It is read
+// on every page render and on every poll of the badge, so it stays a settings
+// lookup — the network check behind those settings is the background checker's
+// job, never a page's.
+func (s *Server) updateBadgeData(isAdmin bool) map[string]any {
+	latest := db.GetSetting(s.db, updater.SettingLatestTag)
+	return map[string]any{
+		"IsAdmin":     isAdmin,
+		"Latest":      latest,
+		"UpdateAvail": updater.IsNewer(version.Version, latest),
+	}
+}
+
+// handleUpdateBadgePartial refreshes the header button on its own. Without it a
+// release found by the checker would only surface on the next full page load,
+// which on a dashboard left open on one screen may be hours away.
+func (s *Server) handleUpdateBadgePartial(w http.ResponseWriter, r *http.Request) {
+	s.renderPartial(w, "update_badge", s.updateBadgeData(true))
 }
 
 // humanCheckedAt turns the stored timestamp into the only thing anyone reads it

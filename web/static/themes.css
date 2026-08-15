@@ -425,6 +425,73 @@ summary:focus-visible,
 }
 .btn-signout .ico { width: 0.8125rem; height: 0.8125rem; }
 
+/* The update button, which is in the header only when there is a release to
+   install. It is drawn as a ghost — accent text on a wash of the same colour,
+   inside an outline at nearly full strength. The outline is what carries it:
+   nothing else in the header is boxed at all, so the shape alone marks it out
+   without a filled slab shouting from the top of every page. It takes the
+   header's mono caps so it still belongs to the bar rather than looking like a
+   control that landed in it from a page.
+
+   The ring travels outward and fades rather than the button itself pulsing: a
+   halo leaving the edge reads as something arriving, where brightness cycling
+   on the button would read as a fault. It is pinned to the document clock in
+   layout.html for the same reason the shimmer is — the button is replaced by
+   its own poll, and an animation restarted mid-cycle every minute reads as a
+   stutter. */
+.btn-update {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  margin-right: 0.75rem;
+  white-space: nowrap;
+  border: var(--border-w) solid color-mix(in srgb, var(--accent) 70%, transparent);
+  border-radius: var(--radius);
+  padding: 0.3125rem 0.625rem;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  /* The resting state, and what reduced motion is left holding. */
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  animation: update-glow 2600ms ease-out infinite;
+}
+.btn-update:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.btn-update .ico { width: 0.8125rem; height: 0.8125rem; }
+
+/* The version, set apart by the same hairline the wordmark uses against the
+   nav — the label says there is an update, this says which one. It keeps the
+   tag's own case: everything else on screen calls the release v1.6.4, and the
+   header's caps would be the one place it were V1.6.4. */
+.btn-update-version {
+  position: relative;
+  padding-left: 0.5rem;
+  font-weight: 700;
+  text-transform: none;
+}
+.btn-update-version::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 0.875em;
+  background: color-mix(in srgb, currentColor 40%, transparent);
+}
+
+@keyframes update-glow {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
 /* --- Sign-in --------------------------------------------------------------- */
 
 /* The one screen with nothing else on it, and the first thing anyone sees, so

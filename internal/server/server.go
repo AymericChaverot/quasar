@@ -326,6 +326,9 @@ func (s *Server) routes() {
 	// Admin-only like the panel it refreshes, which sits inside the form that
 	// sets the limits it reports.
 	s.admin("GET /partials/apps/{id}/limits", s.handleAppLimitsPartial)
+	// Admin-only like the button it refreshes: only an admin is offered the
+	// update, so only an admin's header polls for one.
+	s.admin("GET /partials/update-badge", s.handleUpdateBadgePartial)
 	s.viewer("GET /partials/metrics", s.handleServerMetricsPartial)
 	s.viewer("GET /partials/apps/{id}/metrics", s.handleAppMetricsPartial)
 }
@@ -385,6 +388,19 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, dat
 	_, _, role, _ := s.currentUser(r)
 	data["Role"] = role
 	data["IsAdmin"] = role == auth.RoleAdmin
+	// The header's update button, on every page for the same reason the version
+	// is: a release waiting to be installed should be visible wherever you
+	// happen to be, not only on the System page. Only an admin can apply one,
+	// so only an admin is shown it.
+	//
+	// Kept under its own key rather than merged into the page's data: the
+	// System page already carries UpdateAvail and Latest for the update card,
+	// and two things writing the same keys would have the header and the card
+	// silently fighting over them.
+	hideNav, _ := data["HideNav"].(bool)
+	if role == auth.RoleAdmin && !hideNav {
+		data["Update"] = s.updateBadgeData(true)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := t.ExecuteTemplate(w, "layout", data); err != nil {
 		log.Printf("render %s: %v", page, err)

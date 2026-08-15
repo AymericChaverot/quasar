@@ -1,0 +1,25 @@
+{{/* The header's update button: the one control in the chrome that appears
+     only when there is something to do, and the only filled surface up there
+     when it does — a release waiting to be installed should be impossible to
+     miss from any page.
+
+     It carries its own id and poll so it can arrive without a page load. A
+     dashboard left open on a screen would otherwise not learn about a release
+     until someone navigated, which may be hours after the checker found it.
+     Nothing renders at all when there is no update, so the poll costs an empty
+     div and the header keeps its shape. */}}
+{{define "update_badge"}}
+<div id="update-badge" class="flex items-center"
+     hx-get="/partials/update-badge" hx-trigger="every 60s" hx-swap="outerHTML">
+  {{if and .IsAdmin .UpdateAvail}}
+  <form method="post" action="/system/update/apply"
+        onsubmit="return confirm('Update the dashboard to {{.Latest}}? Applications keep running; the dashboard restarts briefly.')">
+    <button type="submit" class="btn-update"
+            title="Install {{.Latest}} — applications keep running, the dashboard restarts briefly">
+      {{template "icon_deploy"}}Update available
+      <span class="btn-update-version">{{.Latest}}</span>
+    </button>
+  </form>
+  {{end}}
+</div>
+{{end}}

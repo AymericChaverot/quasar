@@ -44,8 +44,10 @@
   {{end}}
 
   <p class="help">
-    Releases come from github.com/{{.Repo}}. The platform checks automatically every 6 hours{{if .CheckedAt}},
-    last checked {{.CheckedAt}}{{end}}.
+    {{/* The cadence comes from the checker's own constant rather than being
+         written out here, so the sentence cannot drift from what it does. */}}
+    Releases come from github.com/{{.Repo}}.{{if .CheckEvery}} The platform checks automatically every {{.CheckEvery}}{{if .CheckedAt}},
+    last checked {{.CheckedAt}}{{end}}.{{end}}
   </p>
 </div>
 {{end}}

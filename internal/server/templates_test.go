@@ -121,8 +121,10 @@ func TestExecuteTemplates(t *testing.T) {
 			"Backups":  []backup.Info{{Name: "quasar-20260722-120000.tar.gz", SizeMB: 4.2, Date: time.Now()}},
 			"AutoOn":   true, "Retention": "7", "Saved": "Backup created.",
 			"Current": "v1.0.0", "Latest": "v1.1.0", "UpdateAvail": true,
-			"CheckedAt": "2026-07-22", "Repo": "AymericChaverot/quasar",
-			"Host": vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64", Uptime: "3d 4h"},
+			"CheckedAt": "2026-07-22", "Repo": "AymericChaverot/quasar", "CheckEvery": "30 minutes",
+			// The header's copy of the same news, which every page carries.
+			"Update": map[string]any{"IsAdmin": true, "UpdateAvail": true, "Latest": "v1.1.0"},
+			"Host":   vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64", Uptime: "3d 4h"},
 			"Hardware": vps.Hardware{
 				CPUModel: "Intel Xeon E5-2686 v4", CPUCores: 2, CPUThreads: 4, CPUGHz: 2.3,
 				MemTotalGB: 7.8, SwapTotalGB: 2, DiskTotalGB: 78.6,
@@ -224,14 +226,20 @@ func TestExecuteTemplates(t *testing.T) {
 		{"update_card", map[string]any{
 			"Current": "v1.0.0", "Latest": "v1.1.0", "UpdateAvail": true, "IsAdmin": true,
 			"Repo": "AymericChaverot/quasar", "CheckedAt": "just now", "Checked": "v1.1.0 is available.",
+			"CheckEvery": "30 minutes",
 		}},
 		{"update_card", map[string]any{
 			"Current": "v1.1.0", "Latest": "v1.1.0", "IsAdmin": true,
-			"Repo": "AymericChaverot/quasar", "CheckedAt": "2 min ago",
+			"Repo": "AymericChaverot/quasar", "CheckedAt": "2 min ago", "CheckEvery": "30 minutes",
 			"CheckError": "Update check failed: github api: 403 rate limit exceeded",
 		}},
 		// A viewer's copy: no buttons, and no check has ever run.
 		{"update_card", map[string]any{"Current": "v1.1.0", "Repo": "AymericChaverot/quasar"}},
+		// The header button, in the one state it renders anything and in the
+		// two that must render nothing at all.
+		{"update_badge", map[string]any{"IsAdmin": true, "UpdateAvail": true, "Latest": "v1.1.0"}},
+		{"update_badge", map[string]any{"IsAdmin": true, "UpdateAvail": false, "Latest": "v1.1.0"}},
+		{"update_badge", map[string]any{"IsAdmin": false, "UpdateAvail": true, "Latest": "v1.1.0"}},
 		{"system_stats", vps.Stats{CPUPercent: 42.5, MemPercent: 61, MemUsedGB: 1.2, MemTotalGB: 2, DiskPercent: 90, DiskUsedGB: 18, DiskTotalGB: 20}},
 		// Both build badges, plus the rows that carry none: an image app and a
 		// git app whose repository is not on disk yet.

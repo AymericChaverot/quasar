@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -117,6 +118,65 @@ func TestGitEnvCarriesTheSecretAndTheArgumentsDoNot(t *testing.T) {
 		if strings.HasPrefix(e, "QUASAR_GIT_PASSWORD=") || strings.HasPrefix(e, "GIT_ASKPASS=") {
 			t.Errorf("a public clone should carry no credential, got %q", e)
 		}
+	}
+}
+
+// What authenticates a deploy must be what Quasar put in the environment and
+// nothing the host happened to have in its own.
+//
+// This is not hypothetical: a shell that exports GIT_ASKPASS — a credential
+// manager, an editor's terminal, an agent — hands every anonymous clone a
+// helper Quasar never chose, which either prompts where nobody is watching or
+// answers as the wrong account. It also used to make the test above pass or
+// fail depending on whose machine ran it, which is how it was noticed.
+func TestGitEnvIgnoresTheHostsOwnCredentialPlumbing(t *testing.T) {
+	t.Setenv("GIT_ASKPASS", "/usr/lib/host-credential-manager")
+	t.Setenv("SSH_ASKPASS", "/usr/lib/host-ssh-askpass")
+	t.Setenv("QUASAR_GIT_USERNAME", "someone-else")
+	t.Setenv("QUASAR_GIT_PASSWORD", "a-token-from-the-host")
+	t.Setenv("GIT_TERMINAL_PROMPT", "1")
+	t.Setenv("PATH", os.Getenv("PATH")) // untouched: git still has to be found
+
+	c := credClient(t)
+
+	// An anonymous clone: none of it survives.
+	env, cred, err := c.gitEnv("https://codeberg.org/o/r.git")
+	if err != nil || cred != nil {
+		t.Fatalf("public repo resolved to %v (err %v)", cred, err)
+	}
+	for _, e := range env {
+		for _, banned := range []string{"GIT_ASKPASS=", "SSH_ASKPASS=", "QUASAR_GIT_USERNAME=", "QUASAR_GIT_PASSWORD="} {
+			if strings.HasPrefix(e, banned) {
+				t.Errorf("the host's %q reached an anonymous clone", e)
+			}
+		}
+		if e == "GIT_TERMINAL_PROMPT=1" {
+			t.Error("the host re-enabled terminal prompting, which would hang a deploy")
+		}
+	}
+	if !slices.Contains(env, "GIT_TERMINAL_PROMPT=0") {
+		t.Error("GIT_TERMINAL_PROMPT=0 is missing")
+	}
+	// The rest of the environment is left alone — git is run from it.
+	if !slices.Contains(env, "PATH="+os.Getenv("PATH")) {
+		t.Error("PATH was stripped along with the credential plumbing")
+	}
+
+	// An authenticated clone: Quasar's own values, not the host's.
+	env, cred, err = c.gitEnv("https://bitbucket.org/team/repo.git")
+	if err != nil || cred == nil {
+		t.Fatalf("bitbucket.org should resolve to a credential (err %v)", err)
+	}
+	for _, e := range env {
+		switch {
+		case strings.HasPrefix(e, "GIT_ASKPASS=") && strings.Contains(e, "host-credential-manager"),
+			e == "QUASAR_GIT_USERNAME=someone-else",
+			e == "QUASAR_GIT_PASSWORD=a-token-from-the-host":
+			t.Errorf("the host's %q survived into an authenticated clone", e)
+		}
+	}
+	if !slices.Contains(env, "QUASAR_GIT_PASSWORD=app pass/word") {
+		t.Error("the stored token did not reach git")
 	}
 }
 

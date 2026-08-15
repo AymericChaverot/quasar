@@ -53,6 +53,22 @@ func TestUpdateRunReportsProgress(t *testing.T) {
 	}
 }
 
+// The card says the cadence out loud, so it has to read as English for the
+// interval the checker actually keeps — including if that constant is changed.
+func TestHumanInterval(t *testing.T) {
+	cases := map[time.Duration]string{
+		30 * time.Minute: "30 minutes",
+		15 * time.Minute: "15 minutes",
+		time.Hour:        "hour",
+		6 * time.Hour:    "6 hours",
+	}
+	for d, want := range cases {
+		if got := humanInterval(d); got != want {
+			t.Errorf("humanInterval(%s) = %q, want %q", d, got, want)
+		}
+	}
+}
+
 func TestHumanCheckedAt(t *testing.T) {
 	now := time.Now()
 	cases := map[string]string{

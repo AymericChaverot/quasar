@@ -74,10 +74,48 @@ func (c *Client) gitRun(ctx context.Context, out func(string), repoURL string, a
 	return nil
 }
 
+// gitStripped are the variables dropped from the environment a git command
+// inherits, so that what authenticates a deploy is only ever what Quasar put
+// there.
+//
+// The host has its own git plumbing: a developer's credential manager, a
+// terminal or an editor that exports GIT_ASKPASS, an agent's SSH_ASKPASS.
+// Inherited, any of those would be consulted during a clone Quasar believes is
+// anonymous — prompting a helper nobody is watching, or answering with an
+// account that is not the one the operator configured here. The two QUASAR_
+// variables are stripped for the mirror-image reason: they must mean something
+// only when gitEnv has just set them, never because they were already lying
+// around in the process's environment.
+var gitStripped = map[string]bool{
+	"GIT_ASKPASS":         true,
+	"SSH_ASKPASS":         true,
+	"QUASAR_GIT_USERNAME": true,
+	"QUASAR_GIT_PASSWORD": true,
+	"GIT_TERMINAL_PROMPT": true, // set below; stripped so it cannot be duplicated
+	"GCM_INTERACTIVE":     true,
+}
+
+// gitBaseEnv is the inherited environment with that plumbing removed and
+// Quasar's own settings applied.
+func gitBaseEnv() []string {
+	host := os.Environ()
+	env := make([]string, 0, len(host)+2)
+	for _, kv := range host {
+		name, _, _ := strings.Cut(kv, "=")
+		// Upper-cased because Windows environment names are case-insensitive,
+		// and a "Git_AskPass" there is the same variable git will read.
+		if gitStripped[strings.ToUpper(name)] {
+			continue
+		}
+		env = append(env, kv)
+	}
+	return append(env, "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never")
+}
+
 // gitEnv builds the environment a git command runs in, and reports which
 // credential (if any) it will offer.
 func (c *Client) gitEnv(repoURL string) ([]string, *db.GitCredential, error) {
-	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never")
+	env := gitBaseEnv()
 	cred := c.gitCredentialFor(repoURL)
 	if cred == nil {
 		return env, nil, nil

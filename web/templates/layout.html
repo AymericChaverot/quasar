@@ -43,9 +43,15 @@
           <a href="/settings" class="nav-link {{navActive .Nav "settings"}}">Settings</a>
         </nav>
       </div>
-      <form method="post" action="/logout" class="flex items-center">
-        <button class="btn-signout">{{template "icon_logout"}}Sign out</button>
-      </form>
+      {{/* No gap here: the badge is an empty div whenever there is no update,
+           and a gap would still push Sign out along by it. The button carries
+           its own margin instead, which leaves with it. */}}
+      <div class="flex items-center">
+        {{if .Update}}{{template "update_badge" .Update}}{{end}}
+        <form method="post" action="/logout" class="flex items-center">
+          <button class="btn-signout">{{template "icon_logout"}}Sign out</button>
+        </form>
+      </div>
     </div>
   </header>
   {{end}}
@@ -68,14 +74,19 @@
        nothing, so this can run after every swap. */}}
   <script>
     (function () {
+      // The animations that must survive their element being replaced, and the
+      // elements that run them. The update button is in here for the same
+      // reason: it is swapped by its own poll every minute, and a halo that
+      // started over on each swap would pulse in time with the poll.
+      var PINNED = ["shimmer", "update-glow"];
       function pin() {
-        document.querySelectorAll(".shimmer").forEach(function (el) {
+        document.querySelectorAll(".shimmer, .btn-update").forEach(function (el) {
           // getAnimations reports nothing for an element whose style has not
           // been resolved yet, which a just-inserted one has not, and nothing
           // at all where reduced motion has taken the animation away.
           getComputedStyle(el).animationName;
           el.getAnimations().forEach(function (a) {
-            if (a.animationName === "shimmer") a.startTime = 0;
+            if (PINNED.indexOf(a.animationName) >= 0) a.startTime = 0;
           });
         });
       }

@@ -18,7 +18,14 @@ import (
 	"quasar/internal/version"
 )
 
-const checkInterval = 6 * time.Hour
+// CheckInterval is how often the background checker asks GitHub for the latest
+// release. Exported because the System page tells the operator this cadence,
+// and a card claiming a frequency the checker does not keep is worse than one
+// that says nothing.
+//
+// Kept well inside GitHub's 60-requests-per-hour anonymous limit — two calls an
+// hour leaves the rest of that budget to the manual "Check for updates" button.
+const CheckInterval = 30 * time.Minute
 
 // Settings keys owned by the updater.
 const (
@@ -88,20 +95,27 @@ func parse(tag string) [3]int {
 }
 
 // StartChecker polls for new releases and notifies once per new tag.
+//
+// The first check runs shortly after boot rather than a full interval later.
+// The header carries the update button now, so a dashboard that has just been
+// started — which is exactly when someone is looking at it — would otherwise
+// stay silent about a release that is already out. The short delay is only to
+// keep the check off the critical path of coming up.
 func StartChecker(database *sql.DB, repo string) {
 	go func() {
+		time.Sleep(15 * time.Second)
 		for {
-			time.Sleep(checkInterval)
 			known := db.GetSetting(database, SettingLatestTag)
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			latest, err := Check(ctx, database, repo)
 			cancel()
-			if err != nil || latest == known {
-				continue
-			}
-			if IsNewer(version.Version, latest) {
+			// Notify once per tag: only a tag we had not seen before is news,
+			// and the checker now runs often enough that repeating it would
+			// mean a message every half hour until the update is applied.
+			if err == nil && latest != known && IsNewer(version.Version, latest) {
 				notify.Send(database, fmt.Sprintf("Quasar: version %s is available (current: %s). Update from the System page.", latest, version.Version))
 			}
+			time.Sleep(CheckInterval)
 		}
 	}()
 }
