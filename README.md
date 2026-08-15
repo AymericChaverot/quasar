@@ -210,6 +210,75 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
   CATALOG_DEPLOY=1 go test ./internal/catalog/ -run TestDeploy -parallel 4 -timeout 3h
   CATALOG_DEPLOY=1 CATALOG_ONLY=immich,outline go test ./internal/catalog/ -run TestDeploy -v
   ```
+- **Catalogues personnels** : *Réglages → Catalogues*. Un catalogue est un
+  document YAML — écrit dans l'interface, collé, ou importé depuis une URL —
+  qui ajoute vos entrées et vos catégories à celles livrées. Les catégories
+  apparaissent en boutons de filtre au-dessus du catalogue. Une entrée qui
+  reprend un `id` livré **remplace** la carte correspondante au lieu de s'y
+  ajouter. Rien ne se rafraîchit tout seul : un catalogue décrit les compose
+  que ce serveur exécutera, donc un ré-import est un bouton, jamais une tâche
+  de fond. Un document qui ne passe pas les contrôles n'est pas enregistré, et
+  la page rend la liste de ce qui cloche avec le texte tel quel.
+
+  Les entrées s'éditent aussi une par une dans un formulaire, sans écrire de
+  YAML — même document des deux côtés, on peut commencer dans l'un et finir
+  dans l'autre.
+- **Entrées paramétrées** : une entrée peut poser des questions avant de
+  préremplir le formulaire — une version, un moteur de mods, une quantité de
+  RAM, un port. C'est ce qui fait qu'une entrée couvre une flotte plutôt qu'une
+  installation : un seul Minecraft pour du vanilla et du moddé, à la version
+  qu'on veut, autant de fois qu'on veut.
+
+  Chaque réponse est substituée aux `{{VERSION}}` de l'entrée — dans son env,
+  son image, son compose, et dans le nom et le sous-domaine proposés, pour que
+  le deuxième serveur n'atterrisse ni sur l'adresse ni sous le nom du premier.
+  À ne pas confondre avec `${VERSION}`, que Quasar laisse tel quel : c'est
+  docker compose qui le lit dans le `.env` à l'exécution.
+
+  ```yaml
+  name: Mes serveurs
+  categories: [Minecraft]
+  entries:
+    - id: minecraft-modded
+      name: Minecraft moddé
+      description: Serveur Fabric ou Forge, version au choix
+      category: Minecraft
+      deploy_type: compose
+      compose_service: minecraft
+      port: 25565
+      raw: true
+      app_name: "Minecraft {{VERSION}} ({{TYPE}})"
+      subdomain: "mc-{{TYPE}}-{{VERSION}}"
+      params:
+        - {name: TYPE, label: Moteur, kind: select, default: FABRIC,
+           options: [FABRIC, FORGE, NEOFORGE]}
+        - {name: VERSION, label: Version, default: "1.20.1"}
+        - {name: HOST_PORT, label: Port, kind: port, default: "25566"}
+      env: |
+        TYPE={{TYPE}}
+        MINECRAFT_VERSION={{VERSION}}
+        HOST_PORT={{HOST_PORT}}
+      compose: |
+        services:
+          minecraft:
+            image: itzg/minecraft-server:latest
+            ports:
+              - "${HOST_PORT}:25565"
+            environment:
+              EULA: "TRUE"
+              TYPE: ${TYPE}
+              VERSION: ${MINECRAFT_VERSION}
+            volumes:
+              - ./data:/data
+            restart: unless-stopped
+  ```
+
+  L'exemple affiché sur la page est le même, et un test le parse et le valide :
+  une documentation qui serait refusée au collage vaut moins que pas de
+  documentation. Deux serveurs bruts sur le même port de l'hôte sont refusés au
+  moment de la création, en nommant l'app qui le détient — sinon la deuxième
+  stack démarre, n'arrive pas à binder et s'arrête, dans un log que personne ne
+  regarde.
 - **Tâches** : commandes exécutées dans le conteneur (`docker exec`), à la
   demande ou planifiées (toutes les N minutes), sortie et statut conservés.
 - **Terminal web** : shell interactif dans le conteneur (xterm.js + WebSocket).
