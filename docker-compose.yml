@@ -45,6 +45,11 @@ services:
   traefik:
     # v3.7+ required: older Traefik fails Docker API negotiation against
     # recent daemons ("client version 1.24 is too old").
+    #
+    # Bumping this is what offers every install the update, so bump
+    # version.TraefikImage with it — a test fails if the two drift apart. The
+    # dashboard applies the update through docker-compose.override.yml, which
+    # takes precedence over this line until that file is removed.
     image: traefik:v3.7.10
     container_name: quasar-traefik
     restart: unless-stopped

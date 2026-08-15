@@ -55,7 +55,9 @@
        appear. None of them is polled: nothing here changes on its own. */}}
   <section class="space-y-4">
     <h2 class="h-label">Environment</h2>
-    <div hx-get="/partials/system/environment" hx-trigger="load" hx-swap="innerHTML">
+    {{/* outerHTML, unlike the three below: the partial brings its own wrapper
+         so that it can poll itself while a Traefik update is running. */}}
+    <div hx-get="/partials/system/environment" hx-trigger="load" hx-swap="outerHTML">
       <div class="card h-40 max-w-2xl animate-pulse"></div>
     </div>
   </section>

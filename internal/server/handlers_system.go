@@ -63,10 +63,12 @@ func (s *Server) systemData() map[string]any {
 // what version of it. Two Docker round trips, which is why it is not rendered
 // with the page.
 func (s *Server) handleSystemEnvPartial(w http.ResponseWriter, r *http.Request) {
+	engine := s.dock.EngineInfo(r.Context())
 	s.renderPartial(w, "system_env", map[string]any{
 		"Host":      vps.CollectHost(),
-		"Engine":    s.dock.EngineInfo(r.Context()),
+		"Engine":    engine,
 		"GoRuntime": runtime.Version(),
+		"Traefik":   s.traefikView(engine.TraefikImage, s.isAdmin(r)),
 	})
 }
 

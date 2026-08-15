@@ -197,9 +197,17 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
 - **2FA (TOTP)** : QR code d'activation, code exigé au login.
 - **Historique métriques** : échantillons CPU/RAM (serveur et par app) en
   SQLite, sparklines SVG 24h rendues côté serveur.
-- **Auto-update** : vérification des releases GitHub (6h), mise à jour en un
-  clic via un conteneur updater éphémère — seules quelques secondes
-  d'indisponibilité du dashboard, les apps ne sont pas touchées.
+- **Auto-update** : vérification des releases GitHub (30 min), bouton dans la
+  barre du haut dès qu'une version est disponible, mise à jour en un clic via
+  un conteneur updater éphémère — seules quelques secondes d'indisponibilité du
+  dashboard, les apps ne sont pas touchées.
+- **Mise à jour de Traefik** : depuis la page System, vers la version avec
+  laquelle la release courante de Quasar a été testée (jamais la dernière de
+  Docker Hub — Traefik est la brique qui, si elle ne démarre pas, emporte tous
+  les sites). Le pin est écrit dans `docker-compose.override.yml`, donc il
+  survit à un `docker compose up -d` lancé à la main et laisse le dépôt git
+  propre. Si la nouvelle version ne tient pas debout, l'ancienne est remise en
+  place automatiquement.
 
 ## Arborescence sur le VPS
 
@@ -207,6 +215,9 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
 /opt/quasar/
 ├── setup.sh
 ├── docker-compose.yml       # Traefik + socket-proxy + dashboard
+├── docker-compose.override.yml  # Version de Traefik épinglée par le dashboard
+│                            # (absent tant qu'aucune mise à jour n'a été faite ;
+│                            #  le supprimer revient au pin de docker-compose.yml)
 ├── .env                     # Secrets globaux (chmod 600)
 ├── traefik/
 │   ├── traefik.yml          # Conf statique (généré par setup.sh)

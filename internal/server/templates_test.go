@@ -24,6 +24,17 @@ func testServer(t *testing.T) *Server {
 	return s
 }
 
+// traefikRowCase is the Environment card built around one state of its Traefik
+// row, which is the only part of it that has more than one.
+func traefikRowCase(t TraefikView) map[string]any {
+	return map[string]any{
+		"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64"},
+		"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44", TraefikImage: t.Image},
+		"GoRuntime": "go1.26.5",
+		"Traefik":   t,
+	}
+}
+
 // composeRouteView is a stack app with one particular reading of its compose
 // file, for the panel that reports it.
 func composeRouteView(base AppView, adaptation docker.ComposeAdaptation) AppView {
@@ -203,18 +214,51 @@ func TestExecuteTemplates(t *testing.T) {
 
 		// The four sections the System page now fetches once it is on screen.
 		// Everything the page used to be tested for lives here.
+		// An edge router already on the tested version: the row reports, and
+		// offers nothing.
 		{"system_env", map[string]any{
 			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64", Uptime: "3d 4h"},
-			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44", OSType: "linux/amd64", TraefikImage: "traefik:v3.7"},
+			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44", OSType: "linux/amd64", TraefikImage: "traefik:v3.7.10"},
 			"GoRuntime": "go1.26.5",
+			"Traefik":   TraefikView{Image: "traefik:v3.7.10", Tested: "traefik:v3.7.10", IsAdmin: true},
 		}},
 		// A daemon that answered the version but not the inspect: the branch
-		// with no Traefik row.
+		// with no Traefik row at all.
 		{"system_env", map[string]any{
 			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64"},
 			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44"},
 			"GoRuntime": "go1.26.5",
+			"Traefik":   TraefikView{Tested: "traefik:v3.7.10", IsAdmin: true},
 		}},
+		// Every state the Traefik row can be in: an update on offer, a viewer
+		// who is not offered it, the two phases of a run, and the two outcomes.
+		{"system_env", traefikRowCase(TraefikView{
+			Image: "traefik:v3.7.6", Tested: "traefik:v3.7.10", Available: true, IsAdmin: true,
+		})},
+		{"system_env", traefikRowCase(TraefikView{
+			Image: "traefik:v3.7.6", Tested: "traefik:v3.7.10", Available: true,
+		})},
+		{"system_env", traefikRowCase(TraefikView{
+			Image: "traefik:v3.7.6", Tested: "traefik:v3.7.10", Available: true, IsAdmin: true,
+			Phase: traefikPulling, Percent: 42, Detail: "Downloading",
+		})},
+		// The pull that has not said anything yet, so the row has no percentage
+		// and no word from the daemon to show.
+		{"system_env", traefikRowCase(TraefikView{
+			Image: "traefik:v3.7.6", Tested: "traefik:v3.7.10", Available: true, IsAdmin: true,
+			Phase: traefikPulling,
+		})},
+		{"system_env", traefikRowCase(TraefikView{
+			Image: "traefik:v3.7.6", Tested: "traefik:v3.7.10", Available: true, IsAdmin: true,
+			Phase: traefikRecreating, Percent: 100,
+		})},
+		{"system_env", traefikRowCase(TraefikView{
+			Image: "traefik:v3.7.6", Tested: "traefik:v3.7.10", Available: true, IsAdmin: true,
+			Phase: traefikFailed, Err: "the update was rolled back and Traefik is running on its previous version",
+		})},
+		{"system_env", traefikRowCase(TraefikView{
+			Image: "traefik:v3.7.10", Tested: "traefik:v3.7.10", IsAdmin: true, Phase: traefikDone,
+		})},
 		{"system_certs", map[string]any{
 			"IsAdmin": true, "CertsWritable": true,
 			"Certs": []CertView{

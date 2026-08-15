@@ -50,6 +50,10 @@ type Server struct {
 	// the request that asked for it, and this is where the page waiting on it
 	// reads how far it has got.
 	update updateRun
+
+	// traefik is the edge-router update in flight, for the same reason and read
+	// the same way — by the Environment card, which polls while one is running.
+	traefik traefikRun
 }
 
 func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) (*Server, error) {
@@ -262,6 +266,9 @@ func (s *Server) routes() {
 	s.admin("POST /system/certs/{domain}/delete", s.handleCertDelete)
 	s.admin("POST /system/update/check", s.handleUpdateCheck)
 	s.admin("POST /system/update/apply", s.handleUpdateApply)
+	// Recreating the edge router stops every site for a few seconds, this page
+	// included.
+	s.admin("POST /system/traefik/update", s.handleTraefikUpdate)
 	// The page that waits out an update, and what it polls. Admin-only like the
 	// update itself: nobody else can start one, so nobody else is waiting.
 	s.admin("GET /system/updating", s.handleUpdating)
