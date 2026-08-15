@@ -1,0 +1,194 @@
+{{define "content"}}
+<div class="mb-8">
+  <a href="/settings" class="back-link">Settings</a>
+  <h1 class="page-title mt-2">Catalogues</h1>
+  <p class="help max-w-3xl mt-2!">
+    The one-click entries offered on the new-application page. Quasar ships {{.BuiltinN}} of them;
+    a catalogue of your own adds the software you actually run, under the categories you think in.
+    An entry may ask questions before it prefills the form — a version, a mod loader, a port — so
+    one entry covers a fleet of servers rather than a single installation.
+  </p>
+</div>
+
+{{if .Saved}}
+<div class="card mb-6 max-w-3xl px-4 py-3 text-sm" style="color: var(--ok)">{{.Saved}}</div>
+{{end}}
+{{if .Errors}}
+<div class="alert-err mb-6 max-w-3xl">
+  <p class="font-medium">This catalogue was not saved:</p>
+  <ul class="mt-2 list-disc space-y-1 pl-5">
+    {{range .Errors}}<li class="mono text-xs">{{.}}</li>{{end}}
+  </ul>
+</div>
+{{end}}
+
+<div class="max-w-3xl space-y-10">
+
+  <section class="space-y-4">
+    <h2 class="h-label">Your catalogues</h2>
+    {{if .Catalogs}}
+    {{range .Catalogs}}
+    <div class="card p-4 space-y-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="flex flex-wrap items-center gap-2 text-sm font-medium">
+            {{.Name}}
+            {{if not .Enabled}}<span class="badge badge-muted">off</span>{{end}}
+            {{if .Problems}}<span class="badge badge-muted">needs fixing</span>{{end}}
+          </p>
+          <p class="faint mt-0.5 text-xs">
+            {{len .Entries}} {{plural (len .Entries) "entry" "entries"}}
+            {{with .Categories}} · {{range $i, $c := .}}{{if $i}}, {{end}}{{$c}}{{end}}{{end}}
+            {{if .SourceURL}} · fetched from <span class="mono">{{.SourceURL}}</span>{{end}}
+            · updated {{.UpdatedAt.Format "2006-01-02 15:04"}}
+          </p>
+        </div>
+        <div class="flex shrink-0 flex-wrap gap-2">
+          {{if .SourceURL}}
+          <form method="post" action="/settings/catalogs/{{.ID}}/fetch">
+            <button type="submit" class="btn py-1! text-xs">{{template "icon_restart"}}Re-fetch</button>
+          </form>
+          {{end}}
+          <form method="post" action="/settings/catalogs/{{.ID}}/toggle">
+            <button type="submit" class="btn py-1! text-xs">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
+          </form>
+          <form method="post" action="/settings/catalogs/{{.ID}}/delete"
+                onsubmit="return confirm('Delete this catalogue? Its entries leave the new-application page. Applications already deployed from them are unaffected.')">
+            <button type="submit" class="btn-danger py-1! text-xs">{{template "icon_trash"}}Delete</button>
+          </form>
+        </div>
+      </div>
+
+      {{if .Problems}}
+      <div class="alert-err">
+        <p class="text-sm font-medium">This catalogue is not being used:</p>
+        <ul class="mt-2 list-disc space-y-1 pl-5">
+          {{range .Problems}}<li class="mono text-xs">{{.}}</li>{{end}}
+        </ul>
+      </div>
+      {{end}}
+
+      {{with .Overrides}}
+      <p class="help mt-0!">
+        Replaces the built-in {{range $i, $n := .}}{{if $i}}, {{end}}<span class="font-medium">{{$n}}</span>{{end}}
+        — same id, so this entry takes that card's place rather than sitting beside it.
+      </p>
+      {{end}}
+
+      {{if .Entries}}
+      <div class="flex flex-wrap gap-1.5">
+        {{range .Entries}}
+        <span class="chip chip-name">{{.Name}}{{if .Params}} · {{len .Params}} {{plural (len .Params) "choice" "choices"}}{{end}}</span>
+        {{end}}
+      </div>
+      {{end}}
+
+      <details class="text-sm">
+        <summary class="cursor-pointer select-none">{{template "icon_pencil"}}Edit the document</summary>
+        <form method="post" action="/settings/catalogs/{{.ID}}" class="mt-4 space-y-4">
+          <div>
+            <label class="label" for="name-{{.ID}}">Name</label>
+            <input id="name-{{.ID}}" name="name" type="text" required value="{{.Name}}" class="input">
+          </div>
+          <div>
+            <label class="label" for="url-{{.ID}}">Source URL (optional)</label>
+            <input id="url-{{.ID}}" name="source_url" type="url" value="{{.SourceURL}}" class="input mono"
+                   placeholder="https://example.com/catalogue.yaml">
+            <p class="help">Only a record of where to fetch it again. Nothing re-fetches on its own.</p>
+          </div>
+          <div>
+            <label class="label" for="yaml-{{.ID}}">Document</label>
+            <textarea id="yaml-{{.ID}}" name="yaml" rows="20" spellcheck="false"
+                      class="input mono text-xs">{{.YAML}}</textarea>
+          </div>
+          <button type="submit" class="btn-primary px-4 py-2">Save</button>
+        </form>
+      </details>
+    </div>
+    {{end}}
+    {{else}}
+    <div class="empty p-6 text-center">
+      <p class="text-sm">No catalogue of your own yet.</p>
+      <p class="help mt-1!">The {{.BuiltinN}} built-in entries are offered on their own until you add one.</p>
+    </div>
+    {{end}}
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Import from a URL</h2>
+    <form method="post" action="/settings/catalogs/fetch" class="card space-y-4 p-4">
+      <div>
+        <label class="label" for="import-url">Address of the document</label>
+        <input id="import-url" name="source_url" type="url" required class="input mono"
+               placeholder="https://raw.githubusercontent.com/you/catalogue/main/catalogue.yaml">
+        <p class="help">
+          Fetched once, now. It is checked before it is stored, and stored as text — so what is
+          offered on the new-application page is what you looked at, not whatever the address
+          serves next week. Re-fetching is a button on the card above.
+        </p>
+      </div>
+      <div>
+        <label class="label" for="import-name">Name (optional)</label>
+        <input id="import-name" name="name" type="text" class="input"
+               placeholder="Taken from the document, or from the file name">
+      </div>
+      <button type="submit" class="btn px-4 py-2">Fetch and add</button>
+    </form>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Write one</h2>
+    {{$draft := .Draft}}
+    <form method="post" action="/settings/catalogs" class="card space-y-4 p-4">
+      <div>
+        <label class="label" for="new-name">Name</label>
+        <input id="new-name" name="name" type="text" required class="input"
+               value="{{with $draft}}{{.Name}}{{end}}" placeholder="My catalogue">
+        <p class="help">
+          Shown on every card the catalogue supplies, so you can tell yours apart. A
+          <span class="mono">name:</span> line in the document wins over this one.
+        </p>
+      </div>
+      <div>
+        <label class="label" for="new-yaml">Document</label>
+        <textarea id="new-yaml" name="yaml" rows="24" spellcheck="false" required
+                  class="input mono text-xs" placeholder="Paste a catalogue, or start from the example below.">{{with $draft}}{{.YAML}}{{end}}</textarea>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <button type="submit" class="btn-primary px-4 py-2">Add catalogue</button>
+        <button type="button" id="use-example" class="btn">Start from the example</button>
+      </div>
+    </form>
+
+    <details class="card p-4 text-sm">
+      <summary class="cursor-pointer select-none font-medium">What a catalogue looks like</summary>
+      <p class="help mt-3">
+        Two levels of substitution meet in an entry, and the difference is the thing to hold on to:
+        <span class="mono">{{"{{NAME}}"}}</span> is answered when the entry is picked and substituted
+        by Quasar, while <span class="mono">${NAME}</span> is left alone for docker compose to read
+        from the <span class="mono">.env</span> at run time. Quasar also answers
+        <span class="mono">{{"{{RANDOM}}"}}</span>, <span class="mono">{{"{{HOST}}"}}</span> and
+        <span class="mono">{{"{{URL}}"}}</span> by itself.
+      </p>
+      <pre id="example-doc" class="mono mt-3 overflow-x-auto rounded p-3 text-xs"
+           style="background: var(--surface-2)">{{.Example}}</pre>
+    </details>
+  </section>
+</div>
+
+<script>
+  (function () {
+    // The example is the format's documentation, and the shortest path from
+    // reading it to having one is not retyping it.
+    const button = document.getElementById("use-example");
+    const box = document.getElementById("new-yaml");
+    const example = document.getElementById("example-doc");
+    if (!button || !box || !example) return;
+    button.addEventListener("click", function () {
+      box.value = example.textContent;
+      box.focus();
+      box.setSelectionRange(0, 0);
+    });
+  })();
+</script>
+{{end}}

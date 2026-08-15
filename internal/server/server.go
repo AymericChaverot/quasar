@@ -228,6 +228,16 @@ func (s *Server) routes() {
 	s.admin("POST /settings/git/{id}/update", s.handleGitCredentialUpdate)
 	s.admin("POST /settings/git/{id}/delete", s.handleGitCredentialDelete)
 	s.admin("POST /settings/git/test", s.handleGitCredentialTest)
+	// An operator's catalogue is a set of compose files this server will run,
+	// so writing one is an admin's business — including the read, which shows
+	// the documents in full.
+	s.admin("GET /settings/catalogs", s.handleCatalogs)
+	s.admin("POST /settings/catalogs", s.handleCatalogCreate)
+	s.admin("POST /settings/catalogs/fetch", s.handleCatalogFetch)
+	s.admin("POST /settings/catalogs/{id}", s.handleCatalogUpdate)
+	s.admin("POST /settings/catalogs/{id}/fetch", s.handleCatalogFetch)
+	s.admin("POST /settings/catalogs/{id}/toggle", s.handleCatalogToggle)
+	s.admin("POST /settings/catalogs/{id}/delete", s.handleCatalogDelete)
 	s.admin("POST /settings/notify-test", s.handleNotifyTest)
 	s.admin("POST /settings/users", s.handleUserCreate)
 	s.admin("POST /settings/users/{id}/role", s.handleUserRole)

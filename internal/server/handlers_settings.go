@@ -103,18 +103,23 @@ func (s *Server) settingsData(r *http.Request) map[string]any {
 		"DBPath":       s.cfg.DBPath,
 		"Registries":   registries,
 		"GitCredCount": len(gitCreds),
-		"NotifyURL":    db.GetSetting(s.db, db.SettingNotifyURL),
-		"NtfyURL":      db.GetSetting(s.db, db.SettingNtfyURL),
-		"SMTPHost":     db.GetSetting(s.db, db.SettingSMTPHost),
-		"SMTPPort":     db.GetSetting(s.db, db.SettingSMTPPort),
-		"SMTPUser":     db.GetSetting(s.db, db.SettingSMTPUser),
-		"SMTPFrom":     db.GetSetting(s.db, db.SettingSMTPFrom),
-		"SMTPTo":       db.GetSetting(s.db, db.SettingSMTPTo),
-		"SMTPPassSet":  db.GetSetting(s.db, db.SettingSMTPPassword) != "",
-		"TOTPEnabled":  auth.TOTPEnabled(s.db, userID),
-		"AlertDisk":    s.alertThreshold(db.SettingAlertDisk, monitor.AlertDefaultDisk),
-		"AlertMem":     s.alertThreshold(db.SettingAlertMem, monitor.AlertDefaultMem),
-		"AlertCPU":     s.alertThreshold(db.SettingAlertCPU, monitor.AlertDefaultCPU),
+		// What the new-application page will actually offer, which is the
+		// built-in entries plus whatever the operator's catalogues add or
+		// replace — the merged count, not the sum.
+		"CatalogEntryCount": len(s.catalog().Templates),
+		"CatalogCount":      len(s.customCatalogs()),
+		"NotifyURL":         db.GetSetting(s.db, db.SettingNotifyURL),
+		"NtfyURL":           db.GetSetting(s.db, db.SettingNtfyURL),
+		"SMTPHost":          db.GetSetting(s.db, db.SettingSMTPHost),
+		"SMTPPort":          db.GetSetting(s.db, db.SettingSMTPPort),
+		"SMTPUser":          db.GetSetting(s.db, db.SettingSMTPUser),
+		"SMTPFrom":          db.GetSetting(s.db, db.SettingSMTPFrom),
+		"SMTPTo":            db.GetSetting(s.db, db.SettingSMTPTo),
+		"SMTPPassSet":       db.GetSetting(s.db, db.SettingSMTPPassword) != "",
+		"TOTPEnabled":       auth.TOTPEnabled(s.db, userID),
+		"AlertDisk":         s.alertThreshold(db.SettingAlertDisk, monitor.AlertDefaultDisk),
+		"AlertMem":          s.alertThreshold(db.SettingAlertMem, monitor.AlertDefaultMem),
+		"AlertCPU":          s.alertThreshold(db.SettingAlertCPU, monitor.AlertDefaultCPU),
 	}
 }
 

@@ -128,6 +128,25 @@ func TestBuiltinCatalogValidates(t *testing.T) {
 	}
 }
 
+// The example is the format's documentation, shown on the page where a
+// catalogue is written. Documentation that would be rejected on paste is worse
+// than none.
+func TestExampleIsACatalogueQuasarAccepts(t *testing.T) {
+	c := parseOK(t, Example)
+	if len(c.Templates) == 0 {
+		t.Fatal("the example declares no entries")
+	}
+	e := c.Templates[0]
+	if len(e.Params) == 0 {
+		t.Error("the example does not show the parameters it exists to show")
+	}
+	// It has to survive the merge too: an example that collided with a
+	// built-in id would demonstrate an override rather than an addition.
+	if Builtin().Get(e.ID) != nil {
+		t.Errorf("the example's entry id %q is a built-in one", e.ID)
+	}
+}
+
 func TestMergeOverridesByID(t *testing.T) {
 	base := Catalog{
 		Categories: []string{"Games"},

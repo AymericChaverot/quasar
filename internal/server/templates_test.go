@@ -168,6 +168,29 @@ func TestExecuteTemplates(t *testing.T) {
 			},
 			"IsAdmin": true,
 		}},
+		// One catalogue that reads and one that does not, so both halves of the
+		// card render: the entry chips, and the list of what is wrong with it.
+		{"catalogs", map[string]any{
+			"Title": "Catalogues", "IsAdmin": true, "BuiltinN": len(catalog.Builtin().Templates),
+			"Example": catalog.Example,
+			"Saved":   "Catalogue added.",
+			"Errors":  []string{"mc: an entry needs a description; it is all the card says about it"},
+			"Draft":   catalogForm{Name: "My servers", YAML: "entries:\n  - id: mc\n"},
+			"Catalogs": []CatalogView{
+				{
+					Catalog: &db.Catalog{ID: 1, Name: "My servers", Enabled: true, UpdatedAt: time.Now(),
+						SourceURL: "https://example.com/catalogue.yaml", YAML: catalog.Example},
+					Entries: []catalog.Template{
+						{ID: "minecraft", Name: "Modded Minecraft", Params: []catalog.Param{{Name: "VERSION"}}},
+					},
+					Categories: []string{"Minecraft"},
+				},
+				{
+					Catalog:  &db.Catalog{ID: 2, Name: "Broken", UpdatedAt: time.Now(), YAML: "nope"},
+					Problems: []string{"this is not a catalogue Quasar can read"},
+				},
+			},
+		}},
 		{"git_credentials", map[string]any{
 			"Title": "Git credentials", "IsAdmin": true,
 			"AnyScope": db.AnyScope, "DefaultUser": db.DefaultGitUsername, "Providers": gitProviders,

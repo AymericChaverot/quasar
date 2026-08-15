@@ -213,6 +213,26 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
   </section>
 
   <section class="space-y-4">
+    <h2 class="h-label">Catalogues</h2>
+    <a href="/settings/catalogs" class="card nav-card">
+      <span class="cred-mark" aria-hidden="true">{{template "icon_grid"}}</span>
+      <span class="min-w-0 flex-1">
+        <span class="block text-sm font-medium">
+          {{.CatalogEntryCount}} {{plural .CatalogEntryCount "entry" "entries"}} offered
+          {{if .CatalogCount}}
+            <span class="faint">· {{.CatalogCount}} of your own</span>
+          {{end}}
+        </span>
+        <span class="help block mt-0!">
+          The one-click entries on the new-application page. Add your own — your software, your
+          categories, and entries that ask for a version before they prefill anything.
+        </span>
+      </span>
+      <span class="faint shrink-0" aria-hidden="true">→</span>
+    </a>
+  </section>
+
+  <section class="space-y-4">
     <h2 class="h-label">Git credentials</h2>
     <a href="/settings/git" class="card nav-card">
       <span class="cred-mark" aria-hidden="true">{{template "icon_key"}}</span>
