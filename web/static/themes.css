@@ -1426,7 +1426,9 @@ input[type="checkbox"]:focus-visible {
 /* A control that has fired a request and is waiting on the answer. The spinner
    takes the icon's place rather than being added beside it, so the button keeps
    its width and its label stays where it was. htmx puts .htmx-request on
-   whatever hx-indicator names — here, the button itself. */
+   whatever hx-indicator names — here, the button itself; .is-working is the
+   same state set by hand, for a plain form whose submit navigates the page and
+   so has no htmx request to be indicated. */
 .spinner {
   display: inline-block;
   width: 0.875rem;
@@ -1446,11 +1448,17 @@ input[type="checkbox"]:focus-visible {
 
 .btn.htmx-request .spinner,
 .btn-primary.htmx-request .spinner,
-.btn-danger.htmx-request .spinner { display: inline-block; }
+.btn-danger.htmx-request .spinner,
+.btn.is-working .spinner,
+.btn-primary.is-working .spinner,
+.btn-danger.is-working .spinner { display: inline-block; }
 
 .btn.htmx-request .ico,
 .btn-primary.htmx-request .ico,
-.btn-danger.htmx-request .ico { display: none; }
+.btn-danger.htmx-request .ico,
+.btn.is-working .ico,
+.btn-primary.is-working .ico,
+.btn-danger.is-working .ico { display: none; }
 
 /* A word that names something happening right now: DEPLOYING on a badge, the
    heading over an update, the line naming the step a deploy is on. A band of

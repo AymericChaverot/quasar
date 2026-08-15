@@ -78,6 +78,11 @@ type CleanupReport struct {
 	Volumes    int
 	Bytes      int64
 	Failed     int // objects the daemon refused to remove
+
+	// Incomplete marks a sweep that stopped while there was still something to
+	// take — it ran out of passes or out of time. Everything counted above was
+	// still removed; what is left needs another sweep.
+	Incomplete bool
 }
 
 // Summary is the sentence the System page shows after a sweep.
@@ -111,6 +116,11 @@ func (r CleanupReport) Summary() string {
 		msg += " One object was still in use and was left alone."
 	} else if r.Failed > 1 {
 		msg += fmt.Sprintf(" %d objects were still in use and were left alone.", r.Failed)
+	}
+	// A sweep normally runs until there is nothing left to take, so saying this
+	// only when it did not is what keeps the ordinary message meaning "done".
+	if r.Incomplete {
+		msg += " More was still coming free when the sweep reached its limit — run it again to finish."
 	}
 	return msg
 }
@@ -242,6 +252,14 @@ type sweep struct {
 	networks   []string
 	volumes    []*volume.Volume
 	usage      DiskUsage
+}
+
+// empty reports whether there is nothing here to remove. A pass that finds this
+// is the pass that ends a sweep — everything else is a bound on how long it may
+// keep trying.
+func (s sweep) empty() bool {
+	return len(s.images) == 0 && len(s.dangling) == 0 && len(s.cache) == 0 &&
+		len(s.containers) == 0 && len(s.networks) == 0 && len(s.volumes) == 0
 }
 
 // resolve works out what Docker is holding and which of it is disposable.
@@ -695,19 +713,37 @@ func (o CleanupOptions) narrow(s sweep) sweep {
 	return out
 }
 
-// cleanupPasses bounds how many times a sweep looks again at what is left.
+// What ends a sweep is a look that finds nothing left to take. These only bound
+// how long it may go on trying.
 //
 // Removal cascades. The container removed in one pass is what frees the image
 // it was created from; the image removed by its last tag is what turns its
-// layers into the untagged leftovers of the next. A single pass therefore
-// always stops short of what it set out to do, and the page it returns to says
-// so — a sweep reporting success over a breakdown still offering a few hundred
-// megabytes, which is the state this bound exists to clear.
+// layers into the untagged leftovers of the next, and those are what release
+// the build cache records underneath. A single pass therefore always stops
+// short of what it set out to do, and the page it returns to says so — a sweep
+// reporting success over a breakdown still offering a few hundred megabytes.
 //
-// Four is past the depth of that chain (containers, their images, the layers
-// those images held). The loop stops early on the pass that removes nothing,
-// so the bound is only ever reached by a daemon that keeps finding more.
-const cleanupPasses = 4
+// The chain is three or four deep in the ordinary case, which is what the bound
+// used to be — and a bound set to the ordinary case is reached by every server
+// that is not the ordinary case, which is how a full cleanup came to take six
+// presses of the button with nothing done in between. It is a backstop now:
+// high enough that reaching it means something is regenerating faster than this
+// removes it, at which point stopping is the right answer anyway. The real
+// budget is the caller's deadline, which every pass is subject to.
+const cleanupPasses = 32
+
+// cleanupSettle is how long a pass that took nothing waits before looking once
+// more. The daemon does not always finish with an object by the time it says it
+// has — a container still winding down keeps its image out of the next scan —
+// and concluding "nothing left" from that one look is what left work behind for
+// the next press of the button.
+const cleanupSettle = 3 * time.Second
+
+// cleanupStalls is how many passes in a row may take nothing before the sweep
+// concludes that what is left is not going. Two rather than one: the first is
+// what asks the question, the second — after the pause above — is what answers
+// it.
+const cleanupStalls = 2
 
 // Cleanup removes everything a scan found disposable, and the orphaned volumes
 // too if the operator asked for those separately. It repeats until a pass finds
@@ -724,22 +760,54 @@ func (c *Client) Cleanup(ctx context.Context, appIDs []string, opts CleanupOptio
 	}
 
 	var rep CleanupReport
-	for pass := 0; pass < cleanupPasses; pass++ {
+	var progress bool // some pass removed something
+	var stalled int   // passes in a row that removed nothing
+	pass := 0
+	for ; pass < cleanupPasses; pass++ {
 		s, err := c.resolve(ctx, appIDs)
 		if err != nil {
 			if pass == 0 {
 				return CleanupReport{}, err
 			}
-			break // what the earlier passes removed still stands, and is reported
-		}
-		removed, failed := c.sweepOnce(ctx, opts.narrow(s), &rep)
-		// Only the latest pass's failures are kept: an object an earlier pass
-		// could not remove was tried again, and either went or is counted here.
-		// Summing them would report one stubborn image as four.
-		rep.Failed = failed
-		if removed == 0 {
+			// What the earlier passes removed still stands and is reported, but
+			// this is not a sweep that finished.
+			rep.Incomplete = true
 			break
 		}
+		left := opts.narrow(s)
+		var removed, failed int
+		if !left.empty() {
+			removed, failed = c.sweepOnce(ctx, left, &rep)
+			// Only the latest pass's failures are kept: an object an earlier
+			// pass could not remove was tried again, and either went or is
+			// counted here. Summing them would report one stubborn image as
+			// four.
+			rep.Failed = failed
+		}
+		if removed > 0 {
+			progress = true
+			stalled = 0
+			continue
+		}
+
+		// Nothing went this time: either there is nothing left, or what is left
+		// refuses to go, or the daemon has not caught up with the pass before.
+		// Only the first of those is a finished sweep, and one look cannot tell
+		// them apart — so unless nothing has gone all sweep, it waits and asks
+		// again rather than handing back a page with work still on it.
+		stalled++
+		if !progress || stalled >= cleanupStalls {
+			break
+		}
+		if !settle(ctx) {
+			rep.Incomplete = true
+			break
+		}
+	}
+	// Running out of passes means the cascade was still going, which is the one
+	// thing the operator has to be told: the button is worth pressing again.
+	if pass == cleanupPasses {
+		rep.Incomplete = true
 	}
 
 	// Measured rather than added up. The per-object sizes are estimates that
@@ -753,6 +821,18 @@ func (c *Client) Cleanup(ctx context.Context, appIDs []string, opts CleanupOptio
 		}
 	}
 	return rep, nil
+}
+
+// settle pauses between two looks at the daemon and reports whether it was
+// allowed to finish. A sweep that has run out of time stops asking rather than
+// waiting out a deadline it has already passed.
+func settle(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(cleanupSettle):
+		return true
+	}
 }
 
 // sweepOnce removes everything one resolution found disposable, adding what

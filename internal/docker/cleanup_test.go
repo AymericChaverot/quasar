@@ -3,6 +3,7 @@ package docker
 import (
 	"testing"
 
+	"github.com/docker/docker/api/types/build"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
@@ -253,6 +254,43 @@ func TestReportSummaryNamesWhatWent(t *testing.T) {
 		if !contains(got, want) {
 			t.Errorf("summary %q is missing %q", got, want)
 		}
+	}
+	// A sweep that finished must not hedge: "run it again" over a completed
+	// cleanup is what sent the operator back to the button six times.
+	if contains(got, "run it again") {
+		t.Errorf("a finished sweep should not ask to be repeated, got %q", got)
+	}
+
+	partial := CleanupReport{Images: 1, Incomplete: true}.Summary()
+	if !contains(partial, "run it again") {
+		t.Errorf("a sweep that ran out of passes should say so, got %q", partial)
+	}
+}
+
+// The pass that finds nothing is what ends a sweep, so empty has to be false
+// for every category on its own — a category it forgot would end the loop with
+// that category's objects still on the disk.
+func TestSweepIsEmptyOnlyWhenNothingIsLeftToTake(t *testing.T) {
+	if !(sweep{}).empty() {
+		t.Fatal("a sweep with nothing in it should be empty")
+	}
+	img := &image.Summary{ID: "sha256:aa"}
+	for name, s := range map[string]sweep{
+		"images":     {images: []*image.Summary{img}},
+		"dangling":   {dangling: []*image.Summary{img}},
+		"cache":      {cache: []*build.CacheRecord{{ID: "c1"}}},
+		"containers": {containers: []*container.Summary{ct("qs-x", "exited", 1, nil)}},
+		"networks":   {networks: []string{"stray"}},
+		"volumes":    {volumes: []*volume.Volume{{Name: "orphan"}}},
+	} {
+		if s.empty() {
+			t.Errorf("a sweep holding %s is not empty", name)
+		}
+	}
+	// The disk figures ride along on every resolution and are not things to
+	// remove: a sweep carrying only those has nothing left to do.
+	if !(sweep{usage: DiskUsage{ImagesCount: 12}}).empty() {
+		t.Error("disk usage alone is not something to sweep")
 	}
 }
 
