@@ -28,9 +28,13 @@
 {{define "deploy_fields_compose"}}
 <div>
   <label for="compose_yaml" class="label">docker-compose.yml</label>
+  {{/* Catalogue stacks name the service the domain belongs to: several of them
+       run four containers, and the one that serves the site is not always the
+       one Quasar would pick on its own. */}}
+  <input type="hidden" name="compose_service" value="{{with .Form}}{{.ComposeService}}{{end}}">
   <textarea id="compose_yaml" name="compose_yaml" rows="12" spellcheck="false"
             placeholder="services:&#10;  web:&#10;    image: nginx:latest&#10;    networks: [traefik-net]&#10;networks:&#10;  traefik-net:&#10;    external: true"
-            class="input mono"></textarea>
+            class="input mono">{{with .Form}}{{.ComposeYAML}}{{end}}</textarea>
   <p class="help">
     Quasar works out which service fronts the stack and adapts the file to run behind Traefik: it
     adds the router labels, joins the external network, and drops any host bindings on ports 80 and

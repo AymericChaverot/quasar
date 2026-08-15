@@ -184,8 +184,32 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
 - **Thèmes** : Nebula (sombre, défaut), Marathon (brutalism orange/os, d'après
   Marathon de Bungie), Nord, Synthwave, Terminal (vert CRT), Paper et Solarized
   (clairs) — via variables CSS, persisté en cookie.
-- **Catalogue one-click** : PostgreSQL, MySQL, Redis, Uptime Kuma, Ghost, n8n,
-  Vaultwarden — formulaire prérempli, secrets générés automatiquement.
+- **Catalogue one-click** : ~60 services self-host classés par catégorie
+  (médias, fichiers, notes, tableaux de bord, sécurité, dev, analytics, bases
+  de données, serveurs de jeu…), avec recherche. Une entrée est soit une image
+  unique, soit une stack Compose complète — Immich, Nextcloud, Authentik ou
+  Paperless arrivent avec leur base de données et leur cache. Formulaire
+  prérempli, secrets générés automatiquement.
+  L'adresse publique dont une entrée a besoin (`URL`, `BASE_URL`, `url`…) est
+  déduite du sous-domaine et du domaine : rien à recopier à la main. Les stacks
+  attendent leur base de données via `healthcheck` + `depends_on: condition`,
+  donc pas de boucle de redémarrage au premier déploiement.
+  Les serveurs de jeu et les bases de données ne parlent pas HTTP : Traefik ne
+  tient que :80 et :443 et route sur l'en-tête Host, donc ces apps publient
+  leur propre port et se joignent à l'IP du serveur, pas au sous-domaine. Des
+  entrypoints TCP/UDP dédiés dans Traefik les rendraient routables comme les
+  autres — piste ouverte, pas encore faite.
+
+  Le catalogue est vérifiable, pas seulement relu :
+
+  ```sh
+  # Chaque image existe encore dans son registre (réseau seul, pas de Docker).
+  CATALOG_IMAGES=1 go test ./internal/catalog/ -run TestEveryImageStillExists
+
+  # Chaque entrée est réellement déployée et sondée (nécessite Docker).
+  CATALOG_DEPLOY=1 go test ./internal/catalog/ -run TestDeploy -parallel 4 -timeout 3h
+  CATALOG_DEPLOY=1 CATALOG_ONLY=immich,outline go test ./internal/catalog/ -run TestDeploy -v
+  ```
 - **Tâches** : commandes exécutées dans le conteneur (`docker exec`), à la
   demande ou planifiées (toutes les N minutes), sortie et statut conservés.
 - **Terminal web** : shell interactif dans le conteneur (xterm.js + WebSocket).

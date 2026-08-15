@@ -832,6 +832,18 @@ input[type="checkbox"]:focus-visible {
   color: var(--err);
 }
 
+/* Not a failure — the one thing a catalogue entry needs said before it is
+   created: a URL to fill in, or a server the subdomain will never reach. */
+.alert-note {
+  border: var(--border-w) solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--warn);
+}
+
 /* --- Badges & meters ------------------------------------------------------- */
 
 /* A status is a machine word, not a sentence: mono and capitalised, so a column

@@ -133,19 +133,26 @@ func (s *Server) handleAppNew(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{
 		"Title":   "New application",
 		"Domain":  s.cfg.Domain,
-		"Catalog": catalog.Templates,
+		"Catalog": catalog.Grouped(),
 	}
-	// ?template=<id> prefills the form from a one-click catalog entry.
+	// ?template=<id> prefills the form from a one-click catalog entry. The
+	// subdomain it proposes is the entry's ID, so the public address the entry
+	// needs in its env is already known and can be filled in rather than left
+	// as a placeholder for the operator to paste back in.
 	if t := catalog.Get(r.URL.Query().Get("template")); t != nil {
+		host := appHost(&db.App{Subdomain: t.ID}, s.cfg.Domain)
 		data["Form"] = &db.App{
-			Name:       t.Name,
-			Subdomain:  t.ID,
-			DeployType: "image",
-			ImageRef:   t.ImageRef,
-			Port:       t.Port,
-			DataMount:  t.DataMount,
-			EnvContent: t.RenderEnv(),
+			Name:           t.Name,
+			Subdomain:      t.ID,
+			DeployType:     t.Type(),
+			ImageRef:       t.ImageRef,
+			ComposeYAML:    t.Compose,
+			ComposeService: t.ComposeService,
+			Port:           t.Port,
+			DataMount:      t.DataMount,
+			EnvContent:     t.RenderEnv(host),
 		}
+		data["Picked"] = t
 	}
 	s.render(w, r, "app_new", data)
 }
@@ -154,17 +161,18 @@ func (s *Server) handleAppCreate(w http.ResponseWriter, r *http.Request) {
 	form := func(k string) string { return strings.TrimSpace(r.FormValue(k)) }
 
 	a := &db.App{
-		Name:          form("name"),
-		Subdomain:     strings.ToLower(form("subdomain")),
-		DeployType:    form("deploy_type"),
-		ImageRef:      form("image_ref"),
-		GitURL:        form("git_url"),
-		GitBranch:     form("git_branch"),
-		ComposeYAML:   r.FormValue("compose_yaml"),
-		EnvContent:    strings.ReplaceAll(r.FormValue("env_content"), "\r\n", "\n"),
-		DataMount:     form("data_mount"),
-		CustomDomains: normalizeDomains(form("custom_domains")),
-		Port:          80,
+		Name:           form("name"),
+		Subdomain:      strings.ToLower(form("subdomain")),
+		DeployType:     form("deploy_type"),
+		ImageRef:       form("image_ref"),
+		GitURL:         form("git_url"),
+		GitBranch:      form("git_branch"),
+		ComposeYAML:    r.FormValue("compose_yaml"),
+		ComposeService: form("compose_service"),
+		EnvContent:     strings.ReplaceAll(r.FormValue("env_content"), "\r\n", "\n"),
+		DataMount:      form("data_mount"),
+		CustomDomains:  normalizeDomains(form("custom_domains")),
+		Port:           80,
 	}
 	if p := form("port"); p != "" {
 		if n, err := strconv.Atoi(p); err == nil && n > 0 && n < 65536 {

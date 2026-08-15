@@ -5,19 +5,61 @@
 <div class="alert-err mb-6">{{.Error}}</div>
 {{end}}
 
+{{with .Picked}}{{with .Caveat}}
+<div class="alert-note mb-6">{{.}}</div>
+{{end}}{{end}}
+
 {{if .Catalog}}
 <section class="mb-10">
-  <h2 class="h-label mb-3">One-click apps</h2>
-  <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+  <h2 class="h-label mb-3">App catalogue</h2>
+  <input type="search" id="catalog-search" class="input mb-4" autocomplete="off"
+         placeholder="Search the catalogue — jellyfin, minecraft, postgres…">
+  {{/* Scrolled rather than paged: the form underneath is the point of the
+       page, and a catalogue that pushed it off screen would bury it. */}}
+  <div id="catalog" class="max-h-[26rem] space-y-5 overflow-y-auto pr-1">
     {{range .Catalog}}
-    <a href="/apps/new?template={{.ID}}" class="card block p-3 transition-colors hover:border-[var(--border-strong)]">
-      <p class="text-sm font-medium">{{.Name}}</p>
-      <p class="faint mt-0.5 text-xs">{{.Description}}</p>
-    </a>
+    <div class="catalog-group">
+      <h3 class="h-label mb-2">{{.Category}}</h3>
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {{range .Templates}}
+        <a href="/apps/new?template={{.ID}}"
+           class="catalog-card card block p-3 transition-colors hover:border-[var(--border-strong)]"
+           data-search="{{.Name}} {{.Description}} {{.Category}}">
+          <p class="text-sm font-medium">{{.Name}}</p>
+          <p class="faint mt-0.5 text-xs">{{.Description}}</p>
+        </a>
+        {{end}}
+      </div>
+    </div>
     {{end}}
+    <p id="catalog-empty" class="faint hidden py-6 text-center text-sm">Nothing matches that.</p>
   </div>
   <p class="help mt-2">Selecting a template prefills the form below — review it, then create.</p>
 </section>
+
+<script>
+  // Filtering happens here rather than over the wire: the whole catalogue is
+  // already on the page, and a round trip per keystroke would be slower than
+  // the typing.
+  (function () {
+    const box = document.getElementById("catalog-search");
+    const cards = [...document.querySelectorAll(".catalog-card")];
+    const groups = [...document.querySelectorAll(".catalog-group")];
+    const empty = document.getElementById("catalog-empty");
+    if (!box) return;
+    box.addEventListener("input", function () {
+      const q = box.value.trim().toLowerCase();
+      for (const c of cards) {
+        c.classList.toggle("hidden", q !== "" && !c.dataset.search.toLowerCase().includes(q));
+      }
+      // A category whose every card is hidden should take its heading with it.
+      for (const g of groups) {
+        g.classList.toggle("hidden", !g.querySelector(".catalog-card:not(.hidden)"));
+      }
+      empty.classList.toggle("hidden", !!document.querySelector(".catalog-card:not(.hidden)"));
+    });
+  })();
+</script>
 {{end}}
 
 <form method="post" action="/apps" class="max-w-2xl space-y-8">
@@ -39,27 +81,32 @@
     </div>
   </section>
 
+  {{/* A catalogue entry is either an image or a whole stack, so the selected
+       type follows what was picked rather than always starting on image. */}}
+  {{$deploy := "image"}}{{with .Form}}{{if .DeployType}}{{$deploy = .DeployType}}{{end}}{{end}}
   <section class="space-y-4">
     <h2 class="h-label">Deployment</h2>
     <div class="flex gap-6 text-sm">
       <label class="flex items-center gap-2">
-        <input type="radio" name="deploy_type" value="image" checked
+        <input type="radio" name="deploy_type" value="image" {{if eq $deploy "image"}}checked{{end}}
                hx-get="/partials/deploy-fields?type=image" hx-target="#deploy-fields" hx-swap="innerHTML">
         <span>Docker image</span>
       </label>
       <label class="flex items-center gap-2">
-        <input type="radio" name="deploy_type" value="git"
+        <input type="radio" name="deploy_type" value="git" {{if eq $deploy "git"}}checked{{end}}
                hx-get="/partials/deploy-fields?type=git" hx-target="#deploy-fields" hx-swap="innerHTML">
         <span>Git build</span>
       </label>
       <label class="flex items-center gap-2">
-        <input type="radio" name="deploy_type" value="compose"
+        <input type="radio" name="deploy_type" value="compose" {{if eq $deploy "compose"}}checked{{end}}
                hx-get="/partials/deploy-fields?type=compose" hx-target="#deploy-fields" hx-swap="innerHTML">
         <span>Docker Compose</span>
       </label>
     </div>
     <div id="deploy-fields">
-      {{template "deploy_fields_image" .}}
+      {{if eq $deploy "compose"}}{{template "deploy_fields_compose" .}}
+      {{else if eq $deploy "git"}}{{template "deploy_fields_git" .}}
+      {{else}}{{template "deploy_fields_image" .}}{{end}}
     </div>
   </section>
 

@@ -132,7 +132,7 @@ func TestExecuteTemplates(t *testing.T) {
 		{"updating", map[string]any{"Title": "Updating", "HideNav": true, "Current": "v1.0.0", "Target": "v1.1.0"}},
 		{"twofa", map[string]any{"Title": "2FA", "HideNav": true, "Error": "bad code"}},
 		{"dashboard", map[string]any{"Title": "Dashboard", "Domain": "example.com"}},
-		{"app_new", map[string]any{"Title": "New", "Domain": "example.com", "Catalog": catalog.Templates, "Form": app.App}},
+		{"app_new", map[string]any{"Title": "New", "Domain": "example.com", "Catalog": catalog.Grouped(), "Form": app.App}},
 		{"app_detail", map[string]any{"Title": "Blog", "App": app}},
 		{"app_detail", map[string]any{"Title": "API", "App": gitApp, "IsAdmin": true}},
 		{"app_container_detail", map[string]any{
