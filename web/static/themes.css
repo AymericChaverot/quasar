@@ -622,14 +622,20 @@ summary:focus-visible,
    and a native blue tick on a themed surface is the loudest sign that a page
    was assembled rather than designed. They follow the accent and the theme's
    corner radius like everything else — square on Terminal and Marathon,
-   rounded on Nord. */
+   rounded on Nord.
+
+   The 1rem box is a whole even number of pixels on purpose. At the 15px this
+   used to be, centring a 6px dot leaves 4.5px on each side, so the dot lands
+   half a pixel off the device grid and the browser smears it across two
+   columns — geometrically centred, visibly not. An even box keeps the dot,
+   the tick and the ring on whole pixels at both border widths. */
 input[type="radio"],
 input[type="checkbox"] {
   appearance: none;
   display: inline-grid;
   place-content: center;
-  width: 0.9375rem;
-  height: 0.9375rem;
+  width: 1rem;
+  height: 1rem;
   flex-shrink: 0;
   border: var(--border-w) solid var(--border-strong);
   background: var(--surface);
