@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -305,7 +306,16 @@ func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
 		redirectSystem(w, r, "Cleanup cancelled: the application list could not be read ("+err.Error()+"), and without it nothing can be told apart from a leftover.")
 		return
 	}
-	withVolumes := r.FormValue("volumes") == "on"
+	if err := r.ParseForm(); err != nil {
+		redirectSystem(w, r, "Cleanup cancelled: the selection could not be read ("+err.Error()+").")
+		return
+	}
+	opts := docker.CleanupOptions{
+		Volumes: r.FormValue("volumes") == "on",
+		// Nothing ticked is the whole scan, which is what the card says the
+		// button does. Ticking anything narrows it to exactly that.
+		Only: docker.ParseSelection(r.Form["sel"]),
+	}
 
 	// Deleting gigabytes of layers takes longer than a browser is willing to
 	// wait for a response, and a sweep abandoned half-way is worse than one
@@ -314,16 +324,19 @@ func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Minute)
 	defer cancel()
 
-	rep, err := s.dock.Cleanup(ctx, ids, withVolumes)
+	rep, err := s.dock.Cleanup(ctx, ids, opts)
 	if err != nil {
 		redirectSystem(w, r, "Cleanup failed: "+err.Error())
 		return
 	}
-	detail := ""
-	if withVolumes {
-		detail = "including orphaned volumes"
+	var detail []string
+	if !opts.Only.Empty() {
+		detail = append(detail, "a selection of "+strconv.Itoa(len(r.Form["sel"]))+" entries")
 	}
-	s.audit(r, "system.cleanup", docker.HumanSize(rep.Bytes), detail)
+	if opts.Volumes {
+		detail = append(detail, "including orphaned volumes")
+	}
+	s.audit(r, "system.cleanup", docker.HumanSize(rep.Bytes), strings.Join(detail, ", "))
 	redirectSystem(w, r, rep.Summary())
 }
 

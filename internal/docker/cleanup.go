@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/build"
@@ -21,7 +22,35 @@ type Reclaimable struct {
 	Count int
 	Bytes int64
 	Note  string // a few of the actual names, so the count is not the only thing shown
+
+	// Objects is the category opened up: one entry per thing that would go, so
+	// a count can be checked instead of trusted, and so a sweep can be narrowed
+	// to some of them. Capped at objectsListed.
+	Objects []ReclaimableObject
+
+	// WholeOnly marks a category the daemon offers no per-object removal for.
+	// The build cache is the only one: it has a prune endpoint and nothing
+	// else, so its objects are listed to be read rather than ticked.
+	WholeOnly bool
 }
+
+// ReclaimableObject is one thing inside a category — a line to read before
+// deciding, and to tick if only some of them should go.
+type ReclaimableObject struct {
+	// ID is what a narrowed sweep names it by: an image or container ID, a
+	// network or volume name. Never shown; Name is.
+	ID    string
+	Name  string
+	Note  string // what it is, or how old — enough to recognise it by
+	Bytes int64
+}
+
+// objectsListed caps how many objects a category hands to the page. A server
+// that has been building for months can hold thousands of untagged layers, and
+// a list that long is neither readable nor worth the bytes — the count above it
+// is already the honest figure, and a sweep of the whole category still takes
+// every one of them.
+const objectsListed = 100
 
 // CleanupScan is the preview of a sweep: what would go and what it is worth,
 // worked out without removing anything.
@@ -374,77 +403,186 @@ func (s sweep) scan() CleanupScan {
 
 	var names []string
 	var bytes int64
+	var objects []ReclaimableObject
 	for _, img := range s.images {
 		names = append(names, firstTag(img))
 		bytes += imageBytes(img)
+		objects = append(objects, ReclaimableObject{
+			ID:    img.ID,
+			Name:  firstTag(img),
+			Note:  otherTags(img) + since(time.Unix(img.Created, 0)),
+			Bytes: imageBytes(img),
+		})
 	}
 	add(Reclaimable{
-		Key:   "images",
-		Label: "Images no container uses",
-		Count: len(s.images),
-		Bytes: bytes,
-		Note:  examples(names),
+		Key:     "images",
+		Label:   "Images no container uses",
+		Count:   len(s.images),
+		Bytes:   bytes,
+		Note:    examples(names),
+		Objects: listed(objects),
 	})
 
-	bytes = 0
+	bytes, objects = 0, nil
 	for _, img := range s.dangling {
 		bytes += imageBytes(img)
+		objects = append(objects, ReclaimableObject{
+			ID: img.ID,
+			// An untagged image has no name left; its ID is the only thing it
+			// can be told apart by, and the short form is the one the daemon
+			// shows everywhere else.
+			Name:  shortID(img.ID),
+			Note:  since(time.Unix(img.Created, 0)),
+			Bytes: imageBytes(img),
+		})
 	}
 	add(Reclaimable{
-		Key:   "dangling",
-		Label: "Untagged layers left by rebuilds",
-		Count: len(s.dangling),
-		Bytes: bytes,
+		Key:     "dangling",
+		Label:   "Untagged layers left by rebuilds",
+		Count:   len(s.dangling),
+		Bytes:   bytes,
+		Objects: listed(objects),
 	})
 
-	bytes = 0
+	bytes, objects = 0, nil
 	for _, rec := range s.cache {
 		bytes += rec.Size
+		objects = append(objects, ReclaimableObject{
+			ID:    rec.ID,
+			Name:  shortID(rec.ID),
+			Note:  strings.TrimSpace(rec.Description + " " + since(rec.CreatedAt)),
+			Bytes: rec.Size,
+		})
 	}
 	add(Reclaimable{
-		Key:   "cache",
-		Label: "Build cache no longer referenced",
-		Count: len(s.cache),
-		Bytes: bytes,
+		Key:     "cache",
+		Label:   "Build cache no longer referenced",
+		Count:   len(s.cache),
+		Bytes:   bytes,
+		Objects: listed(objects),
+		// The daemon prunes the build cache or leaves it; there is no call that
+		// removes one record.
+		WholeOnly: true,
 	})
 
-	names, bytes = nil, 0
+	names, bytes, objects = nil, 0, nil
 	for _, ct := range s.containers {
+		name := ""
 		if len(ct.Names) > 0 {
-			names = append(names, strings.TrimPrefix(ct.Names[0], "/"))
+			name = strings.TrimPrefix(ct.Names[0], "/")
+			names = append(names, name)
 		}
 		bytes += ct.SizeRw
+		objects = append(objects, ReclaimableObject{
+			ID:    ct.ID,
+			Name:  name,
+			Note:  ct.Image + " · " + ct.Status,
+			Bytes: ct.SizeRw,
+		})
 	}
 	add(Reclaimable{
-		Key:   "containers",
-		Label: "Stopped containers nothing owns",
-		Count: len(s.containers),
-		Bytes: bytes,
-		Note:  examples(names),
+		Key:     "containers",
+		Label:   "Stopped containers nothing owns",
+		Count:   len(s.containers),
+		Bytes:   bytes,
+		Note:    examples(names),
+		Objects: listed(objects),
 	})
 
+	objects = nil
+	for _, n := range s.networks {
+		objects = append(objects, ReclaimableObject{ID: n, Name: n})
+	}
 	add(Reclaimable{
-		Key:   "networks",
-		Label: "Networks with nothing attached",
-		Count: len(s.networks),
-		Note:  examples(s.networks),
+		Key:     "networks",
+		Label:   "Networks with nothing attached",
+		Count:   len(s.networks),
+		Note:    examples(s.networks),
+		Objects: listed(objects),
 	})
 
-	names, bytes = nil, 0
+	names, bytes, objects = nil, 0, nil
 	for _, v := range s.volumes {
 		names = append(names, v.Name)
+		var size int64
 		if v.UsageData != nil {
-			bytes += v.UsageData.Size
+			size = v.UsageData.Size
+			bytes += size
 		}
+		objects = append(objects, ReclaimableObject{
+			ID: v.Name, Name: v.Name, Note: createdAt(v.CreatedAt), Bytes: size,
+		})
 	}
 	out.Volumes = Reclaimable{
-		Key:   "volumes",
-		Label: "Volumes no container references",
-		Count: len(s.volumes),
-		Bytes: bytes,
-		Note:  examples(names),
+		Key:     "volumes",
+		Label:   "Volumes no container references",
+		Count:   len(s.volumes),
+		Bytes:   bytes,
+		Note:    examples(names),
+		Objects: listed(objects),
 	}
 	return out
+}
+
+// listed puts the biggest first — reclaiming space is why anyone opens this —
+// and cuts the list at what a page can usefully show.
+func listed(objects []ReclaimableObject) []ReclaimableObject {
+	sort.SliceStable(objects, func(i, j int) bool {
+		if objects[i].Bytes != objects[j].Bytes {
+			return objects[i].Bytes > objects[j].Bytes
+		}
+		return objects[i].Name < objects[j].Name
+	})
+	if len(objects) > objectsListed {
+		return objects[:objectsListed]
+	}
+	return objects
+}
+
+// shortID is an ID as the daemon prints it: the twelve hex characters after the
+// algorithm, which are enough to recognise one object among a page of them.
+func shortID(id string) string {
+	if _, hex, ok := strings.Cut(id, ":"); ok {
+		id = hex
+	}
+	if len(id) > 12 {
+		return id[:12]
+	}
+	return id
+}
+
+// otherTags names the tags beyond the one shown, so an image kept for a second
+// name is not mistaken for one that would vanish entirely.
+func otherTags(img *image.Summary) string {
+	first := firstTag(img)
+	var rest []string
+	for _, tag := range img.RepoTags {
+		if tag != first && tag != "<none>:<none>" {
+			rest = append(rest, tag)
+		}
+	}
+	if len(rest) == 0 {
+		return ""
+	}
+	return "also " + strings.Join(rest, ", ") + " · "
+}
+
+// since is how long ago something was made, for telling one untagged layer from
+// another. A zero time yields nothing rather than a date in 1970.
+func since(t time.Time) string {
+	if t.IsZero() || t.Unix() <= 0 {
+		return ""
+	}
+	return humanDuration(time.Since(t)) + " old"
+}
+
+// createdAt reads the timestamp the volume API reports as a string.
+func createdAt(s string) string {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return ""
+	}
+	return since(t)
 }
 
 // examples names the first few objects in a category. A count alone asks the
@@ -457,6 +595,104 @@ func examples(names []string) string {
 		return strings.Join(names, ", ")
 	}
 	return fmt.Sprintf("%s and %d more", strings.Join(names[:show], ", "), len(names)-show)
+}
+
+// Selection is what the operator ticked on the cleanup card: whole categories,
+// individual objects, or — the ordinary case — nothing at all.
+//
+// The empty selection means everything the scan found. That is what makes the
+// button work the way it always has when no box is ticked, without every caller
+// having to say so.
+type Selection struct {
+	categories map[string]bool // "<key>"
+	objects    map[string]bool // "<key>:<id>"
+}
+
+// ParseSelection reads the values the cleanup card submits: "<key>:<id>" for
+// one object and "<key>:*" for a whole category.
+//
+// Anything malformed is dropped rather than guessed at. A selection is a list
+// of things to delete, so a value that cannot be read has to become no
+// permission at all, never a broader one.
+func ParseSelection(values []string) Selection {
+	sel := Selection{categories: map[string]bool{}, objects: map[string]bool{}}
+	for _, v := range values {
+		key, id, ok := strings.Cut(v, ":")
+		if !ok || key == "" || id == "" {
+			continue
+		}
+		if id == "*" {
+			sel.categories[key] = true
+			continue
+		}
+		sel.objects[v] = true
+	}
+	return sel
+}
+
+// Empty reports whether nothing was ticked, which is the whole scan.
+func (s Selection) Empty() bool { return len(s.categories) == 0 && len(s.objects) == 0 }
+
+// wants reports whether one object is in the selection.
+func (s Selection) wants(key, id string) bool {
+	return s.Empty() || s.categories[key] || s.objects[key+":"+id]
+}
+
+// wantsWhole reports whether a category that can only go as a whole is in.
+// Ticking one of its lines cannot stand in for this: there is no call that
+// would remove only that line.
+func (s Selection) wantsWhole(key string) bool { return s.Empty() || s.categories[key] }
+
+// CleanupOptions is what a sweep was asked to do.
+type CleanupOptions struct {
+	// Volumes includes every orphaned volume. It is the consent the card asks
+	// for separately, because a volume is the one thing here that cannot be
+	// pulled or rebuilt back.
+	Volumes bool
+	// Only narrows the sweep to what was ticked. The zero value is everything.
+	Only Selection
+}
+
+// narrow reduces a resolved sweep to what was actually asked for.
+//
+// Applied to every pass, not just the first: a narrowed sweep must not widen
+// into whatever the cascade uncovered. Removing a ticked container frees the
+// image it was created from, and that image is not a thing the operator ticked.
+func (o CleanupOptions) narrow(s sweep) sweep {
+	out := sweep{usage: s.usage}
+	for _, img := range s.images {
+		if o.Only.wants("images", img.ID) {
+			out.images = append(out.images, img)
+		}
+	}
+	for _, img := range s.dangling {
+		if o.Only.wants("dangling", img.ID) {
+			out.dangling = append(out.dangling, img)
+		}
+	}
+	if o.Only.wantsWhole("cache") {
+		out.cache = s.cache
+	}
+	for _, ct := range s.containers {
+		if o.Only.wants("containers", ct.ID) {
+			out.containers = append(out.containers, ct)
+		}
+	}
+	for _, n := range s.networks {
+		if o.Only.wants("networks", n) {
+			out.networks = append(out.networks, n)
+		}
+	}
+	// Volumes are the one category a sweep of "everything" leaves alone, so an
+	// empty selection never reaches them — only the separate consent above, or
+	// a volume ticked by name, which is that same consent given one line at a
+	// time.
+	for _, v := range s.volumes {
+		if o.Volumes || (!o.Only.Empty() && o.Only.wants("volumes", v.Name)) {
+			out.volumes = append(out.volumes, v)
+		}
+	}
+	return out
 }
 
 // cleanupPasses bounds how many times a sweep looks again at what is left.
@@ -481,7 +717,7 @@ const cleanupPasses = 4
 // Every removal is attempted on its own rather than through Docker's own prune
 // endpoints, which take no exclusions: the whole difference between this and
 // `docker system prune -a` is what it refuses to touch.
-func (c *Client) Cleanup(ctx context.Context, appIDs []string, withVolumes bool) (CleanupReport, error) {
+func (c *Client) Cleanup(ctx context.Context, appIDs []string, opts CleanupOptions) (CleanupReport, error) {
 	before, err := c.api.DiskUsage(ctx, types.DiskUsageOptions{})
 	if err != nil {
 		return CleanupReport{}, err
@@ -496,7 +732,7 @@ func (c *Client) Cleanup(ctx context.Context, appIDs []string, withVolumes bool)
 			}
 			break // what the earlier passes removed still stands, and is reported
 		}
-		removed, failed := c.sweepOnce(ctx, s, withVolumes, &rep)
+		removed, failed := c.sweepOnce(ctx, opts.narrow(s), &rep)
 		// Only the latest pass's failures are kept: an object an earlier pass
 		// could not remove was tried again, and either went or is counted here.
 		// Summing them would report one stubborn image as four.
@@ -522,7 +758,7 @@ func (c *Client) Cleanup(ctx context.Context, appIDs []string, withVolumes bool)
 // sweepOnce removes everything one resolution found disposable, adding what
 // went to rep. It returns how much it removed and how much the daemon refused,
 // which is what tells the caller whether another pass is worth making.
-func (c *Client) sweepOnce(ctx context.Context, s sweep, withVolumes bool, rep *CleanupReport) (removed, failed int) {
+func (c *Client) sweepOnce(ctx context.Context, s sweep, rep *CleanupReport) (removed, failed int) {
 	for _, ct := range s.containers {
 		if err := c.api.ContainerRemove(ctx, ct.ID, container.RemoveOptions{}); err != nil {
 			failed++
@@ -561,15 +797,14 @@ func (c *Client) sweepOnce(ctx context.Context, s sweep, withVolumes bool, rep *
 		removed++
 	}
 
-	if withVolumes {
-		for _, v := range s.volumes {
-			if err := c.api.VolumeRemove(ctx, v.Name, false); err != nil {
-				failed++
-				continue
-			}
-			rep.Volumes++
-			removed++
+	// Already narrowed to the volumes the operator consented to, if any.
+	for _, v := range s.volumes {
+		if err := c.api.VolumeRemove(ctx, v.Name, false); err != nil {
+			failed++
+			continue
 		}
+		rep.Volumes++
+		removed++
 	}
 	return removed, failed
 }

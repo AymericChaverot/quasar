@@ -24,6 +24,45 @@ func testServer(t *testing.T) *Server {
 	return s
 }
 
+// fullScan is a sweep preview with one of every category in it, and every shape
+// a category's object list can take: named objects, objects with nothing but an
+// ID, a category that can only go as a whole, and one whose list is capped
+// short of its own count.
+func fullScan() docker.CleanupScan {
+	return docker.CleanupScan{
+		Items: []docker.Reclaimable{
+			{Key: "images", Label: "Images no container uses", Count: 2, Bytes: 700_000_000,
+				Note: "nginx:1.24, redis:7",
+				Objects: []docker.ReclaimableObject{
+					{ID: "sha256:aaa", Name: "nginx:1.24", Note: "also nginx:latest · 12d 4h old", Bytes: 400_000_000},
+					{ID: "sha256:bbb", Name: "redis:7", Note: "3d 1h old", Bytes: 300_000_000},
+				}},
+			// A capped list: six untagged layers, two of them shown.
+			{Key: "dangling", Label: "Untagged layers left by rebuilds", Count: 6, Bytes: 1_100_000_000,
+				Objects: []docker.ReclaimableObject{
+					{ID: "sha256:ccc", Name: "ccc111222333", Note: "20d 0h old", Bytes: 600_000_000},
+					{ID: "sha256:ddd", Name: "ddd444555666", Note: "18d 6h old", Bytes: 500_000_000},
+				}},
+			{Key: "cache", Label: "Build cache no longer referenced", Count: 12, Bytes: 1_400_000_000,
+				WholeOnly: true,
+				Objects: []docker.ReclaimableObject{
+					{ID: "cache1", Name: "eee777888999", Note: "[build 3/7] RUN go build ./... 9d 2h old", Bytes: 900_000_000},
+					{ID: "cache2", Name: "fff000111222", Bytes: 500_000_000},
+				}},
+			// A category with no sizes at all, and objects carrying only a name.
+			{Key: "networks", Label: "Networks with nothing attached", Count: 1, Note: "qs-dead0001_default",
+				Objects: []docker.ReclaimableObject{{ID: "qs-dead0001_default", Name: "qs-dead0001_default"}}},
+		},
+		Volumes: docker.Reclaimable{Key: "volumes", Label: "Volumes no container references",
+			Count: 2, Bytes: 340_000_000, Note: "orphan-pgdata, tmpcache",
+			Objects: []docker.ReclaimableObject{
+				{ID: "orphan-pgdata", Name: "orphan-pgdata", Note: "41d 3h old", Bytes: 300_000_000},
+				{ID: "tmpcache", Name: "tmpcache", Note: "2d 0h old", Bytes: 40_000_000},
+			}},
+		Count: 21, Bytes: 3_200_000_000,
+	}
+}
+
 // traefikRowCase is the Environment card built around one state of its Traefik
 // row, which is the only part of it that has more than one.
 func traefikRowCase(t TraefikView) map[string]any {
@@ -281,16 +320,14 @@ func TestExecuteTemplates(t *testing.T) {
 				ContainersBytes: 41_000_000, VolumesCount: 1, VolumesBytes: 900_000_000,
 				CacheCount: 12, CacheBytes: 1_400_000_000,
 			},
-			"Cleanup": docker.CleanupScan{
-				Items: []docker.Reclaimable{
-					{Key: "images", Label: "Images no container uses", Count: 2, Bytes: 700_000_000, Note: "nginx:1.24, redis:7"},
-					{Key: "dangling", Label: "Untagged layers left by rebuilds", Count: 6, Bytes: 1_100_000_000},
-					{Key: "cache", Label: "Build cache no longer referenced", Count: 12, Bytes: 1_400_000_000},
-					{Key: "networks", Label: "Networks with nothing attached", Count: 1, Note: "qs-dead0001_default"},
-				},
-				Volumes: docker.Reclaimable{Key: "volumes", Count: 2, Bytes: 340_000_000, Note: "orphan-pgdata, tmpcache"},
-				Count:   21, Bytes: 3_200_000_000,
-			},
+			"Cleanup": fullScan(),
+		}},
+		// The same scan as a viewer sees it: every category still opens, and
+		// nothing in it can be ticked.
+		{"system_storage", map[string]any{
+			"IsAdmin": false,
+			"Disk":    docker.DiskUsage{ImagesCount: 5, ImagesBytes: 2_600_000_000},
+			"Cleanup": fullScan(),
 		}},
 		// Nothing to reclaim.
 		{"system_storage", map[string]any{

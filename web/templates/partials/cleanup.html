@@ -1,21 +1,88 @@
-{{/* One row of the reclaimable breakdown. The icon is chosen from the
-     category's key rather than carried in the data: a template cannot invoke
-     another by a name it computes, and the set is fixed and small. */}}
+{{/* One category of the reclaimable breakdown, openable to the objects inside
+     it. Takes a dict: Row is the category, IsAdmin decides whether its lines
+     can be ticked.
+
+     Closed, it is the summary line it has always been. Open, it is one line per
+     object, because "6 untagged layers, 1.1 GB" is a number to be trusted and
+     six names with their sizes is a number that can be checked — and because
+     the operator who only wants one of them gone should not have to choose
+     between all six and none.
+
+     The icon is chosen from the category's key rather than carried in the data:
+     a template cannot invoke another by a name it computes, and the set is
+     fixed and small. */}}
 {{define "cleanup_row"}}
-<div class="sweep-row">
-  <span class="sweep-row-mark" aria-hidden="true">
-    {{if eq .Key "images"}}{{template "icon_layers"}}
-    {{else if eq .Key "dangling"}}{{template "icon_tag_off"}}
-    {{else if eq .Key "cache"}}{{template "icon_hammer"}}
-    {{else if eq .Key "containers"}}{{template "icon_box"}}
-    {{else if eq .Key "networks"}}{{template "icon_network"}}
-    {{else}}{{template "icon_volume"}}{{end}}
-  </span>
-  <div class="min-w-0">
-    <p>{{.Label}}</p>
-    {{if .Note}}<p class="mono faint truncate text-xs">{{.Note}}</p>{{end}}
+{{$row := .Row}}
+{{$admin := .IsAdmin}}
+<details class="sweep-group">
+  <summary class="sweep-row">
+    <span class="sweep-row-mark" aria-hidden="true">
+      {{if eq $row.Key "images"}}{{template "icon_layers"}}
+      {{else if eq $row.Key "dangling"}}{{template "icon_tag_off"}}
+      {{else if eq $row.Key "cache"}}{{template "icon_hammer"}}
+      {{else if eq $row.Key "containers"}}{{template "icon_box"}}
+      {{else if eq $row.Key "networks"}}{{template "icon_network"}}
+      {{else}}{{template "icon_volume"}}{{end}}
+    </span>
+    <div class="min-w-0">
+      <p>{{$row.Label}}</p>
+      {{if $row.Note}}<p class="mono faint truncate text-xs">{{$row.Note}}</p>{{end}}
+    </div>
+    <p class="sweep-count mono">{{$row.Count}}</p>
+    <p class="sweep-size mono">{{if $row.Bytes}}{{humanSize $row.Bytes}}{{else}}—{{end}}</p>
+    <span class="sweep-caret" aria-hidden="true">{{template "icon_chevron_down"}}</span>
+  </summary>
+
+  <div class="sweep-objects">
+    {{if $admin}}
+    {{/* The whole category in one tick. It is a value of its own rather than
+         script ticking every line below, so it works the same with or without
+         JavaScript — and so a category that grew between the scan and the
+         sweep is still taken whole. */}}
+    <label class="sweep-object is-all">
+      <input type="checkbox" name="sel" value="{{$row.Key}}:*"
+             data-bytes="{{$row.Bytes}}" data-count="{{$row.Count}}">
+      <span class="sweep-object-name">All {{$row.Count}} {{plural $row.Count "entry" "entries"}}</span>
+      <span class="sweep-object-size mono">{{if $row.Bytes}}{{humanSize $row.Bytes}}{{else}}—{{end}}</span>
+    </label>
+    {{end}}
+
+    {{if $row.WholeOnly}}
+    <p class="help sweep-objects-note">
+      Docker clears the build cache as a whole or not at all — there is no call that removes one
+      record — so these are listed to be read rather than picked from.
+    </p>
+    {{end}}
+
+    {{range $row.Objects}}
+    {{if and $admin (not $row.WholeOnly)}}
+    <label class="sweep-object">
+      <input type="checkbox" name="sel" value="{{$row.Key}}:{{.ID}}" data-bytes="{{.Bytes}}" data-count="1">
+      <span class="min-w-0">
+        <span class="sweep-object-name mono">{{if .Name}}{{.Name}}{{else}}{{.ID}}{{end}}</span>
+        {{if .Note}}<span class="faint block truncate text-xs">{{.Note}}</span>{{end}}
+      </span>
+      <span class="sweep-object-size mono">{{if .Bytes}}{{humanSize .Bytes}}{{else}}—{{end}}</span>
+    </label>
+    {{else}}
+    <div class="sweep-object is-static">
+      <span class="min-w-0">
+        <span class="sweep-object-name mono">{{if .Name}}{{.Name}}{{else}}{{.ID}}{{end}}</span>
+        {{if .Note}}<span class="faint block truncate text-xs">{{.Note}}</span>{{end}}
+      </span>
+      <span class="sweep-object-size mono">{{if .Bytes}}{{humanSize .Bytes}}{{else}}—{{end}}</span>
+    </div>
+    {{end}}
+    {{end}}
+
+    {{/* The list is capped; the count above it is not. Saying so is what keeps
+         "6 shown, 214 in the category" from reading as a miscount. */}}
+    {{if lt (len $row.Objects) $row.Count}}
+    <p class="help sweep-objects-note">
+      Showing the {{len $row.Objects}} largest of {{$row.Count}}. The rest are still removed by a
+      sweep of the whole category.
+    </p>
+    {{end}}
   </div>
-  <p class="sweep-count mono">{{.Count}}</p>
-  <p class="sweep-size mono">{{if .Bytes}}{{humanSize .Bytes}}{{else}}—{{end}}</p>
-</div>
+</details>
 {{end}}

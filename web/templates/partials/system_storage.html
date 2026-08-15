@@ -65,11 +65,15 @@
       <p class="sweep-total mono">{{humanSize .Bytes}}</p>
     </div>
 
-    {{range .Items}}{{template "cleanup_row" .}}{{end}}
-
     {{if $.IsAdmin}}
-    <form method="post" action="/system/cleanup"
-          onsubmit="return confirm('Remove {{.Count}} unused {{plural .Count "object" "objects"}}? Applications, their images and the last few rollback builds are left untouched.')">
+    {{/* The categories are inside the form now: each one opens onto its own
+         objects, and a ticked line is a narrower sweep rather than a different
+         button. The whole scan is still what an untouched form submits. */}}
+    <form method="post" action="/system/cleanup" data-sweep
+          data-total="{{.Bytes}}" data-count="{{.Count}}"
+          onsubmit="return confirm(this.dataset.confirm || 'Remove {{.Count}} unused {{plural .Count "object" "objects"}}? Applications, their images and the last few rollback builds are left untouched.')">
+      {{range .Items}}{{template "cleanup_row" (dict "Row" . "IsAdmin" true)}}{{end}}
+
       {{/* A volume is the one thing here that cannot be pulled or rebuilt
            back, so it is never part of what the button sweeps by default. */}}
       {{with .Volumes}}
@@ -85,16 +89,91 @@
           </span>
         </span>
       </label>
+      {{/* The same volumes, one per line, for taking one and leaving the next.
+           A volume ticked here is consent given for that volume alone, so it
+           does not need the box above as well. */}}
+      {{template "cleanup_row" (dict "Row" . "IsAdmin" true)}}
       {{end}}
       {{end}}
+
       <div class="sweep-foot">
-        <p class="faint text-xs">
-          {{.Count}} {{plural .Count "object" "objects"}} in
+        <p class="faint text-xs" data-sweep-scope>
+          Nothing ticked — the button takes all {{.Count}}
+          {{plural .Count "object" "objects"}} in
           {{len .Items}} {{plural (len .Items) "category" "categories"}}
         </p>
-        <button type="submit" class="btn-primary">{{template "icon_sweep"}}Clean up {{humanSize .Bytes}}</button>
+        <button type="submit" class="btn-primary">
+          {{template "icon_sweep"}}<span data-sweep-label>Clean up {{humanSize .Bytes}}</span>
+        </button>
       </div>
     </form>
+
+    {{/* Keeps the button honest about what it is about to do. A control still
+         offering to clean up 3 GB while two lines are ticked would be lying
+         about the one thing this card exists to make checkable.
+
+         Everything it needs is in the markup — the counts are the server's, not
+         re-derived here — so with scripting off the form still submits and the
+         server still reads the ticks; only the label stays at its widest,
+         which is the reading that was already there. */}}
+    <script>
+      (function () {
+        // One such form per page: this card is the only thing that sweeps.
+        // Found by selector rather than from currentScript, which is null when
+        // htmx re-runs a script it swapped in.
+        var form = document.querySelector("form[data-sweep]");
+        if (!form) return;
+        var label = form.querySelector("[data-sweep-label]");
+        var scope = form.querySelector("[data-sweep-scope]");
+        var volumes = form.querySelector('input[name="volumes"]');
+        var whole = { label: label.textContent, scope: scope.textContent };
+
+        // How many objects the current ticks add up to. A category ticked whole
+        // stands for all of its lines, so its own lines are not counted again.
+        function selected() {
+          var n = 0;
+          form.querySelectorAll(".sweep-group").forEach(function (group) {
+            var all = group.querySelector(".is-all input");
+            if (!all) return;
+            var c = 0;
+            if (all.checked) {
+              c = Number(all.dataset.count);
+            } else {
+              group.querySelectorAll(".sweep-object:not(.is-all) input:checked").forEach(function (box) {
+                c += Number(box.dataset.count);
+              });
+            }
+            // The volumes consent above the list means all of them, whatever
+            // the lines below it say.
+            if (volumes && volumes.checked && all.value.indexOf("volumes:") === 0) {
+              c = Number(all.dataset.count);
+            }
+            n += c;
+          });
+          return n;
+        }
+
+        function update() {
+          var n = selected();
+          if (n === 0) {
+            label.textContent = whole.label;
+            scope.textContent = whole.scope;
+            form.dataset.confirm = "";
+            return;
+          }
+          var objects = n + (n === 1 ? " object" : " objects");
+          label.textContent = "Clean up " + objects;
+          scope.textContent = "Ticked: " + objects + " — nothing else is touched";
+          form.dataset.confirm = "Remove the " + objects + " you ticked? Nothing else is touched.";
+        }
+
+        form.addEventListener("change", update);
+        update();
+      })();
+    </script>
+    {{else}}
+    {{range .Items}}{{template "cleanup_row" (dict "Row" . "IsAdmin" false)}}{{end}}
+    {{with .Volumes}}{{if .Count}}{{template "cleanup_row" (dict "Row" . "IsAdmin" false)}}{{end}}{{end}}
     {{end}}
   </div>
   {{end}}

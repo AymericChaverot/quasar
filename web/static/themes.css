@@ -1085,12 +1085,13 @@ input[type="checkbox"]:focus-visible {
    can be scanned for the one row worth caring about. */
 .sweep-row {
   display: grid;
-  grid-template-columns: 1rem minmax(0, 1fr) auto auto;
+  grid-template-columns: 1rem minmax(0, 1fr) auto auto 0.75rem;
   align-items: center;
   gap: 0.875rem;
   padding: 0.625rem 1rem;
   font-size: 0.875rem;
 }
+.sweep-group + .sweep-group > .sweep-row,
 .sweep-row + .sweep-row {
   border-top: var(--border-w) solid color-mix(in srgb, var(--border) 60%, transparent);
 }
@@ -1098,6 +1099,56 @@ input[type="checkbox"]:focus-visible {
 .sweep-row-mark .ico { width: 1rem; height: 1rem; }
 .sweep-count { min-width: 2rem; text-align: right; color: var(--text-muted); }
 .sweep-size { min-width: 4.5rem; text-align: right; }
+
+/* A category is a summary line that opens onto the objects inside it. The
+   default disclosure triangle is dropped for a caret in the row's own last
+   column, so the line keeps the grid every other row is set on. */
+.sweep-group > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.sweep-group > summary::-webkit-details-marker { display: none; }
+.sweep-group > summary:hover { background: var(--surface-2); }
+.sweep-caret {
+  display: flex;
+  color: var(--text-faint);
+  transition: transform 120ms ease;
+}
+.sweep-caret .ico { width: 0.75rem; height: 0.75rem; }
+.sweep-group[open] > summary > .sweep-caret { transform: rotate(180deg); }
+
+/* The objects themselves, set back from the category line and on their own
+   ground, so an open category reads as one block rather than as more rows. */
+.sweep-objects {
+  border-top: var(--border-w) solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+  padding: 0.25rem 1rem 0.5rem 2.9rem;
+}
+.sweep-object {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.3125rem 0;
+  font-size: 0.8125rem;
+}
+.sweep-object:not(.is-static) { cursor: pointer; }
+/* Without a checkbox there is no first column to fill, and the name would
+   otherwise start where the sizes of the rows above it end. */
+.sweep-object.is-static { grid-template-columns: minmax(0, 1fr) auto; }
+.sweep-object.is-all {
+  border-bottom: var(--border-w) solid color-mix(in srgb, var(--border) 60%, transparent);
+  margin-bottom: 0.25rem;
+  padding-bottom: 0.4375rem;
+  color: var(--text-muted);
+}
+.sweep-object-name { display: block; overflow-wrap: anywhere; }
+.sweep-object-size {
+  min-width: 4.5rem;
+  text-align: right;
+  color: var(--text-muted);
+}
+.sweep-objects-note { padding-top: 0.25rem; }
 
 /* Every other category can be pulled or rebuilt back; a volume cannot. It is
    set on its own ground so it is never read as one more line of the list. */
