@@ -59,8 +59,8 @@
       <p class="help shimmer mt-1!">Restarting the router on {{.Tested}} — every site is down for a few seconds.</p>
       {{else if eq .Phase "failed"}}
       <p class="mt-1 text-xs" style="color: var(--err)">Traefik update failed: {{.Err}}</p>
-      {{else if eq .Phase "done"}}
-      <p class="mt-1 text-xs" style="color: var(--ok)">Updated to {{.Tested}}.</p>
+      {{/* Nothing for a successful update: the version above it is the news,
+           and it is already saying so. */}}
       {{end}}
       {{end}}
     </div>

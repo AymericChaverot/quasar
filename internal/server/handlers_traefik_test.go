@@ -26,14 +26,45 @@ func TestTraefikRunAdmitsOneRunAtATime(t *testing.T) {
 	// A finished run is over either way, and the operator must be able to try
 	// again — after a failure especially — without restarting the dashboard.
 	run.finish(nil)
-	if got := run.state(); got.phase != traefikDone || got.err != "" {
-		t.Fatalf("state after success = %q/%q, want %q with no error", got.phase, got.err, traefikDone)
-	}
 	if !run.begin("traefik:v3.7.11") {
 		t.Fatal("a run after a finished one was refused")
 	}
 	if got := run.state(); got.target != "traefik:v3.7.11" {
 		t.Errorf("the new run kept the old one's target: %q", got.target)
+	}
+}
+
+// An update that worked leaves nothing behind to report. The row names the
+// version the router is on, which is the whole of the good news; a success
+// banner would otherwise sit under it on every visit to the page, for as long
+// as the dashboard stays up.
+func TestTraefikRunKeepsNothingAfterSuccess(t *testing.T) {
+	var run traefikRun
+	run.begin("traefik:v3.7.10")
+	run.progress(80, "Extracting")
+	run.recreating()
+	run.finish(nil)
+
+	got := run.state()
+	if got.phase != "" || got.err != "" || got.target != "" || got.percent != 0 || got.detail != "" {
+		t.Errorf("state after a successful run = %q/%q/%q/%v/%q, want nothing left to report",
+			got.phase, got.err, got.target, got.percent, got.detail)
+	}
+}
+
+// A failure is kept — it is the only place the reason is written down — but
+// only while it still describes the server. Once the router is on the tested
+// version, however it got there, the old failure is history.
+func TestTraefikViewDropsAFailureThatIsNoLongerTrue(t *testing.T) {
+	s := &Server{}
+	s.traefik.begin(version.TraefikImage)
+	s.traefik.finish(errors.New("rolled back"))
+
+	if v := s.traefikView("traefik:v3.0.0", true); v.Phase != traefikFailed || v.Err == "" {
+		t.Errorf("a router still on the old version = %+v, want the failure kept", v)
+	}
+	if v := s.traefikView(version.TraefikImage, true); v.Phase != "" || v.Err != "" {
+		t.Errorf("a router now on the tested version = %+v, want the stale failure dropped", v)
 	}
 }
 

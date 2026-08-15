@@ -256,9 +256,6 @@ func TestExecuteTemplates(t *testing.T) {
 			Image: "traefik:v3.7.6", Tested: "traefik:v3.7.10", Available: true, IsAdmin: true,
 			Phase: traefikFailed, Err: "the update was rolled back and Traefik is running on its previous version",
 		})},
-		{"system_env", traefikRowCase(TraefikView{
-			Image: "traefik:v3.7.10", Tested: "traefik:v3.7.10", IsAdmin: true, Phase: traefikDone,
-		})},
 		{"system_certs", map[string]any{
 			"IsAdmin": true, "CertsWritable": true,
 			"Certs": []CertView{

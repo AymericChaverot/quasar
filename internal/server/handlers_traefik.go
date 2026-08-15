@@ -13,12 +13,12 @@ import (
 )
 
 // The phases a Traefik update goes through, as the Environment card reads them.
-// The zero phase, "", is no run in this process — nothing to report either way.
+// The zero phase, "", is no run worth reporting — which is where a run that
+// worked ends up, see finish.
 const (
 	traefikPulling    = "pulling"    // transferring the image; the router is untouched
 	traefikRecreating = "recreating" // the router is being replaced
 	traefikFailed     = "failed"
-	traefikDone       = "done"
 )
 
 // traefikTimeout bounds the whole run: an image transfer over whatever link the
@@ -67,6 +67,11 @@ func (t *traefikRun) recreating() {
 	t.phase, t.percent, t.detail = traefikRecreating, 100, ""
 }
 
+// finish ends the run. A failure is kept, because the reason it failed is said
+// nowhere else. A success is not: the row already names the version the router
+// is running, and that new number is the whole of the good news. A banner
+// announcing it would still be there weeks later, on every visit to the page,
+// reporting something nobody is waiting to hear any more.
 func (t *traefikRun) finish(err error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -74,7 +79,7 @@ func (t *traefikRun) finish(err error) {
 		t.phase, t.err = traefikFailed, err.Error()
 		return
 	}
-	t.phase, t.err = traefikDone, ""
+	t.phase, t.target, t.percent, t.detail, t.err = "", "", 0, "", ""
 }
 
 func (t *traefikRun) state() traefikRun {
@@ -117,6 +122,13 @@ func (s *Server) traefikView(running string, isAdmin bool) TraefikView {
 	// offering to take them back a version would be wrong about which of the
 	// two knows better.
 	v.Available = running != "" && updater.IsNewer(imageTag(running), imageTag(version.TraefikImage))
+	// A failure stays on screen until it stops being true. If the router is on
+	// the tested version now — because the operator moved it by hand, or
+	// because a later attempt worked — then whatever went wrong before is
+	// history, and repeating it on every visit would only be alarming.
+	if v.Phase == traefikFailed && running == version.TraefikImage {
+		v.Phase, v.Err = "", ""
+	}
 	return v
 }
 
@@ -169,6 +181,9 @@ func (s *Server) handleTraefikUpdate(w http.ResponseWriter, r *http.Request) {
 		s.traefik.finish(err)
 	}()
 
-	redirectSystem(w, r, "Updating Traefik to "+version.TraefikImage+
-		". Every site is briefly unavailable while the router restarts, including this page.")
+	// Worded as the action taken rather than as progress: this message sits in
+	// the URL and stays on screen until the page is left, which is longer than
+	// the update itself takes.
+	redirectSystem(w, r, "Traefik update to "+version.TraefikImage+
+		" started. Every site is briefly unavailable while the router restarts, including this page.")
 }
