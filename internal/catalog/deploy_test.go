@@ -136,9 +136,14 @@ func deployOne(t *testing.T, e Template) {
 // waitReady blocks until the entry looks alive: an HTTP answer for a web app,
 // a container that stays up for one that speaks its own protocol.
 func waitReady(e Template, dir, project string, port int) error {
-	// Every stack gets the same budget. Nextcloud, Authentik and the ones
-	// that migrate a database on first boot are the slow end of it.
-	deadline := time.Now().Add(8 * time.Minute)
+	// Every stack gets the same generous budget. It costs nothing on a healthy
+	// entry — the loop returns the moment the app answers — and only lengthens
+	// the path to a genuine failure. It is this wide because first boot is
+	// where these are slowest and most machine-dependent: Nextcloud unpacks
+	// its whole application into the mounted directory before it listens,
+	// which takes seconds on a Linux server and the best part of ten minutes
+	// over a Docker Desktop bind mount.
+	deadline := time.Now().Add(20 * time.Minute)
 
 	if e.Raw {
 		// Nothing to ask a Minecraft server over HTTP. What can be checked is
