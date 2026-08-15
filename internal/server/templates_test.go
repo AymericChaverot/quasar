@@ -100,43 +100,23 @@ func TestExecuteTemplates(t *testing.T) {
 			"TOTPEnabled": false,
 			"TOTPSetup":   map[string]string{"Secret": "ABC123", "QR": "data:image/png;base64,x"},
 		}},
+		// The System page proper. Everything it once rendered inline — the
+		// environment, the certificates, the storage figures, the app sizes —
+		// now arrives as a partial, so the page's own data is what it can
+		// answer without leaving the process.
 		{"system", map[string]any{
-			"Title": "System",
-			"Disk": docker.DiskUsage{
-				ImagesCount: 5, ImagesBytes: 2_600_000_000, ContainersCount: 3,
-				ContainersBytes: 41_000_000, VolumesCount: 1, VolumesBytes: 900_000_000,
-				CacheCount: 12, CacheBytes: 1_400_000_000,
-			},
-			"Cleanup": docker.CleanupScan{
-				Items: []docker.Reclaimable{
-					{Key: "images", Label: "Images no container uses", Count: 2, Bytes: 700_000_000, Note: "nginx:1.24, redis:7"},
-					{Key: "dangling", Label: "Untagged layers left by rebuilds", Count: 6, Bytes: 1_100_000_000},
-					{Key: "cache", Label: "Build cache no longer referenced", Count: 12, Bytes: 1_400_000_000},
-					{Key: "networks", Label: "Networks with nothing attached", Count: 1, Note: "qs-dead0001_default"},
-				},
-				Volumes: docker.Reclaimable{Key: "volumes", Count: 2, Bytes: 340_000_000, Note: "orphan-pgdata, tmpcache"},
-				Count:   21, Bytes: 3_200_000_000,
-			},
-			"AppSizes": []AppSize{{Name: "Blog", ID: "abcd1234", SizeMB: 12.5}},
-			"Backups":  []backup.Info{{Name: "quasar-20260722-120000.tar.gz", SizeMB: 4.2, Date: time.Now()}},
-			"AutoOn":   true, "Retention": "7", "Saved": "Backup created.",
+			"Title":   "System",
+			"Backups": []backup.Info{{Name: "quasar-20260722-120000.tar.gz", SizeMB: 4.2, Date: time.Now()}},
+			"AutoOn":  true, "Retention": "7", "Saved": "Backup created.",
 			"Current": "v1.0.0", "Latest": "v1.1.0", "UpdateAvail": true,
 			"CheckedAt": "2026-07-22", "Repo": "AymericChaverot/quasar", "CheckEvery": "30 minutes",
 			// The header's copy of the same news, which every page carries.
 			"Update": map[string]any{"IsAdmin": true, "UpdateAvail": true, "Latest": "v1.1.0"},
-			"Host":   vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64", Uptime: "3d 4h"},
 			"Hardware": vps.Hardware{
 				CPUModel: "Intel Xeon E5-2686 v4", CPUCores: 2, CPUThreads: 4, CPUGHz: 2.3,
 				MemTotalGB: 7.8, SwapTotalGB: 2, DiskTotalGB: 78.6,
 			},
-			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44", OSType: "linux/amd64", TraefikImage: "traefik:v3.7"},
-			"GoRuntime": "go1.26.5",
-			"IsAdmin":   true, "CertsWritable": true,
-			"Certs": []CertView{
-				{Cert: certs.Cert{Domain: "admin.example.com", Issuer: "R3", NotAfter: time.Now().Add(60 * 24 * time.Hour), DaysLeft: 60, Status: "ok"}, UsedBy: "this dashboard"},
-				{Cert: certs.Cert{Domain: "gone.example.com", SANs: []string{"gone.example.com", "www.gone.example.com"},
-					Issuer: "R3", NotAfter: time.Now().Add(5 * 24 * time.Hour), DaysLeft: 5, Status: "critical"}},
-			},
+			"IsAdmin": true,
 		}},
 		{"git_credentials", map[string]any{
 			"Title": "Git credentials", "IsAdmin": true,
@@ -180,34 +160,13 @@ func TestExecuteTemplates(t *testing.T) {
 			"ScopeOptions": scopeOptions(),
 			"Error":        "Could not reach https://github.com/me/private.git — fatal: Authentication failed",
 		}},
-		// A freshly installed server: nothing to reclaim, no certificate issued
-		// yet, no backup taken. Every section's other branch.
+		// A freshly installed server: no backup taken, and a machine whose
+		// /proc/cpuinfo carries no model name and no clock, with one core and
+		// no swap — every "unknown" branch of the hardware cards at once.
 		{"system", map[string]any{
 			"Title": "System", "IsAdmin": true,
 			"Current": "v1.0.0", "Repo": "AymericChaverot/quasar",
-			"Host": vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64"},
-			// A machine whose /proc/cpuinfo carries no model name and no clock,
-			// with one core and no swap: every "unknown" branch of the hardware
-			// cards at once.
-			"Hardware":  vps.Hardware{CPUCores: 1, CPUThreads: 1, MemTotalGB: 1.9},
-			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44"},
-			"GoRuntime": "go1.26.5",
-			"Disk":      docker.DiskUsage{ImagesCount: 2, ImagesBytes: 180_000_000},
-			"Cleanup":   docker.CleanupScan{},
-		}},
-		// One of everything, to catch a count that only reads well in the plural.
-		{"system", map[string]any{
-			"Title": "System", "IsAdmin": true,
-			"Current": "v1.0.0", "Repo": "AymericChaverot/quasar",
-			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64"},
-			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44"},
-			"GoRuntime": "go1.26.5",
-			"Disk":      docker.DiskUsage{ImagesCount: 2, ImagesBytes: 180_000_000},
-			"Cleanup": docker.CleanupScan{
-				Items:   []docker.Reclaimable{{Key: "dangling", Label: "Untagged layers left by rebuilds", Count: 1, Bytes: 41_000_000}},
-				Volumes: docker.Reclaimable{Key: "volumes", Count: 1, Bytes: 12_000_000, Note: "stray"},
-				Count:   1, Bytes: 41_000_000,
-			},
+			"Hardware": vps.Hardware{CPUCores: 1, CPUThreads: 1, MemTotalGB: 1.9},
 		}},
 	}
 	for _, c := range cases {
@@ -241,6 +200,77 @@ func TestExecuteTemplates(t *testing.T) {
 		{"update_badge", map[string]any{"IsAdmin": true, "UpdateAvail": false, "Latest": "v1.1.0"}},
 		{"update_badge", map[string]any{"IsAdmin": false, "UpdateAvail": true, "Latest": "v1.1.0"}},
 		{"system_stats", vps.Stats{CPUPercent: 42.5, MemPercent: 61, MemUsedGB: 1.2, MemTotalGB: 2, DiskPercent: 90, DiskUsedGB: 18, DiskTotalGB: 20}},
+
+		// The four sections the System page now fetches once it is on screen.
+		// Everything the page used to be tested for lives here.
+		{"system_env", map[string]any{
+			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64", Uptime: "3d 4h"},
+			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44", OSType: "linux/amd64", TraefikImage: "traefik:v3.7"},
+			"GoRuntime": "go1.26.5",
+		}},
+		// A daemon that answered the version but not the inspect: the branch
+		// with no Traefik row.
+		{"system_env", map[string]any{
+			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64"},
+			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44"},
+			"GoRuntime": "go1.26.5",
+		}},
+		{"system_certs", map[string]any{
+			"IsAdmin": true, "CertsWritable": true,
+			"Certs": []CertView{
+				{Cert: certs.Cert{Domain: "admin.example.com", Issuer: "R3", NotAfter: time.Now().Add(60 * 24 * time.Hour), DaysLeft: 60, Status: "ok"}, UsedBy: "this dashboard"},
+				{Cert: certs.Cert{Domain: "gone.example.com", SANs: []string{"gone.example.com", "www.gone.example.com"},
+					Issuer: "R3", NotAfter: time.Now().Add(5 * 24 * time.Hour), DaysLeft: 5, Status: "critical"}},
+			},
+		}},
+		// An unused certificate on a read-only store: the branch that explains
+		// why the delete button is not there.
+		{"system_certs", map[string]any{
+			"IsAdmin": true, "CertsWritable": false,
+			"Certs": []CertView{
+				{Cert: certs.Cert{Domain: "gone.example.com", Issuer: "R3", NotAfter: time.Now().Add(20 * 24 * time.Hour), DaysLeft: 20, Status: "warning"}},
+			},
+		}},
+		// Nothing issued yet.
+		{"system_certs", map[string]any{"IsAdmin": true, "CertsWritable": true}},
+		{"system_storage", map[string]any{
+			"IsAdmin": true,
+			"Disk": docker.DiskUsage{
+				ImagesCount: 5, ImagesBytes: 2_600_000_000, ContainersCount: 3,
+				ContainersBytes: 41_000_000, VolumesCount: 1, VolumesBytes: 900_000_000,
+				CacheCount: 12, CacheBytes: 1_400_000_000,
+			},
+			"Cleanup": docker.CleanupScan{
+				Items: []docker.Reclaimable{
+					{Key: "images", Label: "Images no container uses", Count: 2, Bytes: 700_000_000, Note: "nginx:1.24, redis:7"},
+					{Key: "dangling", Label: "Untagged layers left by rebuilds", Count: 6, Bytes: 1_100_000_000},
+					{Key: "cache", Label: "Build cache no longer referenced", Count: 12, Bytes: 1_400_000_000},
+					{Key: "networks", Label: "Networks with nothing attached", Count: 1, Note: "qs-dead0001_default"},
+				},
+				Volumes: docker.Reclaimable{Key: "volumes", Count: 2, Bytes: 340_000_000, Note: "orphan-pgdata, tmpcache"},
+				Count:   21, Bytes: 3_200_000_000,
+			},
+		}},
+		// Nothing to reclaim.
+		{"system_storage", map[string]any{
+			"IsAdmin": true,
+			"Disk":    docker.DiskUsage{ImagesCount: 2, ImagesBytes: 180_000_000},
+			"Cleanup": docker.CleanupScan{},
+		}},
+		// One of everything, to catch a count that only reads well in the plural.
+		{"system_storage", map[string]any{
+			"IsAdmin": true,
+			"Disk":    docker.DiskUsage{ImagesCount: 2, ImagesBytes: 180_000_000},
+			"Cleanup": docker.CleanupScan{
+				Items:   []docker.Reclaimable{{Key: "dangling", Label: "Untagged layers left by rebuilds", Count: 1, Bytes: 41_000_000}},
+				Volumes: docker.Reclaimable{Key: "volumes", Count: 1, Bytes: 12_000_000, Note: "stray"},
+				Count:   1, Bytes: 41_000_000,
+			},
+		}},
+		// The daemon did not answer at all: the section still has to render.
+		{"system_storage", map[string]any{"IsAdmin": false}},
+		{"system_app_sizes", map[string]any{"AppSizes": []AppSize{{Name: "Blog", ID: "abcd1234", SizeMB: 12.5}}}},
+		{"system_app_sizes", map[string]any{"AppSizes": []AppSize(nil)}},
 		// Both build badges, plus the rows that carry none: an image app and a
 		// git app whose repository is not on disk yet.
 		{"apps_table", []AppView{app, gitApp, {

@@ -1,0 +1,27 @@
+{{/* What each application weighs on disk. Its own partial because measuring it
+     means walking every app's directory — a git checkout with its history and
+     its dependencies in it. */}}
+{{define "system_app_sizes"}}
+{{if .AppSizes}}
+<div class="table-wrap max-w-2xl">
+  <table>
+    <thead><tr><th>Application</th><th>On-disk size</th></tr></thead>
+    <tbody>
+      {{range .AppSizes}}
+      <tr>
+        <td><a href="/apps/{{.ID}}" class="font-medium hover:underline">{{.Name}}</a></td>
+        <td class="mono muted">{{printf "%.1f" .SizeMB}} MB</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+{{/* The section used to disappear entirely on an install with no applications.
+     It cannot now — the page is drawn before the answer is known — so the empty
+     case is stated instead, the way the backups table below it already does. */}}
+<div class="empty max-w-2xl p-6 text-center">
+  <p class="muted text-sm">No applications yet.</p>
+</div>
+{{end}}
+{{end}}

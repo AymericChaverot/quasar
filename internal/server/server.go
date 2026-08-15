@@ -312,6 +312,13 @@ func (s *Server) routes() {
 	s.viewer("GET /partials/system", s.handleSystemPartial)
 	s.viewer("GET /partials/system-containers", s.handleSystemContainersPartial)
 	s.viewer("GET /partials/system/containers/{name}/stats", s.handleSystemContainerStatsPartial)
+	// The four sections of the System page that cost real time to produce. They
+	// are fetched once the page is on screen rather than before it, and they run
+	// concurrently because the browser asks for all four at once.
+	s.viewer("GET /partials/system/environment", s.handleSystemEnvPartial)
+	s.viewer("GET /partials/system/certs", s.handleSystemCertsPartial)
+	s.viewer("GET /partials/system/storage", s.handleSystemStoragePartial)
+	s.viewer("GET /partials/system/app-sizes", s.handleSystemAppSizesPartial)
 	s.viewer("GET /partials/apps", s.handleAppsPartial)
 	s.viewer("GET /partials/deploy-fields", s.handleDeployFields)
 	s.viewer("GET /partials/apps/{id}/stats", s.handleAppStatsPartial)

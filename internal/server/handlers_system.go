@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"quasar/internal/backup"
@@ -29,48 +30,111 @@ type AppSize struct {
 	SizeMB float64
 }
 
-func (s *Server) systemData(r *http.Request) map[string]any {
+// systemData is everything the System page can answer without leaving the
+// process: settings, the backup directory listing, and the machine's fixed
+// capacity. All of it is local and none of it takes measurable time, which is
+// what lets the page render as fast as any other.
+//
+// The four expensive sections are not here. Docker's disk report walks every
+// layer on the server, the certificate store has to be read and parsed, the
+// per-app sizes walk each app's directory, and even the engine version is two
+// round trips over the socket proxy — together seconds, spent before the first
+// byte of a page whose headings and forms were ready immediately. Each is now
+// its own partial, fetched on load and arriving when it is ready; see
+// handleSystemEnvPartial and the three below it.
+func (s *Server) systemData() map[string]any {
 	data := map[string]any{
 		"Title":     "System",
 		"Backups":   backup.List(s.cfg.BackupsDir),
 		"AutoOn":    db.GetSetting(s.db, db.SettingBackupAuto) == "true",
 		"Retention": db.GetSetting(s.db, db.SettingBackupRetention),
-		"Host":      vps.CollectHost(),
 		"Hardware":  vps.CollectHardware(s.cfg.HostRootPath),
 		"Offsite":   offsiteView(s.db),
-		"Engine":    s.dock.EngineInfo(r.Context()),
-		"GoRuntime": runtime.Version(),
 	}
 	// The same keys the card is swapped in with after a check, so the page and
 	// the swap cannot drift apart.
 	for k, v := range s.updateCardData() {
 		data[k] = v
 	}
-	_, certsWritable := s.acmePath()
-	data["Certs"] = s.certViews()
-	data["CertsWritable"] = certsWritable
+	return data
+}
 
-	if apps, err := db.ListApps(s.db, s.keyring); err == nil {
-		var sizes []AppSize
-		ids := make([]string, 0, len(apps))
-		for _, a := range apps {
-			ids = append(ids, a.ID)
-			sizes = append(sizes, AppSize{
-				Name:   a.Name,
-				ID:     a.ID,
-				SizeMB: float64(s.dock.AppDirSize(a.ID)) / (1 << 20),
-			})
-		}
-		data["AppSizes"] = sizes
-		// The app list is what tells the scan which images, containers and
-		// networks still belong to something, so the storage figures are only
-		// asked for once it has been read successfully.
+// handleSystemEnvPartial fills the Environment card: what the machine runs and
+// what version of it. Two Docker round trips, which is why it is not rendered
+// with the page.
+func (s *Server) handleSystemEnvPartial(w http.ResponseWriter, r *http.Request) {
+	s.renderPartial(w, "system_env", map[string]any{
+		"Host":      vps.CollectHost(),
+		"Engine":    s.dock.EngineInfo(r.Context()),
+		"GoRuntime": runtime.Version(),
+	})
+}
+
+// handleSystemCertsPartial fills the TLS table: reading the ACME store means
+// parsing every certificate in it.
+func (s *Server) handleSystemCertsPartial(w http.ResponseWriter, r *http.Request) {
+	_, writable := s.acmePath()
+	s.renderPartial(w, "system_certs", map[string]any{
+		"Certs":         s.certViews(),
+		"CertsWritable": writable,
+		"IsAdmin":       s.isAdmin(r),
+	})
+}
+
+// handleSystemStoragePartial fills the Docker storage figures and the cleanup
+// preview. This is the slowest thing the page asks for: the daemon sizes every
+// image, container and cache record to answer it.
+func (s *Server) handleSystemStoragePartial(w http.ResponseWriter, r *http.Request) {
+	data := map[string]any{"IsAdmin": s.isAdmin(r)}
+	// The app list is what tells the scan which images, containers and networks
+	// still belong to something, so the storage figures are only asked for once
+	// it has been read successfully — an empty list would mark every object on
+	// the server as reclaimable.
+	if ids, err := s.appIDs(); err == nil {
 		if st, err := s.dock.Storage(r.Context(), ids); err == nil {
 			data["Disk"] = st.Usage
 			data["Cleanup"] = st.Cleanup
 		}
 	}
-	return data
+	s.renderPartial(w, "system_storage", data)
+}
+
+// handleSystemAppSizesPartial fills the per-application on-disk sizes.
+func (s *Server) handleSystemAppSizesPartial(w http.ResponseWriter, r *http.Request) {
+	s.renderPartial(w, "system_app_sizes", map[string]any{"AppSizes": s.appSizes()})
+}
+
+// appSizeWorkers bounds how many directory walks run at once. An app's
+// directory is a git checkout with its history and its dependencies — tens of
+// thousands of files, and the walk is waiting on the filesystem for nearly all
+// of it, so running them one after another spends the whole time idle. The cap
+// keeps a server with many apps from turning that into a thundering herd on one
+// disk.
+const appSizeWorkers = 8
+
+// appSizes measures each application's directory. Order follows the app list,
+// not whichever walk finished first, so the table does not reshuffle between
+// visits.
+func (s *Server) appSizes() []AppSize {
+	apps, err := db.ListApps(s.db, s.keyring)
+	if err != nil {
+		return nil
+	}
+	sizes := make([]AppSize, len(apps))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, appSizeWorkers)
+	for i, a := range apps {
+		sizes[i] = AppSize{Name: a.Name, ID: a.ID}
+		wg.Add(1)
+		go func(i int, id string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			sizes[i].SizeMB = float64(s.dock.AppDirSize(id)) / (1 << 20)
+		}(i, a.ID)
+	}
+	wg.Wait()
+	return sizes
 }
 
 // appIDs lists the applications the platform still knows about — the set a
@@ -224,7 +288,7 @@ func redirectSystem(w http.ResponseWriter, r *http.Request, msg string) {
 }
 
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
-	data := s.systemData(r)
+	data := s.systemData()
 	if msg := r.URL.Query().Get("msg"); msg != "" {
 		data["Saved"] = msg
 	}
