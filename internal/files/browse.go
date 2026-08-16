@@ -1,19 +1,24 @@
 // Package files browses a directory tree on behalf of the dashboard, confined
-// to a root it is not allowed to leave.
+// to a root it is not allowed to leave, and edits it where it may.
 //
-// Everything here is read-only. The trees it opens are application data —
-// databases, uploads, configuration written by whatever image the operator
-// deployed — and the dashboard reaches them two different ways: an app's data
-// directory is bind-mounted into this process read-write, while a named volume
-// is only visible through the host filesystem mounted at /host/root read-only.
-// Offering to write in one and not the other would make the same button mean
-// different things on two rows of the same list, so neither is offered.
+// The trees it opens are application data: databases, uploads, and the
+// configuration whatever image the operator deployed wrote for itself. The
+// dashboard reaches them two different ways, and which one applies decides
+// whether they can be changed. An app's data directory is bind-mounted into
+// this process read-write, so it is editable. A named volume is normally only
+// visible through the host filesystem mounted at /host/root read-only, so it is
+// not — until an operator mounts Docker's volume tree in as well.
+//
+// Which of those a given root is, this package works out for itself rather than
+// being told: see canWrite. A guess would put an edit button on a file whose
+// filesystem will refuse the write, which is worse than no button.
 //
 // The cage is the point of the package. The dashboard container can see the
 // whole host filesystem, so a browser that took a path from a URL and joined it
 // to a root would hand out /etc/shadow and the platform's own master key to
 // anyone who could type "../". Resolve is the only way in, and every other
-// function goes through it.
+// function goes through it — the writes included, which resolve the parent
+// directory and refuse a name that is anything but a name.
 package files
 
 import (
@@ -43,7 +48,8 @@ var ErrNotDir = errors.New("not a directory")
 // once, so that the prefix check in Resolve compares two paths that have both
 // been through the kernel and can be compared as strings at all.
 type Root struct {
-	path string
+	path     string
+	writable bool
 }
 
 // NewRoot prepares dir for browsing. It fails if dir does not exist or is not a
@@ -68,7 +74,7 @@ func NewRoot(dir string) (Root, error) {
 	if !info.IsDir() {
 		return Root{}, ErrNotDir
 	}
-	return Root{path: real}, nil
+	return Root{path: real, writable: canWrite(real)}, nil
 }
 
 // Path is the resolved directory this root browses, for display.
@@ -76,6 +82,19 @@ func (r Root) Path() string { return r.path }
 
 // Valid reports whether the root was built by NewRoot.
 func (r Root) Valid() bool { return r.path != "" }
+
+// Writable reports whether this process can change what is in the root, as the
+// kernel answers it rather than as the caller hopes. Everything that writes
+// checks it, and the interface asks it before offering an edit.
+func (r Root) Writable() bool { return r.writable }
+
+// ReadOnly returns a copy of the root that refuses every write, whatever the
+// filesystem would have allowed. It is how a caller declines a capability it
+// has — nothing takes it away again.
+func (r Root) ReadOnly() Root {
+	r.writable = false
+	return r
+}
 
 // Resolve turns a slash-separated path from a URL into an absolute path inside
 // the root, or fails.

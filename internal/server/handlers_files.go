@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,6 +17,11 @@ import (
 	"quasar/internal/files"
 )
 
+// maxUploadRequest bounds one upload request as a whole, so a client cannot
+// stream forever by sending many parts. files.MaxUpload bounds each file inside
+// it; this bounds the request that carries them.
+const maxUploadRequest = 4 * files.MaxUpload
+
 // The storage explorer. Two things can be browsed — the mounts of one
 // application, and any Docker volume on the server — and both come down to the
 // same question: given a path on the host, where can this process read it?
@@ -26,27 +32,44 @@ import (
 // material a backup archive holds, and the backup download is admin-only for
 // the same reason.
 
-// browseRoot maps a path on the host to a root this process can read.
+// browseRoot maps a path on the host to a root this process can read, and
+// sometimes write.
 //
-// The dashboard sees the host two ways, and which one applies decides nothing
-// the reader can tell apart but matters for whether the read works at all.
-// /opt/quasar/apps is bind-mounted into this container at its own host path, so
-// an app's data directory is reachable directly. Everything else — a named
-// volume under /var/lib/docker, a bind mount an operator's compose file points
-// somewhere of its own — is only visible through the read-only mount of the
-// whole host filesystem at HOST_ROOT.
+// The dashboard can see the same file up to three ways, and which one applies
+// is what decides whether it is editable.
 //
-// Both are read-only as far as this package is concerned. The explorer does not
-// write.
-func (s *Server) browseRoot(hostPath string) (files.Root, error) {
+//   - /opt/quasar/apps is bind-mounted into this container at its own host
+//     path, read-write. An app's data directory is therefore reachable directly
+//     and can be changed, which covers everything a catalogue app keeps.
+//   - Docker's volume tree is not mounted by default. When an operator has
+//     mounted it — see the commented-out line in docker-compose.yml — the
+//     volume's own mountpoint exists inside this container and is used as it
+//     is. This is only ever tried for a Docker volume, whose mountpoint lives
+//     under the daemon's own directory: trying it for an arbitrary bind mount
+//     would resolve /etc against the container's /etc rather than the host's.
+//   - Everything else goes through HOST_ROOT, the read-only mount of the whole
+//     host filesystem. Readable, never writable.
+//
+// Which of those happened is not recorded anywhere: files.NewRoot asks the
+// kernel whether it can write, so the answer is the filesystem's rather than
+// this function's opinion of it.
+func (s *Server) browseRoot(hostPath string, dockerVolume bool) (files.Root, error) {
 	if hostPath == "" {
 		return files.Root{}, files.ErrNotDir
 	}
 	local := filepath.Clean(hostPath)
-	if !underAppsDir(s.cfg.AppsDir, local) {
+	switch {
+	case underAppsDir(s.cfg.AppsDir, local):
+	case dockerVolume && isDir(local):
+	default:
 		local = filepath.Join(s.cfg.HostRootPath, local)
 	}
 	return files.NewRoot(local)
+}
+
+func isDir(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && info.IsDir()
 }
 
 // underAppsDir reports whether a host path is inside the apps directory, which
@@ -67,7 +90,6 @@ type browseTarget struct {
 	HostPath  string
 	BackURL   string
 	BackLabel string
-	ReadOnly  bool // always true today, and shown so nobody goes looking for an edit button
 	Root      files.Root
 
 	// App is set for kind "app", and carries the mounts the picker offers when
@@ -83,6 +105,42 @@ func (t browseTarget) MountURL(dest string) string {
 	return "/files/" + t.Kind + "/" + url.PathEscape(t.Ref) + "?mount=" + url.QueryEscape(dest)
 }
 
+// Writable reports whether this storage takes changes, which is what decides
+// whether the interface offers any.
+func (t browseTarget) Writable() bool { return t.Root.Writable() }
+
+// UploadURL, SaveURL and DeleteURL are where the three write actions post.
+//
+// Save and delete take the file they act on from their form, because it is
+// whichever one the dialog has open rather than anything the page's URL knows.
+// Upload cannot: its body is a multipart stream read part by part, and asking
+// for a form value would consume it, so the directory being filled travels in
+// the query instead.
+func (t browseTarget) UploadURL(dir string) string {
+	q := url.Values{}
+	if clean := files.Clean(dir); clean != "" {
+		q.Set("path", clean)
+	}
+	return t.actionURL("upload", q)
+}
+
+func (t browseTarget) SaveURL() string   { return t.actionURL("save", nil) }
+func (t browseTarget) DeleteURL() string { return t.actionURL("delete", nil) }
+
+func (t browseTarget) actionURL(verb string, q url.Values) string {
+	if q == nil {
+		q = url.Values{}
+	}
+	if t.Mount != "" {
+		q.Set("mount", t.Mount)
+	}
+	u := "/files/" + t.Kind + "/" + url.PathEscape(t.Ref) + "/" + verb
+	if len(q) > 0 {
+		u += "?" + q.Encode()
+	}
+	return u
+}
+
 // URLFor is the explorer URL for one path inside this target. Templates build
 // every link and every hx-get through it, so the query keeps carrying the mount
 // as the reader walks down the tree.
@@ -95,9 +153,14 @@ func (t browseTarget) PartialFor(rel string) string {
 	return t.linkFor("/partials/files/", rel)
 }
 
-// PreviewFor is the URL of one file's preview panel.
+// PreviewFor is the URL of one file's preview panel, and EditFor the same panel
+// with the text in a box that takes typing.
 func (t browseTarget) PreviewFor(rel string) string {
 	return t.linkFor("/partials/files/", rel, "preview", "1")
+}
+
+func (t browseTarget) EditFor(rel string) string {
+	return t.linkFor("/partials/files/", rel, "preview", "1", "edit", "1")
 }
 
 // RawFor is the URL that downloads one file.
@@ -130,10 +193,6 @@ func (t browseTarget) linkFor(prefix, rel string, extra ...string) string {
 	return u
 }
 
-// errNoMountChosen means the app has several mounts and the URL named none, so
-// the page shows the picker instead of a listing.
-var errNoMountChosen = errors.New("no mount chosen")
-
 // resolveTarget works out what the URL points at, writing the error response
 // itself and returning ok=false when it cannot.
 func (s *Server) resolveTarget(w http.ResponseWriter, r *http.Request) (browseTarget, bool) {
@@ -160,7 +219,6 @@ func (s *Server) resolveAppTarget(w http.ResponseWriter, r *http.Request) (brows
 		Title:     a.Name,
 		BackURL:   "/apps/" + a.ID,
 		BackLabel: a.Name,
-		ReadOnly:  true,
 		App:       a,
 		Mounts:    mounts,
 	}
@@ -192,10 +250,16 @@ func (s *Server) resolveAppTarget(w http.ResponseWriter, r *http.Request) (brows
 		t.Subtitle = m.Destination + " — volume " + m.Name
 	}
 
-	root, err := s.browseRoot(m.Source)
+	root, err := s.browseRoot(m.Source, m.IsVolume())
 	if err != nil {
 		s.browseUnavailable(w, r, t, err)
 		return browseTarget{}, false
+	}
+	// A mount the container itself holds read-only is one the application was
+	// deliberately not given write access to. The dashboard writing to it
+	// anyway would be going behind the compose file that said so.
+	if !m.RW {
+		root = root.ReadOnly()
 	}
 	t.Root = root
 	return t, true
@@ -216,7 +280,6 @@ func (s *Server) resolveVolumeTarget(w http.ResponseWriter, r *http.Request) (br
 		HostPath:  v.Mountpoint,
 		BackURL:   "/system",
 		BackLabel: "System",
-		ReadOnly:  true,
 		Volume:    v,
 	}
 	if !v.Local() {
@@ -224,7 +287,7 @@ func (s *Server) resolveVolumeTarget(w http.ResponseWriter, r *http.Request) (br
 			"this volume is on the %q driver, so its data is not on this machine's filesystem", v.Driver))
 		return browseTarget{}, false
 	}
-	root, err := s.browseRoot(v.Mountpoint)
+	root, err := s.browseRoot(v.Mountpoint, true)
 	if err != nil {
 		s.browseUnavailable(w, r, t, err)
 		return browseTarget{}, false
@@ -338,11 +401,17 @@ func (s *Server) handleFilesPartial(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		editable := t.Root.Editable(preview)
 		s.renderPartial(w, "file_preview", map[string]any{
-			"Target":  t,
-			"Path":    rel,
-			"Name":    path.Base(rel),
-			"Preview": preview,
+			"Target":   t,
+			"Path":     rel,
+			"Name":     path.Base(rel),
+			"Preview":  preview,
+			"Editable": editable,
+			// The same panel, with the text in a box that takes typing. Asked
+			// for by the Edit button and never offered for a file the editor
+			// could not hold whole.
+			"Editing": editable && r.URL.Query().Get("edit") == "1",
 		})
 		return
 	}
@@ -430,6 +499,232 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, t browseTarge
 	http.ServeContent(w, r, name, info.ModTime(), f)
 }
 
+// The three writes. All of them answer with the listing the reader is looking
+// at, so the table shows the result of what just happened rather than the state
+// before it, and all of them record an audit entry: these change an
+// application's data from outside the application, which is exactly the kind of
+// thing somebody will later need to find in a trail.
+
+// handleFilesUpload takes files into the directory being browsed.
+func (s *Server) handleFilesUpload(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.resolveWritable(w, r)
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadRequest)
+
+	// Streamed rather than buffered: ParseMultipartForm would spool the whole
+	// upload to a temporary file first, which for a few hundred megabytes means
+	// writing it to the disk twice. Reading the parts in order is also why the
+	// directory is read from the query — r.FormValue would consume the body
+	// this is about to walk.
+	dir := files.Clean(r.URL.Query().Get("path"))
+	reader, err := r.MultipartReader()
+	if err != nil {
+		s.listingAfter(w, t, dir, flashErr("That upload could not be read."))
+		return
+	}
+	saved, failed := storeUploads(t.Root, dir, reader)
+	for _, name := range saved {
+		s.audit(r, "storage.upload", t.auditTarget(), path.Join(dir, name))
+	}
+
+	switch {
+	case len(saved) == 0 && len(failed) == 0:
+		s.listingAfter(w, t, dir, flashErr("No file was chosen."))
+	case len(failed) > 0:
+		s.listingAfter(w, t, dir, flashErr(fmt.Sprintf(
+			"%d uploaded, %d refused (%s). A file over %s, or a name that cannot be used, is refused.",
+			len(saved), len(failed), strings.Join(failed, ", "), docker.HumanSize(files.MaxUpload))))
+	default:
+		s.listingAfter(w, t, dir, flashOK(fmt.Sprintf("Uploaded %s.", strings.Join(saved, ", "))))
+	}
+}
+
+// storeUploads writes every file part of a multipart body into dir, and reports
+// what landed and what did not.
+//
+// Parts are taken one at a time and streamed straight to disk, so an upload
+// costs its own size in disk and almost nothing in memory. One part failing
+// does not abandon the rest: a batch where a single file was too large should
+// deliver the others and say which one it left.
+func storeUploads(root files.Root, dir string, reader *multipart.Reader) (saved, failed []string) {
+	for {
+		part, err := reader.NextPart()
+		if err != nil {
+			return saved, failed
+		}
+		if part.FormName() != "files" || part.FileName() == "" {
+			part.Close()
+			continue
+		}
+		// The filename is client-controlled, and the part is free to call
+		// itself "../../etc/cron.d/backdoor". SafeName reduces it to one
+		// component or refuses it; Save would refuse it a second time.
+		name, ok := files.SafeName(part.FileName())
+		if !ok {
+			failed = append(failed, part.FileName())
+			part.Close()
+			continue
+		}
+		_, err = root.Save(path.Join(dir, name), part, files.MaxUpload)
+		part.Close()
+		if err != nil {
+			failed = append(failed, name)
+			continue
+		}
+		saved = append(saved, name)
+	}
+}
+
+// errEditTooBig is the one refusal the editor has of its own: the file has
+// outgrown what it can hold whole.
+var errEditTooBig = errors.New("this file is larger than the editor can hold")
+
+// writeEdit applies the editor's contents to one file.
+func writeEdit(root files.Root, rel, content string) error {
+	// The editor was filled from a preview, and a preview stops at 256 KB. If
+	// the file on disk is larger than that — because it grew since the panel
+	// was drawn, or because this request was made by hand — writing the
+	// editor's copy over it would drop everything past the cut. The size is
+	// taken from the file rather than trusted from the form, because the form
+	// is the thing that would be lying.
+	if info, err := root.Stat(rel); err == nil && info.Size() > files.MaxEdit {
+		return errEditTooBig
+	}
+	// Browsers submit CRLF from a textarea whatever went into it. Writing that
+	// into a config file read by a shell script on Linux produces errors that
+	// are invisible in the editor that caused them.
+	body := strings.ReplaceAll(content, "\r\n", "\n")
+	_, err := root.Save(rel, strings.NewReader(body), files.MaxEdit)
+	return err
+}
+
+// handleFilesSave writes the editor's contents back to one file.
+func (s *Server) handleFilesSave(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.resolveWritable(w, r)
+	if !ok {
+		return
+	}
+	rel := files.Clean(r.FormValue("path"))
+	if err := writeEdit(t.Root, rel, r.FormValue("content")); err != nil {
+		s.previewAfter(w, t, rel, writeError(err))
+		return
+	}
+	s.audit(r, "storage.edit", t.auditTarget(), rel)
+	w.Header().Set("HX-Trigger", "quasar:files-changed")
+	s.previewAfter(w, t, rel, "")
+}
+
+// handleFilesDelete removes one file.
+func (s *Server) handleFilesDelete(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.resolveWritable(w, r)
+	if !ok {
+		return
+	}
+	rel := files.Clean(r.FormValue("path"))
+	if err := t.Root.Remove(rel); err != nil {
+		s.previewAfter(w, t, rel, writeError(err))
+		return
+	}
+	s.audit(r, "storage.delete", t.auditTarget(), rel)
+	// The file the dialog was showing is gone, so the dialog goes with it and
+	// the listing behind it is asked to catch up.
+	w.Header().Set("HX-Trigger", "quasar:files-changed, quasar:close-modal")
+	w.WriteHeader(http.StatusOK)
+}
+
+// resolveWritable resolves the target and refuses anything that cannot be
+// written, so no write handler has to remember to check.
+//
+// The check is not only belt and braces for a hidden button: read-only is a
+// property of the mount, and a mount can be read-only now that was writable
+// when the page was drawn.
+func (s *Server) resolveWritable(w http.ResponseWriter, r *http.Request) (browseTarget, bool) {
+	t, ok := s.resolveTarget(w, r)
+	if !ok {
+		return browseTarget{}, false
+	}
+	if !t.Root.Valid() {
+		http.Error(w, "this storage cannot be opened", http.StatusNotFound)
+		return browseTarget{}, false
+	}
+	if !t.Root.Writable() {
+		http.Error(w, "This storage is read-only.", http.StatusForbidden)
+		return browseTarget{}, false
+	}
+	return t, true
+}
+
+// auditTarget names what was changed, in the terms the audit page lists things
+// under: the application, or the volume.
+func (t browseTarget) auditTarget() string {
+	if t.Kind == "app" {
+		return t.Title
+	}
+	return "volume " + t.Ref
+}
+
+// listingAfter re-renders the directory a write happened in, carrying a note
+// about what happened.
+func (s *Server) listingAfter(w http.ResponseWriter, t browseTarget, dir string, flash map[string]string) {
+	listing, err := s.listing(t, dir)
+	if err != nil {
+		s.renderPartial(w, "file_list", map[string]any{
+			"Target": t, "Path": dir, "Error": listingError(err),
+		})
+		return
+	}
+	listing["Flash"] = flash
+	s.renderPartial(w, "file_list", listing)
+}
+
+// previewAfter re-renders the file the dialog is showing, with a problem to
+// report if there is one.
+func (s *Server) previewAfter(w http.ResponseWriter, t browseTarget, rel, problem string) {
+	preview, err := t.Root.Read(rel)
+	if err != nil {
+		s.renderPartial(w, "file_preview", map[string]any{
+			"Target": t, "Path": rel, "Name": path.Base(rel), "Error": listingError(err),
+		})
+		return
+	}
+	s.renderPartial(w, "file_preview", map[string]any{
+		"Target":   t,
+		"Path":     rel,
+		"Name":     path.Base(rel),
+		"Preview":  preview,
+		"Editable": t.Root.Editable(preview),
+		"Problem":  problem,
+	})
+}
+
+func flashOK(text string) map[string]string  { return map[string]string{"Kind": "ok", "Text": text} }
+func flashErr(text string) map[string]string { return map[string]string{"Kind": "err", "Text": text} }
+
+// writeError turns a refused write into a sentence about what was refused.
+func writeError(err error) string {
+	switch {
+	case errors.Is(err, errEditTooBig):
+		return "This file has grown past what the editor can hold, so nothing was written — saving would have dropped the rest of it."
+	case errors.Is(err, files.ErrReadOnly):
+		return "This storage is read-only."
+	case errors.Is(err, files.ErrTooLarge):
+		return "That is larger than this can write."
+	case errors.Is(err, files.ErrIsDir):
+		return "That is a directory. Only files can be changed here."
+	case errors.Is(err, files.ErrNotRegular):
+		return "That is not a plain file — a link or a device — so it was left alone."
+	case errors.Is(err, files.ErrBadName), errors.Is(err, files.ErrOutsideRoot):
+		return "That name cannot be used here."
+	case errors.Is(err, os.ErrNotExist):
+		return "That path no longer exists."
+	case errors.Is(err, os.ErrPermission):
+		return "The dashboard is not allowed to write there."
+	}
+	return "That change could not be written."
+}
+
 // handleAppStoragePartial fills the Storage section of an application's page:
 // what it has mounted, and a way into each one.
 func (s *Server) handleAppStoragePartial(w http.ResponseWriter, r *http.Request) {
@@ -445,7 +740,7 @@ func (s *Server) handleAppStoragePartial(w http.ResponseWriter, r *http.Request)
 			"URL":   "/files/app/" + a.ID + "?mount=" + url.QueryEscape(m.Destination),
 			// Whether the path is readable is worth knowing before the click, and
 			// costs one stat.
-			"Readable": s.readable(m.Source),
+			"Readable": s.readable(m.Source, m.IsVolume()),
 		})
 	}
 	s.renderPartial(w, "app_storage", map[string]any{
@@ -487,7 +782,7 @@ func (s *Server) handleSystemVolumesPartial(w http.ResponseWriter, r *http.Reque
 }
 
 // readable reports whether a host path can be opened as a directory from here.
-func (s *Server) readable(hostPath string) bool {
-	_, err := s.browseRoot(hostPath)
+func (s *Server) readable(hostPath string, dockerVolume bool) bool {
+	_, err := s.browseRoot(hostPath, dockerVolume)
 	return err == nil
 }

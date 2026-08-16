@@ -178,10 +178,33 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
   fichier. Réservé aux admins : ces fichiers contiennent ce que l'app a écrit,
   secrets compris.
 
-  Deux limites assumées. **Lecture seule** : l'app en cours d'exécution reste
-  seule maîtresse de ses données, et le montage hôte est de toute façon `:ro`.
-  Et un volume porté par un driver réseau (NFS, EBS…) n'est pas ouvrable — ses
-  données ne sont pas sur le disque de la machine, la ligne le signale.
+  **Modification** : upload de fichiers dans le dossier ouvert, édition d'un
+  fichier texte dans une zone de saisie, et suppression (avec confirmation).
+  Les trois sont tracés dans l'audit (`storage.upload`, `storage.edit`,
+  `storage.delete`). L'écriture est atomique — fichier temporaire puis rename —
+  donc une app qui relit sa configuration ne la voit jamais à moitié écrite, et
+  une écriture interrompue laisse l'ancienne version intacte. Les permissions
+  d'un fichier remplacé sont conservées : un secret en `600` ne revient pas en
+  `644` parce qu'on l'a édité.
+
+  **Où l'écriture fonctionne**, et pourquoi ça se voit dans l'interface. Les
+  données des apps (`/opt/quasar/apps`) sont montées en lecture-écriture dans
+  le dashboard : modifiables partout, sans rien configurer. Un volume nommé
+  passe par le montage `:ro` de l'hôte, donc le noyau refuse l'écriture — le
+  dashboard le détecte au démarrage de chaque navigation (via `access(2)`,
+  jamais en supposant) et n'affiche ni upload, ni édition, ni suppression, avec
+  un chip *read-only* en haut de page. Pour rendre les volumes modifiables,
+  décommentez la ligne `/var/lib/docker/volumes` dans `docker-compose.yml` puis
+  `docker compose up -d` sur le VPS — l'auto-updater ne remplace que l'image,
+  pas le fichier compose. Un montage que le conteneur détient lui-même en `ro`
+  reste en lecture seule quoi qu'il arrive : le compose de l'app a dit non.
+
+  Deux garde-fous qui méritent d'être connus. Un fichier trop gros pour être
+  affiché en entier (> 256 Ko) n'est **pas** éditable : le sauver réécrirait
+  les 256 Ko affichés par-dessus le fichier entier et perdrait le reste — c'est
+  refusé côté serveur, pas seulement masqué. Et un volume porté par un driver
+  réseau (NFS, EBS…) n'est pas ouvrable du tout : ses données ne sont pas sur
+  le disque de la machine, la ligne le signale.
 - **Identifiants Git** : page dédiée (Paramètres → Git credentials). Chaque
   token déclare sa *portée* — une forge (`github.com`), une organisation
   (`github.com/acme`), un dépôt précis, ou `*` en repli — et c'est la portée la
@@ -395,6 +418,12 @@ go test ./...
   `Content-Disposition: attachment` + `nosniff`, sauf une liste fermée de types
   d'images (SVG exclu, qui exécuterait son script dans l'origine du dashboard).
   Routes réservées aux admins.
+- Écriture dans les volumes : le nom d'un fichier uploadé est réduit à son
+  dernier composant avant usage, et l'écriture passe par un fichier temporaire
+  renommé à la place de la cible — ce qui remplace un lien symbolique au lieu
+  d'écrire à travers. Une cible qui n'est pas un fichier ordinaire est refusée.
+  Les volumes ne sont modifiables que si l'opérateur a explicitement monté
+  `/var/lib/docker/volumes` en écriture (commenté par défaut).
 - Mode compose (injecté ou détecté dans un repo Git) : Quasar réécrit le
   fichier pour poser les labels Traefik sur un seul service, celui qui sert le
   site. Les ports que la stack publie sur l'hôte en dehors de 80/443 sont

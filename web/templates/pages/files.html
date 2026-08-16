@@ -21,11 +21,13 @@
     <span class="truncate">{{.Target.Title}}</span>
     {{if .Target.Mount}}<span class="faint">{{.Target.Mount}}</span>{{end}}
   </h1>
-  {{if .Target.ReadOnly}}
+  {{if and .Target.Root.Valid (not .Target.Writable)}}
   {{/* Said once, at the top, rather than by the absence of buttons further
-       down: an operator who came here to fix a config file should find that
-       out before walking to it. */}}
-  <span class="chip" title="The explorer reads; it never writes to application data">read-only</span>
+       down: an operator who came here to fix a config file should find that out
+       before walking to it. It reflects what the filesystem will actually
+       accept — a named volume is normally reached through a read-only mount of
+       the host, an app's own data directory is not. */}}
+  <span class="chip" title="This storage is mounted read-only, so nothing here can be changed from the dashboard">read-only</span>
   {{end}}
 </div>
 
@@ -124,6 +126,13 @@
     // holding a file while the listing behind it says otherwise.
     dialog.addEventListener("close", function () {
       dialog.innerHTML = "";
+    });
+
+    // Deleting the file the dialog is showing leaves it describing something
+    // that no longer exists, so the response that did the deleting says to
+    // close. The listing behind it refreshes on its own event.
+    document.body.addEventListener("quasar:close-modal", function () {
+      if (dialog.open) dialog.close();
     });
   })();
 </script>

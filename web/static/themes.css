@@ -1500,6 +1500,82 @@ input[type="checkbox"]:focus-visible {
 }
 .file-title .ico { flex: none; width: 1rem; height: 1rem; color: var(--text-faint); }
 
+/* The strip above the table: where you are on the left, what you can add on the
+   right. It keeps its height when there is no trail to show, so the table does
+   not jump up a line as you walk back to the root. */
+.file-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 1.75rem;
+}
+
+/* The file input itself is the one control a browser will not let us style, so
+   it is taken out of the layout and the label around it does the work. */
+.file-upload input[type="file"] { display: none; }
+.file-upload label { cursor: pointer; }
+
+/* What a write just did. Not a toast: it belongs to the folder on screen, and a
+   message about an upload that floats away over an unrelated page is a message
+   nobody finishes reading. */
+.file-flash {
+  margin-top: 0.75rem;
+  border: var(--border-w) solid color-mix(in srgb, var(--ok) 40%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--ok);
+}
+.file-flash.is-err {
+  border-color: color-mix(in srgb, var(--err) 40%, transparent);
+  background: color-mix(in srgb, var(--err) 8%, transparent);
+  color: var(--err);
+}
+
+/* The editor fills the dialog's body rather than being a box inside it: the
+   file is what the panel is for at that point, and a textarea sized to some
+   number of rows would leave a config file scrolling in a well. */
+.file-editor {
+  display: block;
+  width: 100%;
+  min-height: 24rem;
+  height: 100%;
+  resize: vertical;
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  color: var(--text);
+  tab-size: 2;
+}
+.file-editor:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* The dialog is a column of head/body/foot; when the editor is open the form is
+   what holds the last two, so it has to carry the same column through or the
+   body stops scrolling and the footer leaves the panel. */
+.modal-form {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+/* A footer of controls rather than of prose. Its own class because the plain
+   .modal-foot is a line of explanation elsewhere, and turning that into a flex
+   row to suit this one would change a panel this has nothing to do with. */
+.modal-foot-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 /* The trail back to the root of a volume. It wraps rather than scrolls: a path
    ten directories deep is still readable on three lines, and unreadable pushed
    off the side of a bar nobody thinks to drag. */

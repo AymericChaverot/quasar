@@ -2,7 +2,9 @@
 
      Swapped into the dialog on the explorer page, which opens itself once the
      content has arrived — so the panel never appears empty while the file is
-     being read. */}}
+     being read. The same partial serves reading and editing: the editor is this
+     panel with the text in a box that takes typing, not a second place where
+     the same file is described. */}}
 {{define "file_preview"}}
 <div class="modal-head">
   <div class="min-w-0">
@@ -16,6 +18,36 @@
   <button type="button" class="modal-close" data-close-modal aria-label="Close">{{template "icon_x"}}</button>
 </div>
 
+{{if .Problem}}
+{{/* A write that was refused. Above the content, because the content below is
+     what the reader was about to change and is now looking at again. */}}
+<div class="file-flash is-err">{{.Problem}}</div>
+{{end}}
+
+{{if .Editing}}
+{{/* The editor. The whole panel is the form, so the buttons in the footer can
+     submit it — a textarea and its Save separated by a scrolling region would
+     otherwise need the two wired together by hand. */}}
+<form hx-post="{{.Target.SaveURL}}" hx-target="#file-modal" hx-swap="innerHTML"
+      hx-disabled-elt="find button[type=submit]" class="modal-form">
+  <input type="hidden" name="path" value="{{.Path}}">
+  <div class="modal-body">
+    <textarea name="content" class="file-editor" spellcheck="false" autocomplete="off"
+              autocapitalize="off" autocorrect="off">{{.Preview.Text}}</textarea>
+  </div>
+  <div class="modal-foot modal-foot-actions">
+    <button type="submit" class="btn-primary">
+      {{template "icon_save"}}<span class="spinner" aria-hidden="true"></span>Save
+    </button>
+    {{/* Leaves the editor by asking for the file again, which is also the only
+         honest way to discard: whatever was typed is simply never sent. */}}
+    <button type="button" class="btn" hx-get="{{.Target.PreviewFor .Path}}"
+            hx-target="#file-modal" hx-swap="innerHTML">Cancel</button>
+    <span class="help mt-0! ml-auto">Saved straight to disk — the application is not restarted.</span>
+  </div>
+</form>
+
+{{else}}
 <div class="modal-body">
   {{if .Error}}
   <p class="muted text-sm">{{.Error}}</p>
@@ -25,7 +57,8 @@
   {{if eq .Kind "text"}}
   {{if .Truncated}}
   <p class="help mt-0! mb-3">
-    Showing the first 256 KB of {{humanSize .Size}}. Download the file for the rest.
+    Showing the first 256 KB of {{humanSize .Size}}. Download the file for the rest —
+    and for the same reason it is not shown whole, it cannot be edited here.
   </p>
   {{end}}
   <pre class="file-text">{{.Text}}</pre>
@@ -51,7 +84,29 @@
   {{end}}
 </div>
 
-<div class="modal-foot">
+<div class="modal-foot modal-foot-actions">
   <a class="btn" href="{{.Target.RawFor .Path}}">{{template "icon_download"}}Download</a>
+  {{if .Editable}}
+  <button type="button" class="btn" hx-get="{{.Target.EditFor .Path}}"
+          hx-target="#file-modal" hx-swap="innerHTML">{{template "icon_pencil"}}Edit</button>
+  {{end}}
+  {{if and .Target.Writable (not .Error)}}
+  {{/* Deleting is the one thing here that cannot be undone from this page, so
+       it asks — and it sits apart from the two controls that only read.
+
+       A form rather than hx-vals: the path would have to be pasted into a JSON
+       attribute, and a filename is free to contain the quote that would end it.
+       Here it is an attribute value, which the template escapes.
+
+       Nothing is swapped in reply. The response carries the two events that
+       close this dialog and refresh the listing, which is the whole of what
+       should happen when the file being shown stops existing. */}}
+  <form class="ml-auto" hx-post="{{.Target.DeleteURL}}" hx-swap="none"
+        hx-confirm="Delete {{.Name}}? This cannot be undone, and no backup covers a file written since the last one.">
+    <input type="hidden" name="path" value="{{.Path}}">
+    <button type="submit" class="btn-danger">{{template "icon_trash"}}Delete</button>
+  </form>
+  {{end}}
 </div>
+{{end}}
 {{end}}

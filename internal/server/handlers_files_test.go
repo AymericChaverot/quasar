@@ -1,7 +1,10 @@
 package server
 
 import (
+	"bytes"
+	"errors"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -50,7 +53,7 @@ func TestBrowseRootPicksTheRightViewOfTheHost(t *testing.T) {
 	s, appsDir, hostRoot := explorerServer(t)
 
 	appData := filepath.Join(appsDir, "app1", "data")
-	root, err := s.browseRoot(appData)
+	root, err := s.browseRoot(appData, false)
 	if err != nil {
 		t.Fatalf("browseRoot(app data) = %v", err)
 	}
@@ -58,7 +61,7 @@ func TestBrowseRootPicksTheRightViewOfTheHost(t *testing.T) {
 		t.Errorf("app data resolved to %q, want the directory itself at %q", root.Path(), appData)
 	}
 
-	root, err = s.browseRoot("/var/lib/docker/volumes/pgdata/_data")
+	root, err = s.browseRoot("/var/lib/docker/volumes/pgdata/_data", true)
 	if err != nil {
 		t.Fatalf("browseRoot(volume) = %v", err)
 	}
@@ -86,14 +89,14 @@ func sameDir(t *testing.T, a, b string) bool {
 func TestBrowseRootRefusesWhatIsNotThere(t *testing.T) {
 	s, appsDir, _ := explorerServer(t)
 
-	if _, err := s.browseRoot(""); err == nil {
+	if _, err := s.browseRoot("", false); err == nil {
 		t.Error("browseRoot accepted an empty path")
 	}
-	if _, err := s.browseRoot("/var/lib/docker/volumes/gone/_data"); err == nil {
+	if _, err := s.browseRoot("/var/lib/docker/volumes/gone/_data", true); err == nil {
 		t.Error("browseRoot accepted a path that does not exist")
 	}
 	mustFile(t, filepath.Join(appsDir, "app1", "data", "note.txt"), "x")
-	if _, err := s.browseRoot(filepath.Join(appsDir, "app1", "data", "note.txt")); err == nil {
+	if _, err := s.browseRoot(filepath.Join(appsDir, "app1", "data", "note.txt"), false); err == nil {
 		t.Error("browseRoot accepted a file as a browsable root")
 	}
 }
@@ -122,7 +125,7 @@ func testTarget(t *testing.T, dir string) browseTarget {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return browseTarget{Kind: "volume", Ref: "pgdata", Title: "pgdata", Root: root, ReadOnly: true}
+	return browseTarget{Kind: "volume", Ref: "pgdata", Title: "pgdata", Root: root}
 }
 
 func TestURLsCarryTheMountAndEscape(t *testing.T) {
@@ -331,7 +334,7 @@ func TestExplorerTemplates(t *testing.T) {
 
 	appTarget := browseTarget{
 		Kind: "app", Ref: "abcd1234", Title: "Blog", Subtitle: "Storage",
-		BackURL: "/apps/abcd1234", BackLabel: "Blog", ReadOnly: true,
+		BackURL: "/apps/abcd1234", BackLabel: "Blog",
 		Mounts: []docker.Mount{
 			{Type: "volume", Name: "qs-abcd1234_db", Destination: "/var/lib/mysql", RW: true, Service: "db"},
 			{Type: "bind", Source: "/opt/quasar/apps/abcd1234/data", Destination: "/data", RW: true},
@@ -370,17 +373,44 @@ func TestExplorerTemplates(t *testing.T) {
 	big := text
 	big.Truncated, big.Size = true, 40<<20
 
+	// The same listing on storage that will not take writes, which is what a
+	// named volume looks like on an install that has not mounted Docker's
+	// volume tree in: no upload control, no edit, no delete.
+	roTarget := target
+	roTarget.Root = target.Root.ReadOnly()
+	roListing, err := s.listing(roTarget, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Writable() == roTarget.Writable() {
+		t.Fatal("the writable and read-only targets are the same, so this proves nothing")
+	}
+
 	partials := []struct {
 		name string
 		data any
 	}{
 		{"file_list", listing},
+		{"file_list", roListing},
+		// What a write reports when it comes back.
+		{"file_list", withFlash(listing, flashOK("Uploaded site.conf."))},
+		{"file_list", withFlash(listing, flashErr("1 uploaded, 1 refused (big.iso)."))},
 		// A folder below the root, which is the only case with a trail and an
 		// "up one level" row in it.
 		{"file_list", sub},
 		{"file_list", map[string]any{"Target": target, "Path": "gone", "Error": "That path no longer exists."}},
 		{"file_preview", map[string]any{"Target": target, "Path": "app.log", "Name": "app.log", "Preview": text}},
 		{"file_preview", map[string]any{"Target": target, "Path": "app.log", "Name": "app.log", "Preview": big}},
+		// Editable, being edited, and the same panel reporting a refused save.
+		{"file_preview", map[string]any{"Target": target, "Path": "app.log", "Name": "app.log",
+			"Preview": text, "Editable": true}},
+		{"file_preview", map[string]any{"Target": target, "Path": "app.log", "Name": "app.log",
+			"Preview": text, "Editable": true, "Editing": true}},
+		{"file_preview", map[string]any{"Target": target, "Path": "app.log", "Name": "app.log",
+			"Preview": text, "Editable": true, "Problem": "This storage is read-only."}},
+		// On read-only storage the same file offers only the download.
+		{"file_preview", map[string]any{"Target": roTarget, "Path": "app.log", "Name": "app.log",
+			"Preview": text}},
 		{"file_preview", map[string]any{"Target": target, "Path": "db.sqlite", "Name": "db.sqlite",
 			"Preview": files.Preview{Kind: "binary", Size: 4 << 20}}},
 		{"file_preview", map[string]any{"Target": target, "Path": "logo.png", "Name": "logo.png",
@@ -415,4 +445,244 @@ func TestExplorerTemplates(t *testing.T) {
 			t.Errorf("execute partial %s: %v", p.name, err)
 		}
 	}
+}
+
+// uploadBody builds a multipart body of the shape a browser file input sends,
+// so the parser under test meets what it will meet in production.
+func uploadBody(t *testing.T, parts map[string]string) *multipart.Reader {
+	t.Helper()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	for name, content := range parts {
+		part, err := w.CreateFormFile("files", name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.WriteString(part, content); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return multipart.NewReader(&buf, w.Boundary())
+}
+
+func mustRoot(t *testing.T, dir string) files.Root {
+	t.Helper()
+	root, err := files.NewRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestStoreUploadsWritesEveryPart(t *testing.T) {
+	base := t.TempDir()
+	mustDir(t, filepath.Join(base, "vol", "conf.d"))
+	root := mustRoot(t, filepath.Join(base, "vol"))
+
+	body := uploadBody(t, map[string]string{"site.conf": "listen 80;", "notes.txt": "hello"})
+	saved, failed := storeUploads(root, "conf.d", body)
+	if len(saved) != 2 || len(failed) != 0 {
+		t.Fatalf("saved=%v failed=%v", saved, failed)
+	}
+	for name, want := range map[string]string{"site.conf": "listen 80;", "notes.txt": "hello"} {
+		got, err := os.ReadFile(filepath.Join(base, "vol", "conf.d", name))
+		if err != nil || string(got) != want {
+			t.Errorf("%s = %q, %v", name, got, err)
+		}
+	}
+}
+
+// A part's filename is client-controlled. One claiming to be called
+// "../../escaped.conf" must not put a file there, and must not stop the rest of
+// the batch from landing either.
+func TestStoreUploadsRefusesEscapingNames(t *testing.T) {
+	base := t.TempDir()
+	mustDir(t, filepath.Join(base, "vol", "sub"))
+	root := mustRoot(t, filepath.Join(base, "vol", "sub"))
+
+	body := uploadBody(t, map[string]string{
+		"../../escaped.conf": "owned",
+		"good.txt":           "fine",
+	})
+	saved, _ := storeUploads(root, "", body)
+
+	for _, stray := range []string{
+		filepath.Join(base, "escaped.conf"),
+		filepath.Join(base, "vol", "escaped.conf"),
+		filepath.Join(filepath.Dir(base), "escaped.conf"),
+	} {
+		if _, err := os.Stat(stray); err == nil {
+			t.Errorf("a file escaped to %s", stray)
+		}
+	}
+	found := false
+	for _, name := range saved {
+		if name == "good.txt" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the rest of the batch was dropped: saved=%v", saved)
+	}
+}
+
+func TestStoreUploadsReportsWhatFailed(t *testing.T) {
+	base := t.TempDir()
+	mustDir(t, filepath.Join(base, "vol", "sub"))
+	root := mustRoot(t, filepath.Join(base, "vol"))
+
+	// A name already taken by a directory cannot become a file.
+	body := uploadBody(t, map[string]string{"sub": "x", "ok.txt": "y"})
+	saved, failed := storeUploads(root, "", body)
+	if len(saved) != 1 || saved[0] != "ok.txt" {
+		t.Errorf("saved = %v, want just ok.txt", saved)
+	}
+	if len(failed) != 1 || failed[0] != "sub" {
+		t.Errorf("failed = %v, want just sub", failed)
+	}
+}
+
+// Uploading into read-only storage fails on every part rather than partly
+// succeeding.
+func TestStoreUploadsIntoReadOnlyStorage(t *testing.T) {
+	base := t.TempDir()
+	mustDir(t, filepath.Join(base, "vol"))
+	root := mustRoot(t, filepath.Join(base, "vol")).ReadOnly()
+
+	body := uploadBody(t, map[string]string{"a.txt": "x", "b.txt": "y"})
+	saved, failed := storeUploads(root, "", body)
+	if len(saved) != 0 || len(failed) != 2 {
+		t.Errorf("saved=%v failed=%v, want nothing saved", saved, failed)
+	}
+}
+
+func TestWriteEditNormalisesLineEndings(t *testing.T) {
+	base := t.TempDir()
+	mustDir(t, filepath.Join(base, "vol"))
+	mustFile(t, filepath.Join(base, "vol", "app.conf"), "old\n")
+	root := mustRoot(t, filepath.Join(base, "vol"))
+
+	// What a browser submits from a textarea, whatever was typed into it.
+	if err := writeEdit(root, "app.conf", "one\r\ntwo\r\n"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(base, "vol", "app.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "one\ntwo\n" {
+		t.Errorf("saved %q, want the CRLFs gone", got)
+	}
+}
+
+// The guard that stops the editor destroying a file it only ever showed part
+// of. Without it, saving a 40 MB log back would leave a 256 KB one.
+func TestWriteEditRefusesAFileTooLargeToHaveBeenShownWhole(t *testing.T) {
+	base := t.TempDir()
+	mustDir(t, filepath.Join(base, "vol"))
+	big := strings.Repeat("log line\n", files.PreviewMax/9+500)
+	mustFile(t, filepath.Join(base, "vol", "big.log"), big)
+	root := mustRoot(t, filepath.Join(base, "vol"))
+
+	err := writeEdit(root, "big.log", "oops")
+	if !errors.Is(err, errEditTooBig) {
+		t.Fatalf("writeEdit = %v, want errEditTooBig", err)
+	}
+	after, readErr := os.ReadFile(filepath.Join(base, "vol", "big.log"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(after) != len(big) {
+		t.Errorf("the file is now %d bytes, was %d — the refusal did not hold", len(after), len(big))
+	}
+	if msg := writeError(err); !strings.Contains(msg, "nothing was written") {
+		t.Errorf("writeError = %q, want it to say nothing was written", msg)
+	}
+}
+
+func TestWriteEditCreatesAndRefusesReadOnly(t *testing.T) {
+	base := t.TempDir()
+	mustDir(t, filepath.Join(base, "vol"))
+	root := mustRoot(t, filepath.Join(base, "vol"))
+
+	if err := writeEdit(root, "new.conf", "port = 1\n"); err != nil {
+		t.Errorf("writeEdit(new) = %v", err)
+	}
+	if err := writeEdit(root.ReadOnly(), "new.conf", "port = 2\n"); !errors.Is(err, files.ErrReadOnly) {
+		t.Errorf("writeEdit on read-only = %v, want ErrReadOnly", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(base, "vol", "new.conf")); string(got) != "port = 1\n" {
+		t.Errorf("the read-only write went through: %q", got)
+	}
+}
+
+func TestWriteErrorsReadAsProse(t *testing.T) {
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{files.ErrReadOnly, "read-only"},
+		{files.ErrTooLarge, "larger"},
+		{files.ErrIsDir, "directory"},
+		{files.ErrNotRegular, "plain file"},
+		{files.ErrBadName, "cannot be used"},
+		{os.ErrNotExist, "no longer exists"},
+		{os.ErrPermission, "not allowed"},
+		{io.ErrUnexpectedEOF, "could not be written"},
+	} {
+		got := writeError(c.err)
+		if !strings.Contains(strings.ToLower(got), c.want) {
+			t.Errorf("writeError(%v) = %q, want it to mention %q", c.err, got, c.want)
+		}
+		if strings.Contains(got, "Err") {
+			t.Errorf("writeError(%v) leaked a Go error name: %q", c.err, got)
+		}
+	}
+}
+
+func TestAuditTargetNamesWhatChanged(t *testing.T) {
+	app := browseTarget{Kind: "app", Ref: "abcd1234", Title: "Blog"}
+	if got := app.auditTarget(); got != "Blog" {
+		t.Errorf("app auditTarget = %q, want the name of the app", got)
+	}
+	vol := browseTarget{Kind: "volume", Ref: "pgdata", Title: "pgdata"}
+	if got := vol.auditTarget(); got != "volume pgdata" {
+		t.Errorf("volume auditTarget = %q", got)
+	}
+}
+
+func TestWriteActionURLs(t *testing.T) {
+	app := browseTarget{Kind: "app", Ref: "abcd1234", Mount: "/var/lib/mysql"}
+	if got := app.UploadURL("conf.d"); got != "/files/app/abcd1234/upload?mount=%2Fvar%2Flib%2Fmysql&path=conf.d" {
+		t.Errorf("UploadURL = %q", got)
+	}
+	if got := app.UploadURL(""); got != "/files/app/abcd1234/upload?mount=%2Fvar%2Flib%2Fmysql" {
+		t.Errorf("UploadURL(root) = %q", got)
+	}
+	if got := app.SaveURL(); !strings.HasPrefix(got, "/files/app/abcd1234/save?") {
+		t.Errorf("SaveURL = %q", got)
+	}
+
+	// A volume needs no mount, and gets no stray query for one.
+	vol := browseTarget{Kind: "volume", Ref: "pgdata"}
+	if got := vol.DeleteURL(); got != "/files/volume/pgdata/delete" {
+		t.Errorf("volume DeleteURL = %q", got)
+	}
+	if got := vol.EditFor("app.conf"); !strings.Contains(got, "edit=1") || !strings.Contains(got, "preview=1") {
+		t.Errorf("EditFor = %q", got)
+	}
+}
+
+// withFlash copies a listing with a note attached, so one built listing can be
+// rendered in each of the states a write leaves it in.
+func withFlash(listing map[string]any, flash map[string]string) map[string]any {
+	out := make(map[string]any, len(listing)+1)
+	for k, v := range listing {
+		out[k] = v
+	}
+	out["Flash"] = flash
+	return out
 }

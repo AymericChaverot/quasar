@@ -3,19 +3,50 @@
      The whole thing is swapped as a unit, trail included — a breadcrumb left
      outside the swap would keep naming the folder the reader just left. */}}
 {{define "file_list"}}
-{{/* The trail, shown only once there is one. At the root it would be a single
-     crumb repeating the name in the heading above it, which is the line that
-     was worth removing. */}}
-{{if .Crumbs}}
-<div class="file-trail">
-  <a class="file-crumb" href="{{.Target.URLFor ""}}" title="Back to the top of this volume"
-     hx-get="{{.Target.PartialFor ""}}" hx-push-url="{{.Target.URLFor ""}}">{{template "icon_folder"}}</a>
-  {{range .Crumbs}}
-  <span class="file-sep" aria-hidden="true">/</span>
-  <a class="file-crumb" href="{{$.Target.URLFor .Path}}"
-     hx-get="{{$.Target.PartialFor .Path}}" hx-push-url="{{$.Target.URLFor .Path}}">{{.Name}}</a>
+{{/* Asks for itself again whenever a write reports that something changed, so
+     an edit or a delete made in the dialog is reflected in the table behind it.
+     It lives inside the swapped content on purpose: it is the only element that
+     knows which directory is currently open. */}}
+<div hx-get="{{.Target.PartialFor .Path}}" hx-trigger="quasar:files-changed from:body"
+     hx-target="#file-browser" hx-swap="innerHTML"></div>
+
+<div class="file-bar">
+  {{/* The trail, shown only once there is one. At the root it would be a single
+       crumb repeating the name in the heading above it, which is the line that
+       was worth removing. */}}
+  {{if .Crumbs}}
+  <div class="file-trail">
+    <a class="file-crumb" href="{{.Target.URLFor ""}}" title="Back to the top of this volume"
+       hx-get="{{.Target.PartialFor ""}}" hx-push-url="{{.Target.URLFor ""}}">{{template "icon_folder"}}</a>
+    {{range .Crumbs}}
+    <span class="file-sep" aria-hidden="true">/</span>
+    <a class="file-crumb" href="{{$.Target.URLFor .Path}}"
+       hx-get="{{$.Target.PartialFor .Path}}" hx-push-url="{{$.Target.URLFor .Path}}">{{.Name}}</a>
+    {{end}}
+  </div>
+  {{else}}
+  <span></span>
+  {{end}}
+
+  {{if .Target.Writable}}
+  {{/* Upload into the folder on screen. A label wrapping a hidden input rather
+       than a styled input, because the browser's own file control cannot be
+       made to match anything else on the page; picking files submits the form,
+       so there is no second click on a button that would only ever be pressed
+       straight after. */}}
+  <form class="file-upload" hx-post="{{.Target.UploadURL .Path}}" hx-encoding="multipart/form-data"
+        hx-target="#file-browser" hx-swap="innerHTML" hx-trigger="change"
+        hx-disabled-elt="find label">
+    <label class="btn py-1! text-xs">
+      {{template "icon_upload"}}<span class="spinner" aria-hidden="true"></span>Upload
+      <input type="file" name="files" multiple class="sr-only">
+    </label>
+  </form>
   {{end}}
 </div>
+
+{{with .Flash}}
+<div class="file-flash {{if eq .Kind "err"}}is-err{{end}}">{{.Text}}</div>
 {{end}}
 
 {{if .Error}}
@@ -67,11 +98,13 @@
           {{else}}
           {{/* A file opens in the dialog rather than replacing the listing:
                reading one is a look aside, and coming back should not cost a
-               second walk down the tree. */}}
+               second walk down the tree. The icon is guessed from the name —
+               a directory of a hundred files is much faster to scan when the
+               config, the log and the database do not all look alike. */}}
           <a class="file-name" href="{{$.Target.URLFor (printf "%s/%s" $.Path .Name)}}"
              hx-get="{{$.Target.PreviewFor (printf "%s/%s" $.Path .Name)}}"
              hx-target="#file-modal" hx-swap="innerHTML">
-            {{template "icon_file"}}<span class="mono truncate">{{.Name}}</span>
+            {{template "file_icon" (fileKind .Name)}}<span class="mono truncate">{{.Name}}</span>
             {{if .Link}}{{template "icon_link"}}{{end}}
           </a>
           {{end}}

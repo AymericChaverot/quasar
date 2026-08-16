@@ -12,6 +12,7 @@ import (
 	"quasar/internal/auth"
 	"quasar/internal/config"
 	"quasar/internal/docker"
+	"quasar/internal/files"
 	"quasar/internal/secrets"
 	"quasar/internal/version"
 	"quasar/web"
@@ -122,6 +123,9 @@ var templateFuncs = template.FuncMap{
 		return many
 	},
 	"hasPrefix": strings.HasPrefix,
+	// The sort of thing a filename suggests, which the listing turns into an
+	// icon so one row can be told from the next at a glance.
+	"fileKind": files.Kind,
 	// dict builds the argument for a partial that needs more than one value —
 	// a template can only be passed a single dot, and the alternative is
 	// copying the partial's markup once per call site.
@@ -295,6 +299,13 @@ func (s *Server) routes() {
 	// the backup archive holds, and that is admin-only too.
 	s.admin("GET /files/{kind}/{ref}", s.handleFiles)
 	s.admin("GET /partials/files/{kind}/{ref}", s.handleFilesPartial)
+	// Writing is only ever offered where the filesystem takes it — an app's own
+	// data directory, and a Docker volume on an install that has mounted the
+	// volume tree in. Each of these refuses on its own rather than relying on
+	// the button having been hidden.
+	s.admin("POST /files/{kind}/{ref}/upload", s.handleFilesUpload)
+	s.admin("POST /files/{kind}/{ref}/save", s.handleFilesSave)
+	s.admin("POST /files/{kind}/{ref}/delete", s.handleFilesDelete)
 
 	s.viewer("GET /apps/{id}", s.handleAppDetail)
 	s.viewer("GET /apps/{id}/logs", s.handleAppLogs)

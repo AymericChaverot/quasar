@@ -97,6 +97,25 @@ services:
       - /opt/quasar/traefik:/opt/quasar/traefik
       - /proc:/host/proc:ro
       - /:/host/root:ro
+      # Uncomment to make the storage explorer able to *change* what is in a
+      # named Docker volume, not only read it.
+      #
+      # Without this line, a volume is reached through the read-only mount of
+      # the host above, so the explorer offers no upload, edit or delete for
+      # one — it detects that at runtime and hides the controls rather than
+      # failing on them. An app's own data under /opt/quasar/apps is editable
+      # either way, which covers everything deployed from the catalogue.
+      #
+      # It is left off by default because it hands the dashboard write access
+      # to every volume on the server, databases included. The dashboard can
+      # already create containers through the socket proxy, so this grants no
+      # authority an attacker with the dashboard would not have; it does widen
+      # what a mistake can reach.
+      #
+      # Adding it needs a `docker compose up -d` on the host: the self-updater
+      # only replaces the image, so a changed compose file is not picked up by
+      # an update.
+      # - /var/lib/docker/volumes:/var/lib/docker/volumes
     labels:
       traefik.enable: "true"
       traefik.http.routers.quasar-admin.rule: Host(`admin.${DOMAIN}`)
