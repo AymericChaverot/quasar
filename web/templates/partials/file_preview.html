@@ -1,0 +1,57 @@
+{{/* One file, shown over the listing rather than instead of it.
+
+     Swapped into the dialog on the explorer page, which opens itself once the
+     content has arrived — so the panel never appears empty while the file is
+     being read. */}}
+{{define "file_preview"}}
+<div class="modal-head">
+  <div class="min-w-0">
+    <h2 class="modal-title modal-title-file truncate">{{.Name}}</h2>
+    {{with .Preview}}
+    <p class="faint mt-0.5 text-xs">
+      {{humanSize .Size}}{{if not .ModTime.IsZero}} — modified {{.ModTime.Format "2006-01-02 15:04"}}{{end}}
+    </p>
+    {{end}}
+  </div>
+  <button type="button" class="modal-close" data-close-modal aria-label="Close">{{template "icon_x"}}</button>
+</div>
+
+<div class="modal-body">
+  {{if .Error}}
+  <p class="muted text-sm">{{.Error}}</p>
+  {{else}}
+  {{with .Preview}}
+
+  {{if eq .Kind "text"}}
+  {{if .Truncated}}
+  <p class="help mt-0! mb-3">
+    Showing the first 256 KB of {{humanSize .Size}}. Download the file for the rest.
+  </p>
+  {{end}}
+  <pre class="file-text">{{.Text}}</pre>
+
+  {{else if eq .Kind "image"}}
+  <div class="file-image">
+    <img src="{{$.Target.InlineFor $.Path}}" alt="{{$.Name}}" loading="lazy">
+  </div>
+
+  {{else if eq .Kind "empty"}}
+  <p class="muted text-sm">This file is empty.</p>
+
+  {{else}}
+  {{/* A binary is not shown as mangled text. Saying what it is and offering
+       the download is the whole of what can honestly be done with it here. */}}
+  <div class="empty p-6 text-center">
+    <p class="muted text-sm">This file is not text — {{humanSize .Size}} of binary data.</p>
+    <p class="help">A database, an archive, or media. Download it to open it with something that understands it.</p>
+  </div>
+  {{end}}
+
+  {{end}}
+  {{end}}
+</div>
+
+<div class="modal-foot">
+  <a class="btn" href="{{.Target.RawFor .Path}}">{{template "icon_download"}}Download</a>
+</div>
+{{end}}

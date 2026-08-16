@@ -81,6 +81,19 @@
     </div>
   </section>
 
+  {{/* Directly under the storage card, which counts the volumes and offers to
+       sweep the orphaned ones: this is where they are named, and where you can
+       look inside one before agreeing to lose it. Admin-only, like the explorer
+       it leads into. */}}
+  {{if .IsAdmin}}
+  <section class="space-y-4">
+    <h2 class="h-label">Volumes</h2>
+    <div hx-get="/partials/system/volumes" hx-trigger="load" hx-swap="innerHTML">
+      <div class="card h-24 max-w-2xl animate-pulse"></div>
+    </div>
+  </section>
+  {{end}}
+
   <section class="space-y-4">
     <h2 class="h-label">Application storage</h2>
     <div hx-get="/partials/system/app-sizes" hx-trigger="load" hx-swap="innerHTML">

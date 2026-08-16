@@ -1,0 +1,61 @@
+{{/* What an application has mounted, and the way into each one.
+
+     Read from the containers rather than from the compose file, so it lists
+     what is actually mounted now — the volumes an image declares for itself
+     included, which no file on disk mentions and which are the ones quietly
+     holding a database nobody set up. */}}
+{{define "app_storage"}}
+{{if .Mounts}}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Container path</th>
+        <th>Where it lives</th>
+        <th class="w-24">Access</th>
+        <th class="w-28"><span class="sr-only">Browse</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Mounts}}
+      <tr>
+        <td class="mono">
+          {{.Mount.Destination}}
+          {{if .Mount.Service}}<span class="faint block text-xs">{{.Mount.Service}}</span>{{end}}
+        </td>
+        <td class="min-w-0">
+          {{if .Mount.IsVolume}}
+          <span class="badge badge-muted">volume</span>
+          <span class="mono faint ml-1 text-xs">{{.Mount.Name}}</span>
+          {{else}}
+          <span class="badge badge-muted">bind</span>
+          <span class="mono faint ml-1 truncate text-xs">{{.Mount.Source}}</span>
+          {{end}}
+        </td>
+        <td><span class="badge badge-muted">{{if .Mount.RW}}rw{{else}}ro{{end}}</span></td>
+        <td class="text-right">
+          {{if .Readable}}
+          <a href="{{.URL}}" class="btn py-1! text-xs">{{template "icon_folder"}}Browse</a>
+          {{else}}
+          {{/* A mount pointing at a path this host no longer has, or a volume on
+               a driver whose data is not local. Saying so beats a button that
+               leads to an apology. */}}
+          <span class="faint text-xs" title="Not readable from the dashboard">unavailable</span>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+<p class="help">
+  Read-only. Data written here survives a redeploy, which is what makes it worth looking at —
+  and worth leaving to the application to change.
+</p>
+{{else}}
+<div class="empty p-6 text-center">
+  <p class="muted text-sm">This application has no storage mounted.</p>
+  <p class="help">Everything it writes is lost when its container is replaced — fine for a stateless app, a data loss for anything else.</p>
+</div>
+{{end}}
+{{end}}

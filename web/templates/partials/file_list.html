@@ -1,0 +1,97 @@
+{{/* One directory of a volume: the trail back to its root, and its contents.
+
+     The whole thing is swapped as a unit, trail included — a breadcrumb left
+     outside the swap would keep naming the folder the reader just left. */}}
+{{define "file_list"}}
+{{/* The trail, shown only once there is one. At the root it would be a single
+     crumb repeating the name in the heading above it, which is the line that
+     was worth removing. */}}
+{{if .Crumbs}}
+<div class="file-trail">
+  <a class="file-crumb" href="{{.Target.URLFor ""}}" title="Back to the top of this volume"
+     hx-get="{{.Target.PartialFor ""}}" hx-push-url="{{.Target.URLFor ""}}">{{template "icon_folder"}}</a>
+  {{range .Crumbs}}
+  <span class="file-sep" aria-hidden="true">/</span>
+  <a class="file-crumb" href="{{$.Target.URLFor .Path}}"
+     hx-get="{{$.Target.PartialFor .Path}}" hx-push-url="{{$.Target.URLFor .Path}}">{{.Name}}</a>
+  {{end}}
+</div>
+{{end}}
+
+{{if .Error}}
+<div class="card muted mt-3 p-4 text-sm">{{.Error}}</div>
+{{else}}
+
+<div class="table-wrap file-table mt-3">
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th class="w-28 text-right">Size</th>
+        <th class="w-44">Modified</th>
+        <th class="w-16"><span class="sr-only">Download</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{/* Up one level, as a row rather than a button above the table: it is
+           where the eye already is, and it lines up with the folders it sits
+           among. */}}
+      {{if not .AtRoot}}
+      <tr>
+        <td colspan="4">
+          <a class="file-name" href="{{.Target.URLFor .Parent}}"
+             hx-get="{{.Target.PartialFor .Parent}}" hx-push-url="{{.Target.URLFor .Parent}}">
+            {{template "icon_arrow_left"}}<span class="muted">Up one level</span>
+          </a>
+        </td>
+      </tr>
+      {{end}}
+
+      {{range .Entries}}
+      <tr>
+        <td class="min-w-0">
+          {{if .Broken}}
+          {{/* Shown, not hidden: a directory that silently dropped its links
+               would look emptier than it is, and the reason this one leads
+               nowhere is worth reading. */}}
+          <span class="file-name is-broken" title="This link points outside the volume, or at something that no longer exists">
+            {{template "icon_link"}}<span class="mono truncate">{{.Name}}</span>
+          </span>
+          {{else if .IsDir}}
+          <a class="file-name" href="{{$.Target.URLFor (printf "%s/%s" $.Path .Name)}}"
+             hx-get="{{$.Target.PartialFor (printf "%s/%s" $.Path .Name)}}"
+             hx-push-url="{{$.Target.URLFor (printf "%s/%s" $.Path .Name)}}">
+            {{template "icon_folder"}}<span class="mono truncate">{{.Name}}</span>
+            {{if .Link}}{{template "icon_link"}}{{end}}
+          </a>
+          {{else}}
+          {{/* A file opens in the dialog rather than replacing the listing:
+               reading one is a look aside, and coming back should not cost a
+               second walk down the tree. */}}
+          <a class="file-name" href="{{$.Target.URLFor (printf "%s/%s" $.Path .Name)}}"
+             hx-get="{{$.Target.PreviewFor (printf "%s/%s" $.Path .Name)}}"
+             hx-target="#file-modal" hx-swap="innerHTML">
+            {{template "icon_file"}}<span class="mono truncate">{{.Name}}</span>
+            {{if .Link}}{{template "icon_link"}}{{end}}
+          </a>
+          {{end}}
+        </td>
+        <td class="mono faint text-right text-xs">{{if .IsDir}}—{{else}}{{humanSize .Size}}{{end}}</td>
+        <td class="mono faint text-xs">{{if .ModTime.IsZero}}—{{else}}{{.ModTime.Format "2006-01-02 15:04"}}{{end}}</td>
+        <td class="text-right">
+          {{if and (not .IsDir) (not .Broken)}}
+          <a class="file-get" href="{{$.Target.RawFor (printf "%s/%s" $.Path .Name)}}"
+             title="Download {{.Name}}" aria-label="Download {{.Name}}">{{template "icon_download"}}</a>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+
+      {{if not .Entries}}
+      <tr><td colspan="4" class="muted text-sm">This folder is empty.</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+{{end}}

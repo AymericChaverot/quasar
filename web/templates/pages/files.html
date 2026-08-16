@@ -1,0 +1,131 @@
+{{/* The storage explorer.
+
+     A page rather than a dialog, because walking a directory tree is a place
+     you are rather than a thing you glance at: the trail, the back button and a
+     URL that names the folder all have to keep working, and a modal has none of
+     them. Stepping between folders is still an htmx swap of the listing alone,
+     so it costs a table and not a page. Reading one file is the part that is a
+     glance, and that is what the dialog at the bottom is for. */}}
+{{define "content"}}
+<a href="{{.Target.BackURL}}" class="back-link">{{.Target.BackLabel}}</a>
+
+{{/* One line, not a page title over a path over a subtitle: the name of the
+     volume, its own path, and the trail below all said the same thing three
+     times, in type sized for a page that is mostly heading. What identifies
+     this page is a name and where you are in it, and the second of those is
+     the trail's job. The host path stays as the tooltip — it is worth having
+     and worth nobody reading twice. */}}
+<div class="mt-2 mb-5 flex flex-wrap items-center justify-between gap-3">
+  <h1 class="file-title" {{if .Target.HostPath}}title="{{.Target.HostPath}}"{{end}}>
+    {{if eq .Target.Kind "volume"}}{{template "icon_volume"}}{{else}}{{template "icon_box"}}{{end}}
+    <span class="truncate">{{.Target.Title}}</span>
+    {{if .Target.Mount}}<span class="faint">{{.Target.Mount}}</span>{{end}}
+  </h1>
+  {{if .Target.ReadOnly}}
+  {{/* Said once, at the top, rather than by the absence of buttons further
+       down: an operator who came here to fix a config file should find that
+       out before walking to it. */}}
+  <span class="chip" title="The explorer reads; it never writes to application data">read-only</span>
+  {{end}}
+</div>
+
+{{if .Reason}}
+<div class="card max-w-2xl p-4">
+  <p class="text-sm">{{.Reason}}</p>
+  <p class="help">
+    Storage is read through the host filesystem, which the dashboard mounts read-only.
+    A volume on a network driver, or a path that no longer exists on this machine, cannot be opened from here.
+  </p>
+</div>
+
+{{else if .Picker}}
+{{/* Several mounts and no choice made. The stack's own container paths are the
+     names they are known by, so they are what the list offers. */}}
+<h2 class="h-label mb-3">Mounted storage</h2>
+{{if .Target.Mounts}}
+<div class="table-wrap max-w-3xl">
+  <table>
+    <thead>
+      <tr><th>Container path</th><th>Source</th><th class="w-24">Access</th></tr>
+    </thead>
+    <tbody>
+      {{range .Target.Mounts}}
+      <tr>
+        <td>
+          <a class="file-name" href="{{$.Target.MountURL .Destination}}">
+            {{template "icon_folder"}}<span class="mono">{{.Destination}}</span>
+          </a>
+        </td>
+        <td class="mono faint truncate text-xs">{{if .IsVolume}}volume {{.Name}}{{else}}{{.Source}}{{end}}</td>
+        <td><span class="badge badge-muted">{{if .RW}}rw{{else}}ro{{end}}</span></td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="empty max-w-2xl p-6 text-center">
+  <p class="muted text-sm">This application has no storage mounted.</p>
+  <p class="help">Nothing it writes survives a redeploy — which is what you want for a stateless app, and a problem for anything else.</p>
+</div>
+{{end}}
+
+{{else}}
+{{/* The browser. Everything inside is replaced as the reader walks the tree;
+     the dialog below it is not, so a file opened from one folder does not go
+     away when the folder behind it changes.
+
+     The target lives here rather than on each link because htmx inherits it:
+     the trail and every row of a listing that was itself swapped in still aim
+     at this element, without the partial having to name it on all of them.
+     A file overrides it, since a file opens in the dialog. */}}
+<div id="file-browser" hx-target="#file-browser" hx-swap="innerHTML">
+  {{if .Error}}
+  <div class="card muted max-w-2xl p-4 text-sm">{{.Error}}</div>
+  {{else}}
+  {{template "file_list" .Listing}}
+  {{end}}
+</div>
+
+<dialog id="file-modal" class="modal" aria-label="File preview"></dialog>
+
+{{/* A link kept to a file rather than to a folder: the listing above is its
+     folder, and the file itself comes up over it as soon as the page is up. */}}
+{{if .Open}}
+<div hx-get="{{.Target.PreviewFor .Open}}" hx-trigger="load"
+     hx-target="#file-modal" hx-swap="innerHTML"></div>
+{{end}}
+
+<script>
+  (function () {
+    var dialog = document.getElementById("file-modal");
+    if (!dialog) return;
+
+    // showModal rather than the open attribute: it is what puts the listing
+    // behind inert, draws the backdrop, and makes escape close this.
+    //
+    // Opening happens after the swap rather than on the click, so a file that
+    // takes a moment to read never shows an empty panel — the dialog appears
+    // already holding the file.
+    dialog.addEventListener("htmx:afterSwap", function () {
+      if (!dialog.open) dialog.showModal();
+    });
+
+    // The close button arrives with the content, so the listener is on the
+    // dialog rather than on a button that does not exist yet.
+    dialog.addEventListener("click", function (e) {
+      // A click landing on the dialog itself is the backdrop: the panel fills
+      // it, so nothing else reaches this.
+      if (e.target === dialog || e.target.closest("[data-close-modal]")) dialog.close();
+    });
+
+    // htmx restores this page from its history cache on Back, dialog markup
+    // included — and a dialog whose content was cached mid-open comes back
+    // holding a file while the listing behind it says otherwise.
+    dialog.addEventListener("close", function () {
+      dialog.innerHTML = "";
+    });
+  })();
+</script>
+{{end}}
+{{end}}

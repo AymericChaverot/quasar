@@ -75,6 +75,18 @@
     {{end}}
   </section>
 
+  {{/* What the app keeps, and where. Admin-only for the same reason the
+       environment below it is: the files behind these mounts hold whatever the
+       application wrote, secrets included. */}}
+  {{if $.IsAdmin}}
+  <section>
+    <h2 class="h-label mb-3">Storage</h2>
+    <div hx-get="/partials/apps/{{.ID}}/storage" hx-trigger="load" hx-swap="innerHTML">
+      <div class="card h-20 animate-pulse"></div>
+    </div>
+  </section>
+  {{end}}
+
   {{/* Env content and the compose file hold the app's secrets, so a viewer
        does not get to read them, let alone edit them. */}}
   {{if $.IsAdmin}}

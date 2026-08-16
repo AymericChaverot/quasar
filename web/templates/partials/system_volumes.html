@@ -1,0 +1,70 @@
+{{/* Every Docker volume on the server, what holds it, and a way inside.
+
+     The count on the storage card above says how many there are and how much
+     they weigh; this says which ones. The pairing that matters is with the
+     reclaimable card above: a volume nothing references is one the cleanup
+     offers to delete permanently, and being able to look in it first is what
+     turns that from a leap into a decision.
+
+     Held to the same width as every other section of the page. The extra column
+     tempts it wider, and a table that alone ran past the cards above it read as
+     a different page rather than a fuller one. */}}
+{{define "system_volumes"}}
+{{if .Error}}
+<div class="card muted max-w-2xl p-4 text-sm">Volume list unavailable.</div>
+{{else if .Volumes}}
+<div class="table-wrap max-w-2xl">
+  <table>
+    <thead>
+      <tr>
+        <th>Volume</th>
+        <th>Used by</th>
+        <th class="w-24 text-right">Size</th>
+        <th class="w-28"><span class="sr-only">Browse</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Volumes}}
+      <tr>
+        <td class="min-w-0">
+          <span class="mono block truncate text-sm">{{.Volume.Name}}</span>
+          {{if not .Volume.Created.IsZero}}
+          <span class="faint text-xs">created {{.Volume.Created.Format "2006-01-02"}}</span>
+          {{end}}
+        </td>
+        <td>
+          {{if .AppName}}
+          <a href="/apps/{{.Volume.AppID}}" class="text-sm">{{.AppName}}</a>
+          {{else if .Volume.InUse}}
+          <span class="muted text-sm">a container outside Quasar</span>
+          {{else}}
+          {{/* The word the cleanup card uses for the same volumes, so the two
+               sections are visibly talking about the same thing. */}}
+          <span class="badge badge-warn">orphaned</span>
+          {{end}}
+        </td>
+        <td class="mono faint text-right text-xs">{{humanSize .Volume.Bytes}}</td>
+        <td class="text-right">
+          {{if .Volume.Local}}
+          <a href="{{.URL}}" class="btn py-1! text-xs">{{template "icon_folder"}}Browse</a>
+          {{else}}
+          <span class="faint text-xs" title="Driver: {{.Volume.Driver}}">not local</span>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+<p class="help max-w-2xl">
+  {{len .Volumes}} {{plural (len .Volumes) "volume" "volumes"}}, {{humanSize .Total}} in total.
+  An orphaned volume is one no container references any more — the cleanup above offers to delete
+  those, and nothing else on this server will bring their contents back.
+</p>
+{{else}}
+<div class="empty max-w-2xl p-6 text-center">
+  <p class="muted text-sm">No volumes on this server.</p>
+  <p class="help">Applications deployed from the catalogue keep their data in bind mounts under the apps directory instead, which the application's own page lists.</p>
+</div>
+{{end}}
+{{end}}

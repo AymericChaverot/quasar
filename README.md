@@ -164,6 +164,24 @@ dashboard redémarre quelques secondes, les applications ne sont pas touchées.
   arrêtées, leurs images et les derniers builds git de chaque app (cibles de
   rollback) ; les volumes orphelins sont proposés à part, en case à cocher,
   parce qu'eux ne se re-téléchargent pas.
+- **Explorateur de stockage** : le contenu des données persistées, en lecture
+  seule. Deux entrées : la section *Storage* de la page d'une app liste ce
+  qu'elle a monté (chemin dans le conteneur, volume ou bind, rw/ro) — lu depuis
+  les conteneurs, donc les volumes qu'une image se déclare à elle-même y
+  figurent aussi ; et la section *Volumes* de la page System nomme tous les
+  volumes du serveur, avec l'app à laquelle chacun appartient, sa taille, et un
+  bouton pour l'ouvrir. C'est le complément du nettoyage juste au-dessus :
+  avant de cocher « supprimer 3 volumes orphelins », on peut regarder ce qu'il
+  y a dedans. L'explorateur navigue dans l'arborescence (URL réelle à chaque
+  dossier, donc partageable et compatible avec le bouton Retour), prévisualise
+  les fichiers texte (256 Ko max) et les images, et télécharge n'importe quel
+  fichier. Réservé aux admins : ces fichiers contiennent ce que l'app a écrit,
+  secrets compris.
+
+  Deux limites assumées. **Lecture seule** : l'app en cours d'exécution reste
+  seule maîtresse de ses données, et le montage hôte est de toute façon `:ro`.
+  Et un volume porté par un driver réseau (NFS, EBS…) n'est pas ouvrable — ses
+  données ne sont pas sur le disque de la machine, la ligne le signale.
 - **Identifiants Git** : page dédiée (Paramètres → Git credentials). Chaque
   token déclare sa *portée* — une forge (`github.com`), une organisation
   (`github.com/acme`), un dépôt précis, ou `*` en repli — et c'est la portée la
@@ -366,8 +384,17 @@ go test ./...
   donnent accès au BuildKit du daemon : sans eux, `docker compose build` démarre
   un conteneur BuildKit **privilégié** par build à la place.
 - Sessions HTTP-only, Secure, SameSite=Lax ; mots de passe bcrypt.
-- `/` de l'hôte est monté **en lecture seule** dans le dashboard uniquement
-  pour les métriques disque (`HOST_ROOT`).
+- `/` de l'hôte est monté **en lecture seule** dans le dashboard (`HOST_ROOT`) :
+  métriques disque, store ACME, et contenu des volumes Docker pour
+  l'explorateur de stockage. Celui-ci ne sort jamais de la racine qu'on lui a
+  donnée — le chemin d'URL est normalisé *avant* d'être joint (un `..` n'a donc
+  rien à remonter), puis résolu à travers ses liens symboliques et vérifié
+  comme descendant de cette racine. C'est la deuxième moitié qui compte : les
+  fichiers de ces arborescences sont écrits par les conteneurs applicatifs, qui
+  peuvent parfaitement y déposer un lien vers `/`. Les fichiers sortent en
+  `Content-Disposition: attachment` + `nosniff`, sauf une liste fermée de types
+  d'images (SVG exclu, qui exécuterait son script dans l'origine du dashboard).
+  Routes réservées aux admins.
 - Mode compose (injecté ou détecté dans un repo Git) : Quasar réécrit le
   fichier pour poser les labels Traefik sur un seul service, celui qui sert le
   site. Les ports que la stack publie sur l'hôte en dehors de 80/443 sont

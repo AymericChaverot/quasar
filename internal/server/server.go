@@ -289,6 +289,13 @@ func (s *Server) routes() {
 	s.admin("GET /system/updating", s.handleUpdating)
 	s.admin("GET /system/update/status", s.handleUpdateStatus)
 
+	// The storage explorer, over an app's mounts and over any Docker volume.
+	// Admin-only: what it opens is application data — databases, uploads, the
+	// secrets some images write to a config file — which is the same material
+	// the backup archive holds, and that is admin-only too.
+	s.admin("GET /files/{kind}/{ref}", s.handleFiles)
+	s.admin("GET /partials/files/{kind}/{ref}", s.handleFilesPartial)
+
 	s.viewer("GET /apps/{id}", s.handleAppDetail)
 	s.viewer("GET /apps/{id}/logs", s.handleAppLogs)
 	// Per-container views of a compose stack. {name} is resolved against the
@@ -341,6 +348,10 @@ func (s *Server) routes() {
 	s.viewer("GET /partials/system/certs", s.handleSystemCertsPartial)
 	s.viewer("GET /partials/system/storage", s.handleSystemStoragePartial)
 	s.viewer("GET /partials/system/app-sizes", s.handleSystemAppSizesPartial)
+	// Admin-only like the explorer it leads into: the list names every volume on
+	// the server and links straight into its contents.
+	s.admin("GET /partials/system/volumes", s.handleSystemVolumesPartial)
+	s.admin("GET /partials/apps/{id}/storage", s.handleAppStoragePartial)
 	s.viewer("GET /partials/apps", s.handleAppsPartial)
 	s.viewer("GET /partials/deploy-fields", s.handleDeployFields)
 	s.viewer("GET /partials/apps/{id}/stats", s.handleAppStatsPartial)
