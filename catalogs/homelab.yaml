@@ -1,0 +1,98 @@
+# Two web applications filed under a category Quasar does not ship, which is
+# the other half of a catalogue: the entries are yours, and so is the shelf
+# they sit on. "Homelab" appears as a filter button beside the built-in ones.
+#
+# These are also where the placeholders Quasar answers by itself earn their
+# keep — {{HOST}} and {{URL}} are the address the application will be served
+# on, known only once the subdomain is settled, and {{RANDOM}} is a fresh
+# secret per occurrence.
+name: Homelab extras
+
+categories:
+  - Homelab
+
+entries:
+  # A bookmark manager that insists on being told which origin its forms are
+  # posted from; getting that wrong shows up as a login page that rejects
+  # itself, so {{URL}} answers it rather than the operator.
+  - id: linkding
+    name: Linkding
+    description: Bookmark manager with tags, full-text search and a browser extension
+    category: Homelab
+    port: 9090
+    image_ref: sissbruecker/linkding:latest
+    data_mount: /etc/linkding/data
+
+    params:
+      - name: USERNAME
+        label: Admin user
+        default: admin
+        help: Created on first start only. Its password is generated below and written to the application's .env.
+
+    env: |
+      LD_SUPERUSER_NAME={{USERNAME}}
+      LD_SUPERUSER_PASSWORD={{RANDOM}}
+      LD_CSRF_TRUSTED_ORIGINS={{URL}}
+
+  # A two-service stack, and the reason a shared secret belongs in the env
+  # rather than in the compose file: {{RANDOM}} draws a fresh value at every
+  # occurrence, so the application and its database would end up with two
+  # different passwords for one account. Written once here, read back as
+  # ${DB_PASSWORD} by both services.
+  - id: shlink
+    name: Shlink
+    description: URL shortener with its own database and a REST API
+    category: Homelab
+    deploy_type: compose
+    compose_service: shlink
+    port: 8080
+
+    app_name: "Shlink ({{REDIRECT_CODE}})"
+    params:
+      - name: TAG
+        label: Image tag
+        default: stable
+        help: A published tag of shlinkio/shlink, or stable.
+      - name: REDIRECT_CODE
+        label: Redirect status
+        kind: select
+        default: "302"
+        options: ["302", "301"]
+        help: 301 is cached by browsers and hard to take back; 302 keeps every visit coming through Shlink, which is what the statistics count.
+
+    # {{HOST}} is the hostname the application is served on. Shlink builds
+    # every short link from it, so a wrong answer here is a wrong answer in
+    # every link already handed out.
+    env: |
+      SHLINK_TAG={{TAG}}
+      DEFAULT_DOMAIN={{HOST}}
+      REDIRECT_STATUS_CODE={{REDIRECT_CODE}}
+      DB_PASSWORD={{RANDOM}}
+      INITIAL_API_KEY={{RANDOM}}
+
+    compose: |
+      services:
+        shlink:
+          image: shlinkio/shlink:${SHLINK_TAG}
+          environment:
+            DEFAULT_DOMAIN: ${DEFAULT_DOMAIN}
+            IS_HTTPS_ENABLED: "true"
+            REDIRECT_STATUS_CODE: ${REDIRECT_STATUS_CODE}
+            DB_DRIVER: postgres
+            DB_HOST: db
+            DB_NAME: shlink
+            DB_USER: shlink
+            DB_PASSWORD: ${DB_PASSWORD}
+            INITIAL_API_KEY: ${INITIAL_API_KEY}
+          depends_on:
+            - db
+          restart: unless-stopped
+        db:
+          image: postgres:16-alpine
+          environment:
+            POSTGRES_DB: shlink
+            POSTGRES_USER: shlink
+            POSTGRES_PASSWORD: ${DB_PASSWORD}
+          volumes:
+            - ./data/db:/var/lib/postgresql/data
+          restart: unless-stopped

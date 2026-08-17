@@ -1,0 +1,135 @@
+# Game servers, asked about rather than duplicated. Every entry here is one
+# card that covers however many servers you run: the version, the flavour and
+# the port are questions, not copies of the entry.
+#
+# {{NAME}} is answered by Quasar when the entry is picked; ${NAME} is left
+# alone for docker compose to read from the .env at run time.
+name: Game servers
+
+# A category already in Quasar's list keeps its place; a new one is appended as
+# a filter button of its own.
+categories:
+  - Game servers
+
+entries:
+  # The edition Quasar does not ship: Bedrock is what consoles, phones and the
+  # Windows store client speak, and the Java server will not serve them. Like
+  # the Java image, this one is driven entirely by environment named after
+  # server.properties keys, so the whole matrix collapses into five questions.
+  - id: minecraft-bedrock
+    name: Minecraft (Bedrock)
+    description: Dedicated server for the console, mobile and Windows edition
+    category: Game servers
+    deploy_type: compose
+    compose_service: minecraft
+    port: 19132
+    raw: true
+    note: Players connect over UDP. Running more than one server means giving each its own port.
+
+    # Both carry what was picked, so the second world neither collides with the
+    # first on the address nor arrives on the dashboard under its name.
+    app_name: "Minecraft Bedrock — {{LEVEL_NAME}}"
+    subdomain: "mcbe-{{LEVEL_NAME}}"
+    params:
+      - name: LEVEL_NAME
+        label: World name
+        default: Bedrock level
+        help: Names the world folder under data/, and this server everywhere else.
+      - name: GAMEMODE
+        label: Game mode
+        kind: select
+        default: survival
+        options: [survival, creative, adventure]
+      - name: DIFFICULTY
+        label: Difficulty
+        kind: select
+        default: easy
+        options: [peaceful, easy, normal, hard]
+      - name: MAX_PLAYERS
+        label: Players
+        kind: number
+        default: "10"
+      - name: HOST_PORT
+        label: Port
+        kind: port
+        default: "19132"
+        help: 19132 is the one clients try by default. Give the next server 19134.
+
+    env: |
+      LEVEL_NAME={{LEVEL_NAME}}
+      GAMEMODE={{GAMEMODE}}
+      DIFFICULTY={{DIFFICULTY}}
+      MAX_PLAYERS={{MAX_PLAYERS}}
+      HOST_PORT={{HOST_PORT}}
+
+    compose: |
+      services:
+        minecraft:
+          image: itzg/minecraft-bedrock-server:latest
+          ports:
+            - "${HOST_PORT}:19132/udp"
+          environment:
+            EULA: "TRUE"
+            LEVEL_NAME: ${LEVEL_NAME}
+            GAMEMODE: ${GAMEMODE}
+            DIFFICULTY: ${DIFFICULTY}
+            MAX_PLAYERS: ${MAX_PLAYERS}
+          volumes:
+            - ./data:/data
+          restart: unless-stopped
+
+  # An entry reusing a built-in id replaces that card where it stood rather
+  # than appearing beside it. This is Quasar's own Valheim entry with the
+  # questions it never asked, which is the usual reason to override one: the
+  # stack was right, the defaults were somebody else's.
+  - id: valheim
+    name: Valheim
+    description: Dedicated world, named and listed the way you want it
+    category: Game servers
+    deploy_type: compose
+    compose_service: valheim
+    port: 2456
+    raw: true
+    note: Ports 2456-2458/udp, and they stay fixed — the range is three consecutive ports, so there is nothing useful to ask.
+
+    app_name: "Valheim — {{WORLD_NAME}}"
+    subdomain: "valheim-{{WORLD_NAME}}"
+    params:
+      - name: SERVER_NAME
+        label: Server name
+        default: Quasar
+        help: What the server calls itself in the in-game browser.
+      - name: WORLD_NAME
+        label: World
+        default: Dedicated
+        help: The save to load. A name nothing has used yet starts a new world.
+      - name: PUBLIC
+        label: Listed publicly
+        kind: select
+        default: "false"
+        options: ["false", "true"]
+        help: Listed servers show up in the community browser; unlisted ones are joined by address.
+
+    # The password is not a question: {{RANDOM}} draws a fresh one here, and
+    # the deployed application's .env is where to read it back.
+    env: |
+      SERVER_NAME={{SERVER_NAME}}
+      WORLD_NAME={{WORLD_NAME}}
+      SERVER_PUBLIC={{PUBLIC}}
+      SERVER_PASS={{RANDOM}}
+
+    compose: |
+      services:
+        valheim:
+          image: lloesche/valheim-server:latest
+          ports:
+            - "2456-2458:2456-2458/udp"
+          environment:
+            SERVER_NAME: ${SERVER_NAME}
+            WORLD_NAME: ${WORLD_NAME}
+            SERVER_PASS: ${SERVER_PASS}
+            SERVER_PUBLIC: ${SERVER_PUBLIC}
+          volumes:
+            - ./data/config:/config
+            - ./data/server:/opt/valheim
+          restart: unless-stopped

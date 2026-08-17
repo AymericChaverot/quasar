@@ -1,0 +1,71 @@
+# Development tooling, pinned to the version the work actually needs. The
+# parameter lands in the image reference itself here, which is the shortest
+# useful shape a parameterised entry takes: one card, every published version.
+name: Dev stacks
+
+categories:
+  - Development
+  - Databases
+
+entries:
+  # A database is the thing least worth having one card per version of. The
+  # major is a question, and the answer is part of the image tag, the name and
+  # the address — so a 16 for the old project sits beside a 17 for the new one.
+  - id: postgres-pinned
+    name: PostgreSQL (any major)
+    description: Database on the major version the project was written against
+    category: Databases
+    port: 5432
+    raw: true
+    image_ref: "postgres:{{VERSION}}-alpine"
+    data_mount: /var/lib/postgresql/data
+
+    app_name: "PostgreSQL {{VERSION}} ({{DB}})"
+    subdomain: "pg-{{VERSION}}-{{DB}}"
+    params:
+      - name: VERSION
+        label: Major version
+        kind: select
+        default: "17"
+        options: ["17", "16", "15", "14"]
+        help: A data directory written by one major is not readable by an older one, so pick the version the application expects.
+      - name: DB
+        label: Database name
+        default: app
+
+    env: |
+      POSTGRES_USER=app
+      POSTGRES_PASSWORD={{RANDOM}}
+      POSTGRES_DB={{DB}}
+
+  # One editor per project rather than one editor with every project in it:
+  # each deployment gets its own address, its own password and its own data
+  # directory, and the project name is only there to tell them apart.
+  - id: code-server
+    name: code-server
+    description: VS Code in the browser, one instance per project
+    category: Development
+    port: 8443
+    image_ref: "linuxserver/code-server:{{TAG}}"
+    data_mount: /config
+
+    app_name: "code-server ({{PROJECT}})"
+    subdomain: "code-{{PROJECT}}"
+    params:
+      - name: PROJECT
+        label: Project
+        default: sandbox
+        help: Names this instance and its address. The files live in the application's own data directory.
+      - name: TAG
+        label: Image tag
+        default: latest
+        help: A published tag of linuxserver/code-server, or latest.
+
+    # The password is generated here rather than asked for; read it back from
+    # the deployed application's .env.
+    env: |
+      PUID=1000
+      PGID=1000
+      TZ=Etc/UTC
+      PASSWORD={{RANDOM}}
+      DEFAULT_WORKSPACE=/config/workspace
