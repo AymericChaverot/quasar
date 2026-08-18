@@ -297,6 +297,14 @@ func (s *Server) handleCatalogFetch(w http.ResponseWriter, r *http.Request) {
 const maxCatalogBytes = 1 << 20
 
 func fetchCatalog(raw string) (string, error) {
+	return fetchDocument(raw, "catalogue", maxCatalogBytes)
+}
+
+// fetchDocument reads a YAML document an operator asked for by address, once,
+// now. What it is called is only for the message a document too large comes
+// back with, which is the one place the difference between a catalogue and a
+// station is worth stating.
+func fetchDocument(raw, kind string, max int) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return "", errors.New("That is not an http or https URL.")
@@ -310,12 +318,12 @@ func fetchCatalog(raw string) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("%s answered %s", u, resp.Status)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxCatalogBytes+1))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(max)+1))
 	if err != nil {
 		return "", fmt.Errorf("reading %s: %w", u, err)
 	}
-	if len(body) > maxCatalogBytes {
-		return "", fmt.Errorf("%s is larger than a catalogue has any business being", u)
+	if len(body) > max {
+		return "", fmt.Errorf("%s is larger than a %s has any business being", u, kind)
 	}
 	return strings.ReplaceAll(string(body), "\r\n", "\n"), nil
 }

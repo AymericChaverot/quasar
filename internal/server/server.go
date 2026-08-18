@@ -247,6 +247,15 @@ func (s *Server) routes() {
 	s.admin("GET /settings/catalogs/{id}/entries/{entry}", s.handleCatalogEntryForm)
 	s.admin("POST /settings/catalogs/{id}/entries/{entry}", s.handleCatalogEntrySave)
 	s.admin("POST /settings/catalogs/{id}/entries/{entry}/delete", s.handleCatalogEntryDelete)
+	// A station is a program somebody else wrote, and installing one is
+	// accepting what it may reach. Reading the page is an admin's business for
+	// the same reason writing a catalogue is.
+	s.admin("GET /settings/stations", s.handleStations)
+	s.admin("POST /settings/stations", s.handleStationInstall)
+	s.admin("POST /settings/stations/review", s.handleStationReview)
+	s.admin("POST /settings/stations/fetch", s.handleStationFetch)
+	s.admin("POST /settings/stations/{id}/toggle", s.handleStationToggle)
+	s.admin("POST /settings/stations/{id}/delete", s.handleStationDelete)
 	s.admin("POST /settings/notify-test", s.handleNotifyTest)
 	s.admin("POST /settings/users", s.handleUserCreate)
 	s.admin("POST /settings/users/{id}/role", s.handleUserRole)

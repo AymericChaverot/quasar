@@ -233,6 +233,27 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
   </section>
 
   <section class="space-y-4">
+    <h2 class="h-label">Stations</h2>
+    <a href="/settings/stations" class="card nav-card">
+      <span class="cred-mark" aria-hidden="true">{{template "icon_layers"}}</span>
+      <span class="min-w-0 flex-1">
+        <span class="block text-sm font-medium">
+          {{if .StationCount}}
+            {{.StationCount}} {{plural .StationCount "station" "stations"}} installed
+          {{else}}
+            No station installed
+          {{end}}
+        </span>
+        <span class="help block mt-0!">
+          Applications that arrive with a control surface of their own. A station is a program, so
+          installing one means reading what it asks to be allowed to reach, and accepting it.
+        </span>
+      </span>
+      <span class="faint shrink-0" aria-hidden="true">→</span>
+    </a>
+  </section>
+
+  <section class="space-y-4">
     <h2 class="h-label">Git credentials</h2>
     <a href="/settings/git" class="card nav-card">
       <span class="cred-mark" aria-hidden="true">{{template "icon_key"}}</span>

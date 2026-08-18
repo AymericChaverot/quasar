@@ -108,6 +108,7 @@ func (s *Server) settingsData(r *http.Request) map[string]any {
 		// replace — the merged count, not the sum.
 		"CatalogEntryCount": len(s.catalog().Templates),
 		"CatalogCount":      len(s.customCatalogs()),
+		"StationCount":      len(s.stationViews()),
 		"NotifyURL":         db.GetSetting(s.db, db.SettingNotifyURL),
 		"NtfyURL":           db.GetSetting(s.db, db.SettingNtfyURL),
 		"SMTPHost":          db.GetSetting(s.db, db.SettingSMTPHost),

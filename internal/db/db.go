@@ -147,6 +147,30 @@ CREATE TABLE IF NOT EXISTS catalogs (
 	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- An installed station: an application that arrives with a control surface of
+-- its own, kept as the YAML document it was pasted or fetched as. station_id
+-- is the document's own id and is unique, because a station is a program and
+-- one must not silently replace another.
+--
+-- Three revision columns rather than a revisions table: yaml is what every
+-- application running this station is served from, prev_yaml is the one click
+-- back from a bad update, and pending_yaml is a revision that has been fetched
+-- and is waiting to be approved because its permissions changed.
+CREATE TABLE IF NOT EXISTS stations (
+	id           INTEGER PRIMARY KEY AUTOINCREMENT,
+	station_id   TEXT NOT NULL UNIQUE,
+	name         TEXT NOT NULL,
+	source_url   TEXT NOT NULL DEFAULT '',
+	yaml         TEXT NOT NULL,
+	perms_hash   TEXT NOT NULL,
+	prev_yaml    TEXT NOT NULL DEFAULT '',
+	pending_yaml TEXT NOT NULL DEFAULT '',
+	pending_hash TEXT NOT NULL DEFAULT '',
+	enabled      INTEGER NOT NULL DEFAULT 1,
+	position     INTEGER NOT NULL DEFAULT 0,
+	updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS api_tokens (
 	id           INTEGER PRIMARY KEY AUTOINCREMENT,
 	name         TEXT NOT NULL,
