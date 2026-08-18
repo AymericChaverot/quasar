@@ -68,6 +68,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("server: %v", err)
 	}
+	// A station's hooks run without anybody having pressed anything, so the
+	// loop that fires them belongs here rather than inside a request.
+	srv.StartStationHooks()
 
 	log.Printf("quasar listening on %s (domain: %s)", cfg.ListenAddr, cfg.Domain)
 	if err := http.ListenAndServe(cfg.ListenAddr, srv); err != nil {
