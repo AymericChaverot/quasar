@@ -72,6 +72,12 @@ type PanelView struct {
 	Items  []Item
 	Text   string
 	Fields []FilledField
+
+	// Stream is where a log pane connects, and Embed where an iframe points —
+	// both resolved by the parent, because a container's address means nothing
+	// in a browser and a station never gets to write one.
+	Stream string
+	Embed  string
 }
 
 // Row is one line of a table.
@@ -150,6 +156,25 @@ func Render(appID string, p Panel, data json.RawMessage) PanelView {
 // Failed is a panel whose action did not come back at all.
 func Failed(appID string, p Panel, problem string) PanelView {
 	return PanelView{Panel: p, AppID: appID, Problem: problem}
+}
+
+// Streaming is a log pane, pointed at the container the parent resolved.
+func Streaming(appID string, p Panel, url string) PanelView {
+	return PanelView{Panel: p, AppID: appID, Stream: url}
+}
+
+// Embedded is an iframe, pointed at the address the parent will proxy.
+func Embedded(appID string, p Panel, url string) PanelView {
+	return PanelView{Panel: p, AppID: appID, Embed: url}
+}
+
+// EmbedHeight is how tall an embedded page is drawn, with a workable default
+// so a document that said nothing still gets something to look at.
+func (v PanelView) EmbedHeight() string {
+	if v.Panel.Height != "" {
+		return v.Panel.Height
+	}
+	return "420px"
 }
 
 // Empty reports a table that came back with nothing in it, which is a state

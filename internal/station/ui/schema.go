@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -197,6 +198,24 @@ func (u UI) Services() []string {
 	return out
 }
 
+// Embeds lists the services an iframe points at, with the port each one is
+// reached on. A station's validation holds them to the same permission a
+// script's own request would need.
+func (u UI) Embeds() []ServiceRef {
+	var out []ServiceRef
+	for _, t := range u.Tabs {
+		eachPanel(t.Panels, func(p Panel) {
+			if p.Type != "iframe" {
+				return
+			}
+			if ref, ok := ParseServiceSrc(p.Src); ok {
+				out = append(out, ref)
+			}
+		})
+	}
+	return out
+}
+
 // eachPanel walks the panels of a tab, nested ones included.
 func eachPanel(panels []Panel, fn func(Panel)) {
 	for _, p := range panels {
@@ -209,6 +228,41 @@ func eachPanel(panels []Panel, fn func(Panel)) {
 // refresh lists an action returns, so they are held to a shape that survives
 // both.
 var idRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
+
+// serviceRefRe is the {{service:name:port}} an iframe's src is written with.
+var serviceRefRe = regexp.MustCompile(`^\{\{service:([A-Za-z0-9][A-Za-z0-9._-]*):([0-9]{1,5})\}\}(.*)$`)
+
+// ServiceRef is what an iframe points at: one of the application's own
+// containers, named, on a port the document declared.
+//
+// The address itself never appears in the document and never reaches the
+// browser. A container's address is not routable from anywhere but this
+// server, so the page loads the embed through Quasar, which is also where the
+// permission is checked — and no port has to be published to the world for a
+// map viewer to be on the page.
+type ServiceRef struct {
+	Service string
+	Port    int
+	Path    string
+}
+
+// ParseServiceSrc reads an iframe's src, and reports whether it names a
+// service at all. Anything else is an ordinary URL and is left alone.
+func ParseServiceSrc(src string) (ServiceRef, bool) {
+	m := serviceRefRe.FindStringSubmatch(strings.TrimSpace(src))
+	if m == nil {
+		return ServiceRef{}, false
+	}
+	port, err := strconv.Atoi(m[2])
+	if err != nil || port <= 0 || port > 65535 {
+		return ServiceRef{}, false
+	}
+	path := m[3]
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return ServiceRef{Service: m[1], Port: port, Path: path}, true
+}
 
 // Validate reports everything wrong with the interface rather than the first
 // thing, the way the catalogue's does: whoever pasted the document wants the
@@ -364,8 +418,15 @@ func validatePanel(p Panel, seen map[string]bool) []error {
 			add("a confirm panel needs the question to ask")
 		}
 	case "iframe":
-		if p.Src == "" {
+		switch {
+		case p.Src == "":
 			add("an iframe needs a src")
+		case strings.HasPrefix(strings.TrimSpace(p.Src), "{{"):
+			if _, ok := ParseServiceSrc(p.Src); !ok {
+				add("src %q is not a service reference; write {{service:name:port}} followed by a path", p.Src)
+			}
+		case !strings.HasPrefix(p.Src, "https://"):
+			add("src %q: an iframe reaches one of this application's own services, or an https address", p.Src)
 		}
 	case "section", "grid":
 		if len(p.Panels) == 0 {

@@ -273,6 +273,10 @@ func (s *Server) routes() {
 	// runs somebody else's script with whatever the document was granted —
 	// which is not a read, whatever it looks like on the page.
 	s.admin("GET /apps/{id}/station/panel/{panel}", s.handleStationPanelPartial)
+	// An embedded page is somebody else's application, proxied onto this one:
+	// it makes whatever requests it makes, so this takes every method. Where it
+	// goes is read out of the document and never out of the URL.
+	s.admin("/apps/{id}/station/embed/{panel}/{path...}", s.handleStationEmbed)
 	s.admin("POST /apps/{id}/station/action/{action}", s.handleStationAction)
 	s.admin("POST /settings/stations/{id}/toggle", s.handleStationToggle)
 	s.admin("POST /settings/stations/{id}/delete", s.handleStationDelete)

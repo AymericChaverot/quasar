@@ -139,6 +139,20 @@ func (s Station) validateServiceNames() []error {
 			errs = append(errs, fmt.Errorf("a log panel reads the service %q, which the logs permission does not cover", name))
 		}
 	}
+
+	// An embedded page is reached through Quasar, on the application's own
+	// network, which is the same reach a script's own request would need and
+	// therefore the same permission.
+	for _, ref := range s.UI.Embeds() {
+		switch {
+		case !slices.Contains(defined, ref.Service):
+			errs = append(errs, fmt.Errorf("an iframe points at the service %q, which the compose file does not define; it defines %s",
+				ref.Service, strings.Join(defined, ", ")))
+		case !s.Permissions.AllowsInternal(ref.Service, ref.Port):
+			errs = append(errs, fmt.Errorf("an iframe points at %s on port %d, which the net.internal permission does not cover",
+				ref.Service, ref.Port))
+		}
+	}
 	return errs
 }
 

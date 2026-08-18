@@ -120,6 +120,48 @@ func TestAnActionsRefreshReachesTheRightPanel(t *testing.T) {
 	}
 }
 
+// Every component the format offers draws something. A type a document may
+// declare and the page cannot draw is a blank card with no explanation, which
+// is the one failure this whole file exists to prevent.
+func TestEveryComponentDraws(t *testing.T) {
+	// Enough of a panel for each type to have what it reads, and data of the
+	// shape its own renderer asks for.
+	data := map[string]string{
+		"table": `[{"name":"Sodium","version":"0.5.8"}]`,
+		"stat":  `{"value":3,"suffix":"/ 20"}`,
+		"gauge": `{"value":42,"label":"disk"}`,
+		"list":  `["one","two"]`, "timeline": `[{"label":"deployed","note":"2m ago"}]`,
+		"keyvalue": `{"Loader":"FABRIC"}`,
+		"markdown": `"Some words."`, "code": `"a = 1"`, "banner": `"Heads up."`,
+		"image": `"data:image/svg+xml;base64,PHN2Zy8+"`,
+	}
+
+	for _, kind := range ui.PanelTypes() {
+		panel := ui.Panel{ID: "p", Type: kind, Title: "A panel", Label: "Do it",
+			Action: "go", Confirm: "Sure?", Src: "{{service:app:8080}}", Service: "app",
+			Columns: []ui.Column{{Key: "name", Label: "Mod"}},
+			Fields:  []ui.Field{{Name: "url", Label: "URL"}},
+			Submit:  ui.Action{Label: "Send", Action: "go"},
+			Panels:  []ui.Panel{{ID: "inner", Type: "stat"}},
+		}
+		v := ui.Render("abcd1234", panel, json.RawMessage(data[kind]))
+		if kind == "log" {
+			v = ui.Streaming("abcd1234", panel, "/apps/abcd1234/containers/app/logs")
+		}
+		if kind == "iframe" {
+			v = ui.Embedded("abcd1234", panel, "/apps/abcd1234/station/embed/p/")
+		}
+
+		page := renderPanelPartial(t, v)
+		if strings.Contains(page, "cannot draw") {
+			t.Errorf("%s: the page has no component for it", kind)
+		}
+		if v.Problem != "" {
+			t.Errorf("%s: %s", kind, v.Problem)
+		}
+	}
+}
+
 // A station's script exports helpers as well as actions, and the name of the
 // one to run arrives in a URL. Only what the interface actually reaches may be
 // run.

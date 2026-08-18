@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"strconv"
 	"strings"
 
 	"quasar/internal/db"
@@ -95,6 +99,19 @@ func (s *Server) handleStationPanelPartial(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Two components read something other than the script: a log pane reads a
+	// container, an iframe points at one. Both are resolved here, because an
+	// address on the application's own network means nothing in a browser and
+	// a station never gets to write one.
+	switch panel.Type {
+	case "log":
+		s.renderPartial(w, "station_panel", s.logPanel(r, a, doc, panel))
+		return
+	case "iframe":
+		s.renderPartial(w, "station_panel", embedPanel(a, panel))
+		return
+	}
+
 	// Static content never runs anything, which is the point of having it:
 	// a heading, a note, a table of what the document itself says.
 	if panel.Source.Static != nil {
@@ -117,6 +134,85 @@ func (s *Server) handleStationPanelPartial(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	s.renderPartial(w, "station_panel", ui.Render(a.ID, panel, result.Data))
+}
+
+// logPanel points Quasar's own log pane at the container behind a named
+// service. The pane, the stream and the follow-the-tail behaviour are the ones
+// every other page uses; what a station chose is which service to look at.
+func (s *Server) logPanel(r *http.Request, a *db.App, doc station.Station, panel ui.Panel) ui.PanelView {
+	if !doc.Permissions.AllowsLogs(panel.Service) {
+		return ui.Failed(a.ID, panel, denied("reading the logs of "+panel.Service, "logs").Error())
+	}
+	if s.dock == nil {
+		return ui.Failed(a.ID, panel, "this dashboard has no connection to Docker")
+	}
+	name, err := s.dock.ServiceHost(r.Context(), a, panel.Service)
+	if err != nil {
+		return ui.Failed(a.ID, panel, err.Error())
+	}
+	return ui.Streaming(a.ID, panel, fmt.Sprintf("/apps/%s/containers/%s/logs", a.ID, name))
+}
+
+// embedPanel points an iframe at this application's own service, through
+// Quasar. A container's address is routable from this server and from nowhere
+// else, so the page cannot load it directly — and going through here is also
+// where the permission gets checked.
+func embedPanel(a *db.App, panel ui.Panel) ui.PanelView {
+	if _, ok := ui.ParseServiceSrc(panel.Src); ok {
+		return ui.Embedded(a.ID, panel, fmt.Sprintf("/apps/%s/station/embed/%s/", a.ID, panel.ID))
+	}
+	// An ordinary address, which the browser can fetch for itself. Validation
+	// has already held it to https.
+	return ui.Embedded(a.ID, panel, panel.Src)
+}
+
+// handleStationEmbed proxies one of the application's own services onto the
+// page.
+//
+// Everything about where it goes comes from the document: the service and the
+// port are read out of the panel, checked against net.internal, and resolved
+// to a container. Nothing in the URL decides the target — only which panel is
+// being drawn, and how far into it the browser has navigated.
+func (s *Server) handleStationEmbed(w http.ResponseWriter, r *http.Request) {
+	a, doc, panel, ok := s.stationPanel(w, r)
+	if !ok {
+		return
+	}
+	ref, ok := ui.ParseServiceSrc(panel.Src)
+	if !ok || panel.Type != "iframe" {
+		http.Error(w, "this panel embeds nothing", http.StatusNotFound)
+		return
+	}
+	if !doc.Permissions.AllowsInternal(ref.Service, ref.Port) {
+		http.Error(w, denied("embedding "+ref.Service, "net.internal").Error(), http.StatusForbidden)
+		return
+	}
+	if s.dock == nil {
+		http.Error(w, "this dashboard has no connection to Docker", http.StatusServiceUnavailable)
+		return
+	}
+	host, err := s.dock.ServiceHost(r.Context(), a, ref.Service)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	target := &url.URL{Scheme: "http", Host: net.JoinHostPort(host, strconv.Itoa(ref.Port))}
+	prefix := fmt.Sprintf("/apps/%s/station/embed/%s", a.ID, panel.ID)
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
+		http.Error(w, "this service did not answer: "+err.Error(), http.StatusBadGateway)
+	}
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		// The embedded page is somebody else's, served from this origin. It
+		// gets no frame of its own and no scripts from anywhere but where it
+		// came from.
+		resp.Header.Del("X-Frame-Options")
+		resp.Header.Del("Content-Security-Policy")
+		resp.Header.Set("Content-Security-Policy", "frame-ancestors 'self'; sandbox allow-scripts allow-same-origin allow-forms")
+		return nil
+	}
+	http.StripPrefix(prefix, proxy).ServeHTTP(w, r)
 }
 
 // handleStationAction runs an action and applies what it returned.

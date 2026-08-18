@@ -2498,3 +2498,39 @@ button[disabled] { cursor: progress; opacity: 0.65; }
 .station-tone-err { border-color: var(--err); }
 
 .station-prose { color: var(--text); }
+
+/* A bar that fills, for the one number a gauge is about. */
+.station-gauge {
+  margin-top: 0.5rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.station-gauge > span {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  background: var(--accent);
+}
+
+/* A list of things that happened, in the order they happened. */
+.station-timeline {
+  list-style: none;
+  padding-left: 1rem;
+  border-left: var(--border-w) solid var(--border);
+}
+.station-timeline > li {
+  position: relative;
+  padding-bottom: 0.625rem;
+}
+.station-timeline > li::before {
+  content: "";
+  position: absolute;
+  left: -1.3125rem;
+  top: 0.45rem;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 999px;
+  background: var(--accent);
+}

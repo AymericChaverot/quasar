@@ -76,8 +76,57 @@
     {{end}}
   </dl>
 
+  {{else if eq $panel.Type "gauge"}}
+  <p class="station-stat">
+    {{.Stat.Value}}{{with .Stat.Suffix}}<span class="faint text-base"> {{.}}</span>{{end}}
+  </p>
+  <div class="station-gauge"><span style="width: {{.Stat.Value}}%"></span></div>
+  {{with .Stat.Label}}<p class="faint mt-1 text-xs">{{.}}</p>{{end}}
+
+  {{else if eq $panel.Type "list"}}
+  <ul class="space-y-1 text-sm">
+    {{range .Items}}
+    <li class="flex items-baseline justify-between gap-3">
+      <span>{{.Label}}</span>{{with .Note}}<span class="faint mono text-xs">{{.}}</span>{{end}}
+    </li>
+    {{else}}
+    <li class="faint text-sm">{{$.EmptyText}}</li>
+    {{end}}
+  </ul>
+
+  {{else if eq $panel.Type "timeline"}}
+  <ol class="station-timeline text-sm">
+    {{range .Items}}
+    <li><span>{{.Label}}</span>{{with .Note}}<span class="faint block text-xs">{{.}}</span>{{end}}</li>
+    {{else}}
+    <li class="faint">{{$.EmptyText}}</li>
+    {{end}}
+  </ol>
+
   {{else if eq $panel.Type "markdown"}}
   <div class="station-prose text-sm">{{template "station_markdown" .Text}}</div>
+
+  {{else if eq $panel.Type "code"}}
+  <pre class="mono overflow-x-auto rounded p-3 text-xs" style="background: var(--surface-2)">{{.Text}}</pre>
+
+  {{else if eq $panel.Type "banner"}}
+  <p class="text-sm">{{.Text}}</p>
+
+  {{else if eq $panel.Type "divider"}}
+  <hr style="border-color: var(--border)">
+
+  {{else if eq $panel.Type "image"}}
+  {{/* A data: URI or a path the script returned; either way it is an
+       attribute, never markup. */}}
+  <img src="{{.Text}}" alt="{{$panel.Title}}" class="max-w-full rounded">
+
+  {{else if eq $panel.Type "log"}}
+  {{if .Stream}}{{template "log_pane" .Stream}}{{end}}
+
+  {{else if eq $panel.Type "iframe"}}
+  <iframe src="{{.Embed}}" class="w-full rounded" style="height: {{.EmbedHeight}}; border: 0"
+          sandbox="allow-scripts allow-same-origin allow-forms" loading="lazy"
+          title="{{if $panel.Title}}{{$panel.Title}}{{else}}Embedded view{{end}}"></iframe>
 
   {{else if eq $panel.Type "form"}}
   <form hx-post="/apps/{{$app}}/station/action/{{$panel.Submit.Action}}"
@@ -117,14 +166,29 @@
           hx-target="#station-message" hx-swap="innerHTML"
           {{with $panel.Confirm}}hx-confirm="{{.}}"{{end}}>{{$panel.Label}}</button>
 
-  {{else if eq $panel.Type "section"}}
+  {{else if eq $panel.Type "search"}}
+  <form hx-post="/apps/{{$app}}/station/action/{{$panel.Action}}"
+        hx-target="#station-message" hx-swap="innerHTML" class="flex gap-2">
+    <input name="q" type="search" class="input" autocomplete="off"
+           placeholder="{{if $panel.Placeholder}}{{$panel.Placeholder}}{{else}}Search{{end}}">
+    <button type="submit" class="btn px-4 py-2">{{if $panel.Label}}{{$panel.Label}}{{else}}Search{{end}}</button>
+  </form>
+
+  {{else if eq $panel.Type "confirm"}}
+  {{/* A button whose whole point is the question in front of it. */}}
+  <button type="button" class="{{if eq $panel.Tone "err"}}btn-danger{{else}}btn{{end}} px-4 py-2"
+          hx-post="/apps/{{$app}}/station/action/{{$panel.Action}}"
+          hx-target="#station-message" hx-swap="innerHTML"
+          hx-confirm="{{$panel.Confirm}}">{{$panel.Label}}</button>
+
+  {{else if or (eq $panel.Type "section") (eq $panel.Type "grid")}}
   {{/* Structure only: the panels inside it fetch themselves, like any other. */}}
   <div class="station-grid">
     {{range $panel.Panels}}
     <div class="station-cell station-{{if .Width}}{{.Width}}{{else}}full{{end}}"
          id="station-panel-{{.ID}}"
          hx-get="/apps/{{$app}}/station/panel/{{.ID}}"
-         hx-trigger="load, {{stationRefresh .ID}} from:body"
+         hx-trigger="load, {{stationRefresh .ID}} from:body{{if .Refresh.Seconds}}, every {{.Refresh.Seconds}}s{{end}}"
          hx-swap="innerHTML"></div>
     {{end}}
   </div>
