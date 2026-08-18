@@ -87,6 +87,11 @@ const (
 	// which base64 has already inflated by a third — the point is a bound on
 	// what the document carries, not on what the font weighs.
 	MaxFontBytes = 512 * 1024
+
+	// MaxImageBytes caps an embedded icon or banner. An icon is a mark at the
+	// top of a block and a banner is a strip behind it; neither is a
+	// photograph, and both travel in every page that draws the station.
+	MaxImageBytes = 256 * 1024
 )
 
 // hexRe is a CSS hex colour: #rgb, #rgba, #rrggbb or #rrggbbaa.
@@ -95,6 +100,15 @@ var hexRe = regexp.MustCompile(`^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8
 // lengthRe is a CSS length a station may write: a number, optionally with one
 // of the units that make sense for a radius or a border.
 var lengthRe = regexp.MustCompile(`^-?[0-9]+(\.[0-9]+)?(px|rem|em|%)?$`)
+
+// dataURIRe is the only shape an embedded font or image may take: a media type
+// and base64, and nothing else at all.
+//
+// It is this strict because the value ends up inside a CSS block. A src
+// carrying a quote and a closing tag would otherwise be a way for a station to
+// put markup on the page, which is the one thing the whole interface design
+// exists to prevent.
+var dataURIRe = regexp.MustCompile(`^data:[a-zA-Z0-9!#$&^_.+-]+/[a-zA-Z0-9!#$&^_.+-]+;base64,[A-Za-z0-9+/]+={0,2}$`)
 
 // SizeScale is the type scale to render at, clamped.
 func (t Theme) SizeScale() float64 {
@@ -164,11 +178,19 @@ func (t Theme) Validate() []error {
 			add("font_display src is fetched from %s; embed the font as a data: URI instead", srcHost(f.Src))
 		case len(f.Src) > MaxFontBytes:
 			add("font_display is %d KB, over the %d KB a document may carry", len(f.Src)/1024, MaxFontBytes/1024)
+		case !dataURIRe.MatchString(f.Src):
+			add("font_display src is not a base64 data: URI; it has to be data:font/woff2;base64,…")
 		}
 	}
 	for _, img := range []struct{ what, value string }{{"icon", t.Icon}, {"banner", t.Banner}} {
-		if img.value != "" && !strings.HasPrefix(img.value, "data:") {
+		switch {
+		case img.value == "":
+		case !strings.HasPrefix(img.value, "data:"):
 			add("%s is fetched from %s; embed it as a data: URI instead", img.what, srcHost(img.value))
+		case len(img.value) > MaxImageBytes:
+			add("%s is %d KB, over the %d KB a document may carry", img.what, len(img.value)/1024, MaxImageBytes/1024)
+		case !dataURIRe.MatchString(img.value):
+			add("%s is not a base64 data: URI; it has to be data:image/…;base64,…", img.what)
 		}
 	}
 	return errs

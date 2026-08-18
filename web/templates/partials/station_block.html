@@ -8,9 +8,15 @@
      re-renders a panel it does not own. */}}
 {{define "station_block"}}
 {{$app := .App.ID}}
+{{/* The station's own tokens, on the block and nowhere else. Everything in
+     here has been through validation: colours matched against a pattern,
+     lengths against another, words against a list, and an embedded typeface
+     against the one strict shape a font may take. */}}
+{{with .Style}}<style>{{.}}</style>{{end}}
 <section id="station" class="station mb-8">
   <div class="station-head">
-    <div class="min-w-0">
+    {{with .Doc.UI.Theme.Icon}}<img src="{{.}}" alt="" class="station-icon" aria-hidden="true">{{end}}
+    <div class="min-w-0 flex-1">
       <p class="text-sm font-medium">{{.Doc.Name}}</p>
       <p class="faint text-xs">{{.Doc.Description}}</p>
     </div>

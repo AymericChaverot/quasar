@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -42,6 +43,12 @@ type StationBlock struct {
 
 // Tabs is the strip, in the order the document declares it.
 func (b StationBlock) Tabs() []ui.Tab { return b.Doc.UI.Tabs }
+
+// Style is the station's own tokens, scoped to this block. Everything outside
+// it — the navigation, the top bar, every section below — keeps the theme the
+// operator chose, because a station that could repaint the chrome could draw a
+// convincing login screen.
+func (b StationBlock) Style() template.CSS { return b.Doc.UI.Theme.Tokens("#station") }
 
 // stationBlock is the station block for an application's page, or nothing for
 // an application that was not deployed from one — which is every application
