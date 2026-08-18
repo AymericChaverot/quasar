@@ -1,0 +1,297 @@
+# A station: an application that arrives with a control surface of its own.
+#
+# Paste this into Settings → Stations, or fetch it from this repository. You
+# will be shown what it asks to be allowed to do before anything is installed.
+#
+# Deploying it produces an ordinary application — the same containers, logs,
+# storage, backups and TLS as anything else on the dashboard — with the tabs
+# below on top of it.
+
+schema: 1
+id: minecraft-station
+name: Minecraft
+description: Fabric, Forge or Paper server, with mod management and a live console
+author: quasar
+version: "1.0.0"
+
+# What to run. This block is a catalogue entry, unchanged: the same parameters,
+# the same {{RANDOM}} secrets, the same compose rewriting and host-port checks.
+deploy:
+  deploy_type: compose
+  compose_service: minecraft
+  port: 25565
+  raw: true
+  app_name: "Minecraft {{VERSION}} ({{TYPE}})"
+  subdomain: "mc-{{TYPE}}-{{VERSION}}"
+  params:
+    - name: TYPE
+      label: Server type
+      kind: select
+      default: PAPER
+      options: [PAPER, FABRIC, FORGE, NEOFORGE, VANILLA]
+      help: Paper for plugins, Fabric or Forge for mods, Vanilla for neither.
+    - name: VERSION
+      label: Minecraft version
+      default: "1.20.4"
+    - name: HOST_PORT
+      label: Port
+      kind: port
+      default: "25565"
+      help: Give every server on this machine its own.
+    - name: MEMORY
+      label: Memory
+      kind: select
+      default: "4G"
+      options: ["2G", "4G", "6G", "8G"]
+  env: |
+    TYPE={{TYPE}}
+    MINECRAFT_VERSION={{VERSION}}
+    HOST_PORT={{HOST_PORT}}
+    MEMORY={{MEMORY}}
+    RCON_PASSWORD={{RANDOM}}
+  compose: |
+    services:
+      minecraft:
+        image: itzg/minecraft-server:latest
+        ports:
+          - "${HOST_PORT}:25565"
+        environment:
+          EULA: "TRUE"
+          TYPE: ${TYPE}
+          VERSION: ${MINECRAFT_VERSION}
+          MEMORY: ${MEMORY}
+          ENABLE_RCON: "true"
+          RCON_PASSWORD: ${RCON_PASSWORD}
+        volumes:
+          - ./data:/data
+        restart: unless-stopped
+
+# What the script may reach. Nothing is granted by default, and each of these
+# is narrowed by name: one service, three paths, two keys, two hosts.
+permissions:
+  exec: {services: [minecraft]}
+  logs: {services: [minecraft]}
+  files: {paths: ["data/mods/**", "data/plugins/**", "data/server.properties"]}
+  env: {read: [MINECRAFT_VERSION, TYPE], write: [MINECRAFT_VERSION]}
+  net.external: {allow: ["api.modrinth.com", "cdn.modrinth.com"]}
+  lifecycle: [restart, redeploy]
+
+ui:
+  theme:
+    accent: "#5b8c3a"
+    tint: 0.05
+    radius: 2px
+    case: upper
+
+  tabs:
+    - id: server
+      name: Server
+      panels:
+        - {id: players, type: stat, title: Players online, width: third,
+           source: {action: player_count}, refresh: {seconds: 30}}
+        - {id: build, type: keyvalue, title: Build, width: third,
+           source: {action: build_info}}
+        - id: console
+          type: form
+          title: Console
+          width: third
+          help: Sent over RCON, as the server operator.
+          fields:
+            - {name: cmd, label: Command, placeholder: "say hello"}
+          submit: {label: Send, action: rcon}
+        - {id: output, type: log, title: Live output, service: minecraft}
+
+    - id: mods
+      name: Mods
+      panels:
+        - id: mod_list
+          type: table
+          title: Installed
+          source: {action: list_mods}
+          columns:
+            - {key: name, label: Mod}
+            - {key: version, label: Version, align: right}
+            - {key: state, label: "", type: badge}
+          row_actions:
+            - {label: Remove, action: remove_mod, tone: err, confirm: "Remove {{name}}?"}
+          empty: "Nothing installed. Paste a Modrinth link below."
+        - id: add
+          type: form
+          title: Install from Modrinth
+          fields:
+            - {name: url, label: Modrinth address, placeholder: "https://modrinth.com/mod/sodium"}
+          submit: {label: Install, action: add_mod}
+        - id: sweep
+          type: button
+          title: Everything at once
+          label: Check every mod for updates
+          long: true
+          action: check_all_mods
+          help: Runs in the background; the answer appears below and survives a reload.
+
+    - id: settings
+      name: Settings
+      panels:
+        - id: props
+          type: form
+          title: server.properties
+          source: {action: read_props}
+          fields:
+            - {name: motd, label: Message of the day}
+            - {name: difficulty, label: Difficulty, type: select,
+               options: [peaceful, easy, normal, hard]}
+            - {name: pvp, label: PvP, type: toggle}
+            - {name: max_players, label: Maximum players, type: number}
+          submit: {label: Save and restart, action: write_props}
+        - id: about
+          type: markdown
+          title: About this station
+          source:
+            static: |
+              Mods are installed from Modrinth, into data/mods for Fabric and
+              Forge or data/plugins for Paper. Nothing here reaches anything
+              but this server's own container and the two Modrinth addresses
+              listed on the install screen.
+
+hooks:
+  every:
+    - {minutes: 360, action: check_mod_updates}
+
+script: |
+  // Where a build of this type keeps the things it loads.
+  function modDir() {
+    return quasar.app.params.TYPE === 'PAPER' ? 'data/plugins' : 'data/mods'
+  }
+
+  function rconExec(cmd) {
+    const r = quasar.exec('minecraft', ['rcon-cli', cmd])
+    if (r.code !== 0) throw new Error((r.stderr || r.stdout || 'rcon failed').trim())
+    return r.stdout
+  }
+
+  export function player_count() {
+    const m = rconExec('list').match(/There are (\d+) of a max of (\d+)/)
+    return { data: { value: m ? m[1] : '—', suffix: m ? '/ ' + m[2] : '' } }
+  }
+
+  export function build_info() {
+    return { data: [
+      { key: 'Type',    value: quasar.app.params.TYPE },
+      { key: 'Version', value: quasar.env.get('MINECRAFT_VERSION') },
+      { key: 'Status',  value: quasar.app.status },
+      { key: 'Address', value: quasar.app.domain },
+    ]}
+  }
+
+  export function rcon({ cmd }) {
+    if (!cmd) return { error: 'Nothing to send.' }
+    return { toast: rconExec(cmd).trim() || 'Sent.' }
+  }
+
+  export function list_mods() {
+    const known = quasar.store.get('updates') || {}
+    return { data: quasar.files.list(modDir())
+      .filter(f => f.name.endsWith('.jar'))
+      .map(f => ({
+        name:    f.name.replace(/-[\d.]+\.jar$/, ''),
+        version: (f.name.match(/-([\d.]+)\.jar$/) || [, '?'])[1],
+        state:   known[f.name] ? { label: 'update', tone: 'warn' } : null,
+        file:    f.name,
+      })) }
+  }
+
+  // Modrinth's own naming for the loader this server runs.
+  function loader() {
+    const type = quasar.app.params.TYPE
+    return type === 'PAPER' ? 'paper' : type.toLowerCase()
+  }
+
+  function newestBuild(slug) {
+    const url = 'https://api.modrinth.com/v2/project/' + slug + '/version'
+      + '?loaders=["' + loader() + '"]'
+      + '&game_versions=["' + quasar.env.get('MINECRAFT_VERSION') + '"]'
+    const versions = quasar.http.get(url).json()
+    if (!versions.length) return null
+    return versions[0].files.find(f => f.primary) || versions[0].files[0]
+  }
+
+  export function add_mod({ url }) {
+    const slug = String(url || '').replace(/\/$/, '').split('/').pop()
+    if (!slug) return { error: 'That is not a Modrinth address.' }
+
+    const file = newestBuild(slug)
+    if (!file) {
+      return { error: 'No build of ' + slug + ' for ' + quasar.app.params.TYPE
+        + ' ' + quasar.env.get('MINECRAFT_VERSION') + '.' }
+    }
+    quasar.files.write(modDir() + '/' + file.filename, quasar.http.get(file.url).body)
+    return { toast: slug + ' installed — restart to load it', refresh: ['mod_list'] }
+  }
+
+  export function remove_mod({ file }) {
+    quasar.files.delete(modDir() + '/' + file)
+    return { toast: 'Removed.', refresh: ['mod_list'] }
+  }
+
+  // Long: it makes one request per installed mod, which is not something to
+  // hold an HTTP request open for.
+  export function check_all_mods() {
+    const jars = quasar.files.list(modDir()).filter(f => f.name.endsWith('.jar'))
+    const updates = {}
+
+    for (let i = 0; i < jars.length; i++) {
+      const jar = jars[i]
+      const slug = jar.name.replace(/-[\d.]+\.jar$/, '').toLowerCase()
+      quasar.progress(Math.round((i / Math.max(jars.length, 1)) * 100), 'checking ' + slug)
+      try {
+        const file = newestBuild(slug)
+        if (file && file.filename !== jar.name) {
+          updates[jar.name] = { filename: file.filename, url: file.url }
+        }
+      } catch (e) {
+        quasar.log(slug + ': ' + e.message)
+      }
+    }
+
+    quasar.store.set('updates', updates)
+    const n = Object.keys(updates).length
+    return { toast: n ? n + ' mod(s) have a newer build' : 'Everything is up to date',
+             refresh: ['mod_list'] }
+  }
+
+  export function read_props() {
+    const p = parseProps(quasar.files.read('data/server.properties'))
+    return { data: {
+      motd: p.motd, difficulty: p.difficulty,
+      pvp: p.pvp === 'true', max_players: Number(p['max-players'] || 20),
+    }}
+  }
+
+  export function write_props(v) {
+    const p = parseProps(quasar.files.read('data/server.properties'))
+    p.motd = v.motd
+    p.difficulty = v.difficulty
+    p.pvp = v.pvp ? 'true' : 'false'
+    p['max-players'] = String(v.max_players)
+
+    quasar.files.write('data/server.properties',
+      Object.keys(p).map(k => k + '=' + p[k]).join('\n') + '\n')
+    quasar.app.restart()
+    return { toast: 'Saved — the server is restarting.' }
+  }
+
+  // Runs on its own every six hours while the server is up. What it finds
+  // shows up as badges on the mods table.
+  export function check_mod_updates() {
+    return check_all_mods()
+  }
+
+  function parseProps(text) {
+    const out = {}
+    for (const line of text.split('\n')) {
+      if (!line || line.startsWith('#')) continue
+      const i = line.indexOf('=')
+      if (i > 0) out[line.slice(0, i)] = line.slice(i + 1)
+    }
+    return out
+  }

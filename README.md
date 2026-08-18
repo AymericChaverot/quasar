@@ -319,6 +319,59 @@ few seconds; applications are untouched.
   same reason. Two raw servers on the same host port are refused at creation
   time, naming the application that holds it — otherwise the second stack
   starts, fails to bind and stops, in a log nobody reads.
+- **Stations**: an application that arrives with a control surface of its own.
+  A catalogue entry says what to deploy; a station says that *and* what the
+  application's page looks like afterwards — tabs, tables, forms and actions
+  somebody wrote for one service in particular, because they knew what running
+  it involves and Quasar does not. It is one YAML document, pasted or imported
+  by URL, exactly like a catalogue.
+
+  What it deploys is an ordinary application: the same containers, logs,
+  storage explorer, backups, resource limits and TLS, carrying one extra field
+  naming the station it came from. Removing the station leaves the application
+  exactly where it was, minus its tabs.
+
+  The `deploy:` block *is* a catalogue entry — the same parameters, the same
+  `{{RANDOM}}` secrets, the same compose rewriting — and three more blocks sit
+  on top of it:
+
+  ```yaml
+  schema: 1
+  id: minecraft-station
+  name: Minecraft
+  version: "1.0.0"
+  deploy: { ... }                # what to run — a catalogue entry, whole
+  permissions:                   # what the script may reach
+    exec: {services: [minecraft]}
+    files: {paths: ["data/mods/**"]}
+    net.external: {allow: ["api.modrinth.com"]}
+  ui:                            # what the page shows
+    tabs: [{id: mods, name: Mods, panels: [ ... ]}]
+  script: |                      # the logic
+    export function list_mods() { return { data: [ ... ] } }
+  ```
+
+  **The script never produces markup.** It returns data, a panel says which of
+  Quasar's own components draws it, and the component is Quasar's — so there is
+  nothing to sanitise, and a station written against one theme is legible on
+  every other.
+
+  **Nothing is granted by default, and every grant is narrowed by name**:
+  services for `exec`, globs for `files`, keys for `env`, exact hosts for
+  `net.external`, verbs for `lifecycle`. They are shown in plain words on the
+  install screen and the station is not installed until they are accepted — and
+  **a re-fetched revision that asks for more is held**, running the approved one
+  until somebody accepts the new set. Reverting is one click.
+
+  **The script runs in a disposable process**, one per call: no Docker socket,
+  no database handle, no filesystem, no network. Every capability is a request
+  the dashboard checks against the declared permissions, performs, and records
+  in the audit log. Time and memory are bounded from outside the process being
+  bounded, so a runaway station is a failed panel rather than a dead dashboard.
+
+  See [`docs/stations.md`](docs/stations.md) for the format in full, and
+  [`stations/`](stations/) for ready-made ones — held to the same
+  parse-and-validate test as `catalogs/`, for the same reason.
 - **Tasks**: commands run inside the container (`docker exec`), on demand or
   scheduled (every N minutes), with output and status kept.
 - **Web terminal**: an interactive shell in the container (xterm.js +
