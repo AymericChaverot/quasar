@@ -1,0 +1,155 @@
+{{/* One panel, drawn by one of Quasar's own components from data a station's
+     script returned. There is no markup in this file that a station wrote, and
+     no way for one to add any.
+
+     A panel whose data was the wrong shape says so. A blank card is the failure
+     an author gives up debugging. */}}
+{{define "station_panel"}}
+{{$app := .AppID}}
+{{$panel := .Panel}}
+<div class="card p-4 {{with $panel.Tone}}station-tone-{{.}}{{end}}">
+  {{with $panel.Title}}<p class="h-label mb-2">{{.}}</p>{{end}}
+  {{with $panel.Help}}<p class="help mt-0! mb-3">{{.}}</p>{{end}}
+
+  {{if .Problem}}
+  <div class="alert-err">
+    <p class="text-sm font-medium">This panel has nothing to show</p>
+    <p class="mono mt-1 text-xs">{{.Problem}}</p>
+  </div>
+
+  {{else if eq $panel.Type "table"}}
+  {{if .Empty}}
+  <p class="faint py-6 text-center text-sm">{{.EmptyText}}</p>
+  {{else}}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr>
+          {{range $panel.Columns}}
+          <th class="h-label pb-2 {{if eq .Align "right"}}text-right{{else if eq .Align "center"}}text-center{{end}}">{{.Label}}</th>
+          {{end}}
+          {{if $panel.RowActions}}<th></th>{{end}}
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Rows}}
+        {{$row := .}}
+        <tr class="station-row">
+          {{range .Cells}}
+          <td class="py-1.5 {{if eq .Column.Align "right"}}text-right{{else if eq .Column.Align "center"}}text-center{{end}}">
+            {{if .Badge}}<span class="badge {{if .Badge.Tone}}badge-{{.Badge.Tone}}{{else}}badge-muted{{end}}">{{.Badge.Label}}</span>
+            {{else if eq .Column.Type "code"}}<span class="mono text-xs">{{.Text}}</span>
+            {{else}}{{.Text}}{{end}}
+          </td>
+          {{end}}
+          {{if $panel.RowActions}}
+          <td class="py-1.5 text-right whitespace-nowrap">
+            {{range $panel.RowActions}}
+            <button type="button" class="{{if eq .Tone "err"}}btn-danger{{else}}btn{{end}} py-1! text-xs"
+                    hx-post="/apps/{{$app}}/station/action/{{.Action}}"
+                    hx-vals="{{$row.Input}}"
+                    hx-target="#station-message" hx-swap="innerHTML"
+                    {{with .Confirm}}hx-confirm="{{stationConfirm . $row.Values}}"{{end}}>{{.Label}}</button>
+            {{end}}
+          </td>
+          {{end}}
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+
+  {{else if eq $panel.Type "stat"}}
+  <p class="station-stat">
+    {{.Stat.Value}}{{with .Stat.Suffix}}<span class="faint text-base"> {{.}}</span>{{end}}
+  </p>
+  {{with .Stat.Label}}<p class="faint text-xs">{{.}}</p>{{end}}
+
+  {{else if eq $panel.Type "keyvalue"}}
+  <dl class="space-y-1 text-sm">
+    {{range .Pairs}}
+    <div class="flex justify-between gap-4">
+      <dt class="faint">{{.Key}}</dt>
+      <dd class="mono text-right text-xs">{{.Value}}</dd>
+    </div>
+    {{end}}
+  </dl>
+
+  {{else if eq $panel.Type "markdown"}}
+  <div class="station-prose text-sm">{{template "station_markdown" .Text}}</div>
+
+  {{else if eq $panel.Type "form"}}
+  <form hx-post="/apps/{{$app}}/station/action/{{$panel.Submit.Action}}"
+        hx-target="#station-message" hx-swap="innerHTML"
+        {{with $panel.Submit.Confirm}}hx-confirm="{{.}}"{{end}}
+        class="space-y-3">
+    {{range .Fields}}
+    <div>
+      <label class="label" for="f-{{$panel.ID}}-{{.Name}}">{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</label>
+      {{if eq .Type "select"}}
+      <select id="f-{{$panel.ID}}-{{.Name}}" name="{{.Name}}" class="input">
+        {{$v := .Value}}
+        {{range .Options}}<option value="{{.}}" {{if eq . $v}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      {{else if eq .Type "toggle"}}
+      <input id="f-{{$panel.ID}}-{{.Name}}" name="{{.Name}}" type="checkbox" value="true" {{if .Checked}}checked{{end}}>
+      {{else if eq .Type "textarea"}}
+      <textarea id="f-{{$panel.ID}}-{{.Name}}" name="{{.Name}}" rows="6" spellcheck="false"
+                class="input mono text-xs" placeholder="{{.Placeholder}}">{{.Value}}</textarea>
+      {{else}}
+      <input id="f-{{$panel.ID}}-{{.Name}}" name="{{.Name}}" class="input"
+             type="{{if eq .Type "secret"}}password{{else if or (eq .Type "number") (eq .Type "port")}}number{{else}}text{{end}}"
+             {{if eq .Type "port"}}min="1" max="65535"{{end}}
+             value="{{.Value}}" placeholder="{{.Placeholder}}" autocomplete="off">
+      {{end}}
+      {{with .Help}}<p class="help">{{.}}</p>{{end}}
+    </div>
+    {{end}}
+    <button type="submit" class="btn-primary px-4 py-2">
+      {{if $panel.Submit.Label}}{{$panel.Submit.Label}}{{else}}Send{{end}}
+    </button>
+  </form>
+
+  {{else if eq $panel.Type "button"}}
+  <button type="button" class="{{if eq $panel.Tone "err"}}btn-danger{{else}}btn{{end}} px-4 py-2"
+          hx-post="/apps/{{$app}}/station/action/{{$panel.Action}}"
+          hx-target="#station-message" hx-swap="innerHTML"
+          {{with $panel.Confirm}}hx-confirm="{{.}}"{{end}}>{{$panel.Label}}</button>
+
+  {{else if eq $panel.Type "section"}}
+  {{/* Structure only: the panels inside it fetch themselves, like any other. */}}
+  <div class="station-grid">
+    {{range $panel.Panels}}
+    <div class="station-cell station-{{if .Width}}{{.Width}}{{else}}full{{end}}"
+         id="station-panel-{{.ID}}"
+         hx-get="/apps/{{$app}}/station/panel/{{.ID}}"
+         hx-trigger="load, {{stationRefresh .ID}} from:body"
+         hx-swap="innerHTML"></div>
+    {{end}}
+  </div>
+
+  {{else}}
+  <p class="faint text-xs">This build of Quasar cannot draw a {{$panel.Type}} yet.</p>
+  {{end}}
+</div>
+{{end}}
+
+{{/* A station's markdown, rendered as the little of it that is safe without a
+     parser: paragraphs and line breaks, escaped like everything else. The full
+     component arrives with the rest of them; what matters now is that a station
+     cannot put markup on this page by calling it markdown. */}}
+{{define "station_markdown"}}<p class="whitespace-pre-wrap">{{.}}</p>{{end}}
+
+{{/* What an action had to say. A toast fades on its own; an error stays,
+     because the reason something failed is the thing somebody came to read. */}}
+{{define "station_message"}}
+{{if .Error}}
+<div class="alert-err mb-4">
+  <p class="text-sm font-medium">That did not work</p>
+  <p class="mono mt-1 text-xs">{{.Error}}</p>
+</div>
+{{else if .Toast}}
+<div class="card station-toast mb-4 px-4 py-2 text-sm">{{.Toast}}</div>
+{{end}}
+{{end}}

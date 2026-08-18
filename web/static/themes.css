@@ -2407,3 +2407,94 @@ button[disabled] { cursor: progress; opacity: 0.65; }
 [data-theme="synthwave"] .badge {
   box-shadow: 0 0 8px color-mix(in srgb, currentColor 25%, transparent);
 }
+
+/* --- Stations -------------------------------------------------------------- */
+
+/* A station is one block with a tab strip, at the top of an application's page.
+   It is drawn from the same tokens as everything else — and, from step by step
+   further along, from those tokens with a station's own accent mixed in — so a
+   station written against one theme is legible when it lands on another.
+
+   The scope stops at this block. A station is a shareable program, and one that
+   could repaint the navigation or the top bar could draw a convincing "update
+   available", or a convincing login screen. */
+
+.station {
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.station-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-bottom: var(--border-w) solid var(--border);
+  background: var(--surface-2);
+}
+
+.station-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem 0;
+  border-bottom: var(--border-w) solid var(--border);
+}
+
+.station-tab {
+  cursor: pointer;
+  padding: 0.375rem 0.75rem;
+  border: var(--border-w) solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.station-tab:hover { color: var(--text); }
+.station-tab.is-on {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+  /* Sits on the strip's own border rather than above it, so the open tab reads
+     as continuous with the panel below it. */
+  margin-bottom: calc(-1 * var(--border-w));
+  padding-bottom: calc(0.375rem + var(--border-w));
+}
+
+.station-pane { padding: 1rem; }
+
+.station-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.station-cell { grid-column: span 6; }
+@media (min-width: 48rem) {
+  .station-half { grid-column: span 3; }
+  .station-third { grid-column: span 2; }
+}
+
+/* One number, at the size a number worth looking at is read at. */
+.station-stat {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.station-row + .station-row td { border-top: 1px solid var(--border); }
+
+.station-toast { color: var(--ok); }
+
+/* The four tones mean the same thing inside a station as everywhere else: a red
+   that means "stopped" on the dashboard must not mean something else here. */
+.station-tone-accent { border-color: var(--accent); }
+.station-tone-ok { border-color: var(--ok); }
+.station-tone-warn { border-color: var(--warn); }
+.station-tone-err { border-color: var(--err); }
+
+.station-prose { color: var(--text); }

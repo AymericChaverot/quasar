@@ -442,10 +442,19 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 	if a == nil {
 		return
 	}
-	s.render(w, r, "app_detail", map[string]any{
+	data := map[string]any{
 		"Title": a.Name,
 		"App":   s.appDetailView(r, a),
-	})
+	}
+	// A station renders as one block at the top of this page, and only for an
+	// admin: fetching a panel runs somebody else's script with whatever the
+	// document was granted, which is not a read.
+	if s.isAdmin(r) {
+		if block := s.stationBlock(a); block != nil {
+			data["Station"] = block
+		}
+	}
+	s.render(w, r, "app_detail", data)
 }
 
 // getAppContainer resolves one container of an app's compose project from the

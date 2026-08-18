@@ -1,0 +1,74 @@
+{{/* A station's control surface: one block with its own tab strip, at the top
+     of the application's page. Everything below it — Build, Routing, Storage,
+     Environment — is the machinery Quasar provides for every application, and
+     is untouched by whatever a station does up here.
+
+     Every panel fetches itself. The action that changes something says which
+     panels are now stale, and each of those hears its own event; nothing
+     re-renders a panel it does not own. */}}
+{{define "station_block"}}
+{{$app := .App.ID}}
+<section id="station" class="station mb-8">
+  <div class="station-head">
+    <div class="min-w-0">
+      <p class="text-sm font-medium">{{.Doc.Name}}</p>
+      <p class="faint text-xs">{{.Doc.Description}}</p>
+    </div>
+    <span class="chip shrink-0">{{.Doc.Version}}</span>
+  </div>
+
+  <div class="station-tabs" role="tablist">
+    {{range $i, $tab := .Tabs}}
+    <button type="button" class="station-tab {{if eq $i 0}}is-on{{end}}"
+            role="tab" data-station-tab="{{$tab.ID}}"
+            aria-selected="{{if eq $i 0}}true{{else}}false{{end}}">{{$tab.Name}}</button>
+    {{end}}
+  </div>
+
+  {{/* Where a toast or a refused action lands, once, wherever it came from. */}}
+  <div id="station-message" aria-live="polite"></div>
+
+  {{range $i, $tab := .Tabs}}
+  <div class="station-pane {{if ne $i 0}}hidden{{end}}" data-station-pane="{{$tab.ID}}">
+    <div class="station-grid">
+      {{range $tab.Panels}}
+      <div class="station-cell station-{{if .Width}}{{.Width}}{{else}}full{{end}}"
+           id="station-panel-{{.ID}}"
+           hx-get="/apps/{{$app}}/station/panel/{{.ID}}"
+           hx-trigger="load, {{stationRefresh .ID}} from:body{{if .Refresh.Seconds}}, every {{.Refresh.Seconds}}s{{end}}"
+           hx-swap="innerHTML">
+        <div class="card p-4"><p class="faint text-xs">Loading…</p></div>
+      </div>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
+</section>
+
+<script>
+  (function () {
+    const block = document.getElementById("station");
+    if (!block) return;
+
+    function show(id) {
+      for (const tab of block.querySelectorAll(".station-tab")) {
+        const on = tab.dataset.stationTab === id;
+        tab.classList.toggle("is-on", on);
+        tab.setAttribute("aria-selected", on);
+      }
+      for (const pane of block.querySelectorAll(".station-pane")) {
+        pane.classList.toggle("hidden", pane.dataset.stationPane !== id);
+      }
+    }
+    for (const tab of block.querySelectorAll(".station-tab")) {
+      tab.addEventListener("click", () => show(tab.dataset.stationTab));
+    }
+    // An action may ask to be taken to a tab, which arrives as an event named
+    // after it rather than as anything the script got to write.
+    for (const pane of block.querySelectorAll(".station-pane")) {
+      const id = pane.dataset.stationPane;
+      document.body.addEventListener("quasar:station-tab-" + id, () => show(id));
+    }
+  })();
+</script>
+{{end}}
