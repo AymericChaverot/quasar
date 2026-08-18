@@ -1,0 +1,295 @@
+# Every component, and nothing else.
+#
+# This station asks for no permissions at all. It can compute and return
+# values, remember things in quasar.store, and write to its own log — and it
+# reaches nothing else on the server. Install it to see what a station looks
+# like when it has been granted nothing, and to check that every component in
+# the format draws.
+#
+# The two components missing here are the two that need a permission: a log
+# pane reads a container and an iframe points at one. Both are in
+# permissions.yaml beside this.
+
+schema: 1
+id: components
+name: Components
+description: One of every panel the station format offers, drawn from a script that reaches nothing
+author: quasar
+version: "1.0.0"
+
+deploy:
+  deploy_type: image
+  image_ref: nginx:alpine
+  port: 80
+  app_name: "Components demo"
+  subdomain: "components"
+  params:
+    - name: GREETING
+      label: What the demo should say
+      default: "Hello from a station"
+  env: |
+    GREETING={{GREETING}}
+
+# Deliberately absent. A station with no permissions block gets a runtime that
+# can compute and return values, and nothing else — which is the baseline
+# everything else is measured against.
+
+ui:
+  theme:
+    accent: "#8b5cf6"
+    tint: 0.06
+    radius: 10px
+    density: normal
+    chart: ["#8b5cf6", "#22d3ee"]
+
+  tabs:
+    - id: data
+      name: Data
+      panels:
+        - {id: c_stat, type: stat, title: A number, width: third, source: {action: one_number}}
+        - {id: c_gauge, type: gauge, title: A proportion, width: third, source: {action: a_gauge}}
+        - {id: c_keyvalue, type: keyvalue, title: Key and value, width: third, source: {action: some_pairs}}
+
+        - id: c_table
+          type: table
+          title: A table, with row actions
+          source: {action: some_rows}
+          refresh: {seconds: 60}
+          columns:
+            - {key: name, label: Name}
+            - {key: size, label: Size, align: right}
+            - {key: kind, label: Kind, type: code}
+            - {key: state, label: "", type: badge}
+          row_actions:
+            - {label: Poke, action: poke_row, tone: accent}
+            - {label: Forget, action: forget_row, tone: err, confirm: "Forget {{name}}?"}
+          empty: "Nothing here yet — press Remember below."
+
+        - {id: c_list, type: list, title: A list, width: half, source: {action: some_items}}
+        - {id: c_timeline, type: timeline, title: A timeline, width: half, source: {action: some_events}}
+
+        - {id: c_markdown, type: markdown, title: Some writing, width: half,
+           source: {action: some_writing}}
+        - {id: c_code, type: code, title: Some code, width: half, source: {action: some_code}}
+
+    - id: input
+      name: Input
+      panels:
+        - id: c_form
+          type: form
+          title: A form, with every field kind
+          width: half
+          source: {action: form_values}
+          fields:
+            - {name: text, label: Text}
+            - {name: number, label: Number, type: number}
+            - {name: choice, label: Choice, type: select, options: [first, second, third]}
+            - {name: toggle, label: Toggle, type: toggle}
+            - {name: port, label: Port, type: port}
+            - {name: secret, label: Secret, type: secret}
+            - {name: notes, label: Notes, type: textarea, help: "A textarea, for the longer answers."}
+          submit: {label: Remember all of this, action: remember}
+
+        - id: c_button
+          type: button
+          title: A button
+          width: half
+          label: Say something
+          action: say_something
+          help: Returns a toast, and refreshes the timeline beside it.
+
+        - id: c_confirm
+          type: confirm
+          title: A button that asks first
+          width: half
+          label: Forget everything
+          tone: err
+          confirm: "This clears everything this station remembered. Sure?"
+          action: forget_everything
+
+        - id: c_search
+          type: search
+          title: A search
+          width: half
+          label: Look
+          placeholder: "Type anything"
+          action: search_for
+
+        - id: c_long
+          type: button
+          title: A long action
+          width: half
+          label: Count to ten, slowly
+          long: true
+          action: count_slowly
+          help: Runs in the background. Reload the page while it goes — the pane is still there.
+
+    - id: structure
+      name: Structure
+      panels:
+        - id: c_banner
+          type: banner
+          title: A banner
+          tone: accent
+          # Structural, so it draws what the document says rather than what a
+          # script returned: a banner is a thing that is always true.
+          source:
+            static: "A banner says one thing, and says it whether anything ran or not."
+        - {id: c_divider, type: divider}
+        - id: c_grid
+          type: grid
+          title: A grid of other panels
+          panels:
+            - {id: c_nested_a, type: stat, title: Nested, width: half, source: {action: one_number}}
+            - {id: c_nested_b, type: keyvalue, title: Also nested, width: half, source: {action: some_pairs}}
+
+        - id: c_static
+          type: markdown
+          title: Static content
+          source:
+            static: |
+              This panel calls nothing. Its content is written into the
+              document, so it costs no process and cannot fail.
+
+        - id: c_broken
+          type: table
+          title: A panel whose action returns the wrong shape
+          help: On purpose. This is what an author sees instead of a blank card.
+          source: {action: wrong_shape}
+          columns:
+            - {key: name, label: Name}
+
+        - id: c_throws
+          type: stat
+          title: A panel whose action throws
+          help: Also on purpose.
+          source: {action: throws}
+
+script: |
+  // Everything this station knows is in its own store, which needs no
+  // permission because it reaches nothing: one application, one station.
+  function remembered() {
+    return quasar.store.get('things') || []
+  }
+
+  export function one_number() {
+    return { data: { value: remembered().length, suffix: 'remembered', label: quasar.app.name } }
+  }
+
+  export function a_gauge() {
+    const pct = Math.min(remembered().length * 20, 100)
+    return { data: { value: pct, suffix: '%', label: 'of a nominal ten' } }
+  }
+
+  export function some_pairs() {
+    return { data: [
+      { key: 'Application', value: quasar.app.name },
+      { key: 'Address',     value: quasar.app.domain },
+      { key: 'Status',      value: quasar.app.status },
+      { key: 'Greeting',    value: quasar.app.params.GREETING },
+    ]}
+  }
+
+  export function some_rows() {
+    return { data: remembered().map((t, i) => ({
+      name:  t.text || 'thing ' + (i + 1),
+      size:  String(t.number || 0),
+      kind:  t.choice || 'first',
+      state: t.toggle ? { label: 'on', tone: 'ok' } : { label: 'off', tone: 'warn' },
+      index: String(i),
+    })) }
+  }
+
+  export function poke_row({ name }) {
+    return { toast: 'Poked ' + name + '.' }
+  }
+
+  export function forget_row({ index }) {
+    const things = remembered()
+    things.splice(Number(index), 1)
+    quasar.store.set('things', things)
+    return { toast: 'Forgotten.', refresh: ['c_table', 'c_stat', 'c_gauge'] }
+  }
+
+  export function some_items() {
+    const things = remembered()
+    if (!things.length) return { data: ['Nothing remembered yet'] }
+    return { data: things.map(t => ({ label: t.text || '(no text)', note: t.choice })) }
+  }
+
+  export function some_events() {
+    return { data: (quasar.store.get('events') || []).slice(-8).reverse() }
+  }
+
+  export function some_writing() {
+    return { data: quasar.app.params.GREETING + '. This text came back from a script and was '
+      + 'rendered by Quasar, not by the station: there is no markup anywhere in this document.' }
+  }
+
+  export function some_code() {
+    return { data: 'export function one_number() {\n  return { data: { value: 42 } }\n}' }
+  }
+
+  export function form_values() {
+    return { data: quasar.store.get('form') || { choice: 'second', number: 3, port: 8080 } }
+  }
+
+  export function remember(values) {
+    const things = remembered()
+    things.push(values)
+    quasar.store.set('things', things)
+    quasar.store.set('form', values)
+    note('remembered ' + (values.text || 'something'))
+    return { toast: 'Remembered.', refresh: ['c_table', 'c_stat', 'c_gauge', 'c_list', 'c_timeline'],
+             navigate: 'data' }
+  }
+
+  export function say_something() {
+    const words = ['Still here.', 'Nothing to report.', 'All quiet.', 'Working.']
+    const said = words[Math.floor(Math.random() * words.length)]
+    note(said)
+    return { toast: said, refresh: ['c_timeline'] }
+  }
+
+  export function forget_everything() {
+    quasar.store.delete('things')
+    quasar.store.delete('events')
+    quasar.store.delete('form')
+    return { toast: 'Forgotten.', refresh: ['c_table', 'c_stat', 'c_gauge', 'c_list', 'c_timeline'] }
+  }
+
+  export function search_for({ q }) {
+    const hits = remembered().filter(t => (t.text || '').indexOf(q || '') >= 0)
+    return { toast: hits.length + ' of ' + remembered().length + ' match ' + JSON.stringify(q) }
+  }
+
+  // Long, so it runs as a background job with a pane of its own. Nothing here
+  // is slow for a good reason — it is slow so that the pane can be watched.
+  export function count_slowly() {
+    for (let i = 1; i <= 10; i++) {
+      quasar.progress(i * 10, 'step ' + i + ' of 10')
+      // No sleep exists in a station: there is no event loop and no timers.
+      // Ten million iterations is roughly a moment, which is the point.
+      let n = 0
+      for (let j = 0; j < 3000000; j++) n += j
+      quasar.log('step ' + i + ' summed to ' + n)
+    }
+    note('counted to ten')
+    return { toast: 'Counted to ten.', refresh: ['c_timeline'] }
+  }
+
+  // Deliberately wrong: a table needs a list of rows, and this returns a
+  // string. The panel says so, which is the whole point of it being here.
+  export function wrong_shape() {
+    return { data: 'three things' }
+  }
+
+  export function throws() {
+    throw new Error('this is what an action failing looks like')
+  }
+
+  function note(what) {
+    const events = quasar.store.get('events') || []
+    events.push({ label: what, note: new Date().toISOString().slice(11, 19) })
+    quasar.store.set('events', events.slice(-20))
+  }

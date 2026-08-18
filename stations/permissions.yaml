@@ -1,0 +1,343 @@
+# The permission model, one panel at a time.
+#
+# This station asks for every capability there is, and each tab exercises one
+# of them — including, deliberately, the things it was *not* granted, so that
+# what a refusal looks like is on the page beside what a grant looks like.
+#
+# Read the install screen carefully before accepting this one. It is asking for
+# exec, which is root on a container by design, and for the internet. It is
+# here to be read as an example of a document asking for a lot.
+#
+# The stack it deploys is two services on purpose: everything is granted on
+# "web" and nothing on "side", so the difference between "this station may run
+# commands" and "this station may run commands *here*" is visible.
+
+schema: 1
+id: permissions
+name: Permissions
+description: Every capability a station can hold, next to what it looks like when one is missing
+author: quasar
+version: "1.0.0"
+
+deploy:
+  deploy_type: compose
+  compose_service: web
+  port: 80
+  app_name: "Permissions demo"
+  subdomain: "permissions"
+  params:
+    - name: GREETING
+      label: What the page should say
+      default: "Served by the web service"
+  env: |
+    GREETING={{GREETING}}
+  compose: |
+    services:
+      web:
+        image: nginx:alpine
+        environment:
+          GREETING: ${GREETING}
+        volumes:
+          - ./data/site:/usr/share/nginx/html:ro
+        restart: unless-stopped
+      side:
+        image: alpine:3
+        command: ["sh", "-c", "while true; do echo side is alive; sleep 30; done"]
+        restart: unless-stopped
+
+permissions:
+  # Everything is narrowed to "web". The stack also runs "side", and nothing
+  # here reaches it — which is the point.
+  exec: {services: [web]}
+  logs: {services: [web]}
+  files: {paths: ["data/site/**", "data/notes.txt"]}
+  env: {read: [GREETING], write: [GREETING]}
+  net.internal: {services: [web], ports: [80]}
+  net.external: {allow: ["api.github.com"]}
+  lifecycle: [restart]
+  notify: true
+
+ui:
+  theme:
+    accent: "#e0913f"
+    tint: 0.07
+    radius: 6px
+    tracking: wide
+
+  tabs:
+    - id: containers
+      name: Containers
+      panels:
+        - id: p_uname
+          type: keyvalue
+          title: Inside the web container
+          width: half
+          help: quasar.exec, on the one service the document names.
+          source: {action: inside_web}
+
+        - id: p_exec_denied
+          type: stat
+          title: Inside the side container
+          width: half
+          help: The same call, on the service the document does not name. Deliberate.
+          source: {action: inside_side}
+
+        - id: p_web_log
+          type: log
+          title: What the web service is saying
+          service: web
+          tail: 50
+
+        - id: p_restart
+          type: confirm
+          title: Lifecycle
+          width: half
+          label: Restart this application
+          confirm: "Restart it? The site will be unavailable for a moment."
+          action: restart_app
+          help: The lifecycle permission lists restart, and only restart.
+
+        - id: p_stop_denied
+          type: button
+          title: A verb the document did not list
+          width: half
+          label: Try to stop it
+          tone: err
+          action: stop_app
+          help: Refused, because the document lists restart and nothing else.
+
+    - id: storage
+      name: Files and settings
+      panels:
+        - id: p_files
+          type: table
+          title: Under data/site
+          source: {action: list_site}
+          columns:
+            - {key: name, label: Name}
+            - {key: size, label: Bytes, align: right}
+          row_actions:
+            - {label: Delete, action: delete_file, tone: err, confirm: "Delete {{name}}?"}
+          empty: "Nothing there yet. Write the index page below."
+
+        - id: p_write
+          type: form
+          title: Write the site's index page
+          width: half
+          source: {action: read_index}
+          fields:
+            - {name: body, label: index.html, type: textarea}
+          submit: {label: Write it, action: write_index}
+
+        - id: p_env
+          type: form
+          title: A setting, per key
+          width: half
+          source: {action: read_greeting}
+          fields:
+            - {name: greeting, label: GREETING, help: "Declared for reading and for writing."}
+          submit: {label: Save, action: write_greeting}
+
+        - id: p_secret_denied
+          type: stat
+          title: A key the document did not name
+          width: half
+          help: Reading it is refused per key, not per file.
+          source: {action: read_undeclared}
+
+        - id: p_escape_denied
+          type: stat
+          title: A path outside the declared globs
+          width: half
+          help: Refused before anything touches a disk.
+          source: {action: read_outside}
+
+    - id: network
+      name: Network
+      panels:
+        - id: p_internal
+          type: keyvalue
+          title: The application's own web service
+          width: half
+          help: quasar.service, then quasar.http — on this server only.
+          source: {action: fetch_internal}
+
+        - id: p_external
+          type: keyvalue
+          title: api.github.com
+          width: half
+          help: The one address on the allowlist.
+          source: {action: fetch_external}
+
+        - id: p_external_denied
+          type: stat
+          title: An address that is not on the list
+          width: half
+          source: {action: fetch_elsewhere}
+
+        - id: p_site
+          type: iframe
+          title: The site itself, through Quasar
+          src: "{{service:web:80}}/"
+          height: 260px
+          help: No port is published for this; it is proxied from the container.
+
+        - id: p_notify
+          type: button
+          title: Notifications
+          width: half
+          label: Send one
+          action: send_notice
+          help: Goes wherever Settings → Integrations points.
+
+    - id: memory
+      name: Memory
+      panels:
+        - id: p_store
+          type: keyvalue
+          title: What this station remembers
+          source: {action: read_store}
+          refresh: {seconds: 30}
+          help: >
+            The hook below writes to this every minute while the application is
+            running, and stops the moment it is not.
+        - id: p_store_clear
+          type: button
+          title: Forget it
+          label: Clear the store
+          action: clear_store
+
+hooks:
+  # Every minute, so it can actually be watched. A real station polls far less
+  # often — and this one stops entirely when the application is stopped.
+  every:
+    - {minutes: 1, action: tick}
+
+script: |
+  function try_(fn) {
+    try {
+      return { ok: true, value: fn() }
+    } catch (e) {
+      return { ok: false, value: e.message }
+    }
+  }
+
+  export function inside_web() {
+    const r = quasar.exec('web', ['sh', '-c', 'echo "$(hostname) — $(nginx -v 2>&1)"'])
+    return { data: [
+      { key: 'Exit code', value: String(r.code) },
+      { key: 'Output',    value: (r.stdout || r.stderr).trim() },
+    ]}
+  }
+
+  export function inside_side() {
+    const attempt = try_(() => quasar.exec('side', ['hostname']).stdout)
+    if (attempt.ok) return { error: 'This should not have worked: ' + attempt.value }
+    return { data: { value: 'refused', label: attempt.value } }
+  }
+
+  export function restart_app() {
+    quasar.app.restart()
+    return { toast: 'Restarting.' }
+  }
+
+  export function stop_app() {
+    const attempt = try_(() => quasar.app.stop())
+    if (attempt.ok) return { error: 'This should not have worked.' }
+    return { toast: attempt.value }
+  }
+
+  export function list_site() {
+    const attempt = try_(() => quasar.files.list('data/site'))
+    if (!attempt.ok) return { data: [] }
+    return { data: attempt.value.filter(f => !f.dir).map(f => ({ name: f.name, size: String(f.size) })) }
+  }
+
+  export function delete_file({ name }) {
+    quasar.files.delete('data/site/' + name)
+    return { toast: 'Deleted.', refresh: ['p_files'] }
+  }
+
+  export function read_index() {
+    const attempt = try_(() => quasar.files.read('data/site/index.html'))
+    return { data: { body: attempt.ok ? attempt.value : '<h1>' + quasar.env.get('GREETING') + '</h1>\n' } }
+  }
+
+  export function write_index({ body }) {
+    quasar.files.mkdir('data/site')
+    quasar.files.write('data/site/index.html', body)
+    return { toast: 'Written. Reload the embedded page below.',
+             refresh: ['p_files', 'p_site'] }
+  }
+
+  export function read_greeting() {
+    return { data: { greeting: quasar.env.get('GREETING') } }
+  }
+
+  export function write_greeting({ greeting }) {
+    quasar.env.set('GREETING', greeting)
+    return { toast: 'Saved. It takes effect on the next deploy — the environment '
+      + 'is read when the stack comes up.', refresh: ['p_env'] }
+  }
+
+  export function read_undeclared() {
+    const attempt = try_(() => quasar.env.get('PATH'))
+    if (attempt.ok) return { error: 'This should not have worked: ' + attempt.value }
+    return { data: { value: 'refused', label: attempt.value } }
+  }
+
+  export function read_outside() {
+    const attempt = try_(() => quasar.files.read('data/site/../../../etc/passwd'))
+    if (attempt.ok) return { error: 'This should not have worked.' }
+    return { data: { value: 'refused', label: attempt.value } }
+  }
+
+  export function fetch_internal() {
+    const base = quasar.service('web', 80)
+    const r = quasar.http.get(base + '/')
+    return { data: [
+      { key: 'Address', value: base },
+      { key: 'Status',  value: String(r.status) },
+      { key: 'Served',  value: r.body.slice(0, 120) },
+    ]}
+  }
+
+  export function fetch_external() {
+    const r = quasar.http.get('https://api.github.com/repos/nginx/nginx')
+    const repo = r.json()
+    return { data: [
+      { key: 'Status', value: String(r.status) },
+      { key: 'Repo',   value: repo.full_name || '(no answer)' },
+      { key: 'Stars',  value: String(repo.stargazers_count || 0) },
+    ]}
+  }
+
+  export function fetch_elsewhere() {
+    const attempt = try_(() => quasar.http.get('https://example.com/').status)
+    if (attempt.ok) return { error: 'This should not have worked.' }
+    return { data: { value: 'refused', label: attempt.value } }
+  }
+
+  export function send_notice() {
+    quasar.notify('The permissions demo says hello.')
+    return { toast: 'Sent, if a webhook is configured.' }
+  }
+
+  export function read_store() {
+    return { data: [
+      { key: 'Ticks',     value: String(quasar.store.get('ticks') || 0) },
+      { key: 'Last tick', value: quasar.store.get('last') || 'never' },
+      { key: 'Keys',      value: (quasar.store.keys() || []).join(', ') || '(none)' },
+    ]}
+  }
+
+  export function clear_store() {
+    for (const key of quasar.store.keys() || []) quasar.store.delete(key)
+    return { toast: 'Cleared.', refresh: ['p_store'] }
+  }
+
+  // Runs on its own, once a minute, and only while the application is running.
+  export function tick() {
+    quasar.store.set('ticks', (quasar.store.get('ticks') || 0) + 1)
+    quasar.store.set('last', new Date().toISOString())
+  }

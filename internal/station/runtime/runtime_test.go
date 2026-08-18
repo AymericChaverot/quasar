@@ -67,6 +67,22 @@ func call(t *testing.T, script, action string, opts ...func(*worker.Call, *worke
 	return out, err, broker
 }
 
+// callWith is call for a broker the test built itself, which is what a station
+// exercising a capability needs.
+func callWith(t *testing.T, script, action string, broker *asked) (worker.Outcome, error, *asked) {
+	t.Helper()
+	lim := worker.DefaultLimits()
+	lim.Wall, lim.Grace = 20*time.Second, time.Second
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	c := worker.Call{Script: script, Action: action, Input: json.RawMessage(`{}`),
+		App: json.RawMessage(`{"id":"abcd1234","name":"Components demo","status":"running",` +
+			`"domain":"components.example.com","params":{"GREETING":"Hello from a station"}}`)}
+	out, err := worker.Run(ctx, helper(), c, lim, broker)
+	return out, err, broker
+}
+
 func TestAScriptReturnsAValue(t *testing.T) {
 	out, err, _ := call(t, `
 		export function player_count({ max }) {
