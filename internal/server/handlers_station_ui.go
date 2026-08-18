@@ -209,7 +209,8 @@ func (s *Server) handleStationEmbed(w http.ResponseWriter, r *http.Request) {
 	prefix := fmt.Sprintf("/apps/%s/station/embed/%s", a.ID, panel.ID)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
-		http.Error(w, "this service did not answer: "+err.Error(), http.StatusBadGateway)
+		http.Error(w, "this service did not answer: "+station.UnresolvedInternal(host, err).Error(),
+			http.StatusBadGateway)
 	}
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		// The embedded page is somebody else's, served from this origin. It

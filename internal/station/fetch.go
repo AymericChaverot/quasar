@@ -127,7 +127,7 @@ func (f *Fetcher) Do(ctx context.Context, method, raw string, headers map[string
 
 	resp, err := f.client(internal).Do(req)
 	if err != nil {
-		return Response{}, plainHTTPError(err)
+		return Response{}, readableFetchError(err, u.Hostname(), internal)
 	}
 	defer resp.Body.Close()
 
@@ -281,14 +281,39 @@ var cgnat = netip.MustParsePrefix("100.64.0.0/10")
 
 func isCGNAT(addr netip.Addr) bool { return addr.Is4() && cgnat.Contains(addr) }
 
-// plainHTTPError keeps the policy's own refusals readable when they come back
-// wrapped in url.Error from the redirect check or the dialler.
-func plainHTTPError(err error) error {
+// readableFetchError keeps the policy's own refusals readable when they come
+// back wrapped in url.Error from the redirect check or the dialler, and says
+// something useful about the one failure that is nobody's mistake.
+func readableFetchError(err error, host string, internal bool) error {
 	var ue *url.Error
 	if errors.As(err, &ue) && ue.Err != nil {
-		return ue.Err
+		err = ue.Err
+	}
+	if internal && isUnresolved(err) {
+		return fmt.Errorf("%s did not resolve. The dashboard reaches an application's own "+
+			"containers over the Traefik network, which it is only attached to when it runs as a "+
+			"container itself — as it does on a server, but not in local development", host)
 	}
 	return err
+}
+
+// isUnresolved reports a name the resolver could not answer for, as opposed to
+// a host that answered badly.
+func isUnresolved(err error) bool {
+	var dns *net.DNSError
+	if errors.As(err, &dns) {
+		return true
+	}
+	return strings.Contains(err.Error(), "no such host")
+}
+
+// UnresolvedInternal is that same explanation, for the places that reach a
+// container without going through Do — the embedded page's proxy.
+func UnresolvedInternal(host string, err error) error {
+	if !isUnresolved(err) {
+		return err
+	}
+	return readableFetchError(err, host, true)
 }
 
 // InternalServices lists the services a station's net.internal permission

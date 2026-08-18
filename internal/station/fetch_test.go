@@ -3,6 +3,7 @@ package station
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -196,5 +197,28 @@ func TestNoNetworkPermissionReachesNothing(t *testing.T) {
 	}
 	if _, err := f.ServiceURL("anything", 80); err == nil {
 		t.Error("an internal address was handed out to a station granted none")
+	}
+}
+
+// A container name that does not resolve is the one failure here that is
+// nobody's mistake: in local development the dashboard runs on the host rather
+// than as a container on the Traefik network, so it cannot see the names it
+// correctly handed out. Saying "no such host" leaves an operator looking for a
+// bug that is not there.
+func TestAnUnresolvedContainerSaysWhyRatherThanNoSuchHost(t *testing.T) {
+	perms := Permissions{NetInternal: NetInternal{Services: []string{"web"}, Ports: []int{80}}}
+	f := NewFetcher(perms, map[string]string{"web": "qs-abcd1234-web-1"})
+
+	_, err := f.Do(context.Background(), "GET", "http://qs-abcd1234-web-1:80/", nil, "")
+	if err == nil {
+		t.Fatal("a container name that does not exist resolved")
+	}
+	if !strings.Contains(err.Error(), "Traefik network") {
+		t.Errorf("the message does not explain what happened: %v", err)
+	}
+
+	// A host that answers badly is still reported as itself.
+	if got := UnresolvedInternal("x", errors.New("connection refused")); got.Error() != "connection refused" {
+		t.Errorf("an ordinary failure was rewritten: %v", got)
 	}
 }
