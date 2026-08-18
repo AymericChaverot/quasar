@@ -44,6 +44,12 @@ const (
 	// MsgResponse is the parent's answer to one request.
 	MsgResponse = "response"
 
+	// MsgLog is a line the script wrote for whoever is reading the panel. It
+	// is sent as it happens rather than gathered up and returned at the end,
+	// because the call most worth having a log of is the one that never
+	// reaches the end.
+	MsgLog = "log"
+
 	// MsgResult ends the call with a value, MsgError with a reason.
 	MsgResult = "result"
 	MsgError  = "error"
@@ -73,6 +79,12 @@ type Call struct {
 	// which is a second line rather than the first: the parent's sampler is
 	// what actually holds.
 	MaxMemoryBytes int64 `json:"max_memory_bytes"`
+
+	// App is the application the call is about, as quasar.app: its id, name,
+	// domain, status, image and the parameters it was deployed with. Sent
+	// rather than asked for, because every action reads some of it and none of
+	// it is privileged.
+	App json.RawMessage `json:"app,omitempty"`
 }
 
 // Message is one line on the pipe, in either direction. One shape with a Type

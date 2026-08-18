@@ -1,11 +1,10 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 
+	"quasar/internal/station/runtime"
 	"quasar/internal/station/worker"
 )
 
@@ -29,18 +28,13 @@ func runWorkerMode() bool {
 	if len(os.Args) < 2 || os.Args[1] != workerArg {
 		return false
 	}
-	if err := worker.Serve(os.Stdin, os.Stdout, engine); err != nil {
+	// runtime.Run is the JavaScript. Everything behind it reaches the outside
+	// world only through the Requester it is handed, so there is no way to add
+	// a capability that skips the parent's check.
+	if err := worker.Serve(os.Stdin, os.Stdout, runtime.Run); err != nil {
 		fmt.Fprintln(os.Stderr, "station worker:", err)
 		os.Exit(1)
 	}
 	os.Exit(0)
 	return true
-}
-
-// engine is where the JavaScript runtime is plugged in. The boundary comes
-// first and on purpose: everything behind this function reaches the outside
-// world only through the Requester it is handed, so there is no way to add a
-// capability later that skips the parent's check.
-func engine(call worker.Call, req worker.Requester) (json.RawMessage, error) {
-	return nil, errors.New("this build has no script runtime yet")
 }

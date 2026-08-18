@@ -90,7 +90,7 @@ func testLimits() Limits {
 	return l
 }
 
-func run(t *testing.T, mode string, lim Limits, b Broker) (json.RawMessage, error) {
+func run(t *testing.T, mode string, lim Limits, b Broker) (Outcome, error) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -98,12 +98,12 @@ func run(t *testing.T, mode string, lim Limits, b Broker) (json.RawMessage, erro
 }
 
 func TestAWorkerRunsOneCallAndAnswers(t *testing.T) {
-	value, err := run(t, "echo", testLimits(), DenyAll())
+	out, err := run(t, "echo", testLimits(), DenyAll())
 	if err != nil {
 		t.Fatalf("the call did not come back: %v", err)
 	}
-	if string(value) != `{"n":1}` {
-		t.Errorf("got %s, want the input back", value)
+	if string(out.Value) != `{"n":1}` {
+		t.Errorf("got %s, want the input back", out.Value)
 	}
 }
 
@@ -142,15 +142,15 @@ func TestACapabilityTheBrokerPerformsComesBack(t *testing.T) {
 		return json.RawMessage(`"the file's contents"`), nil
 	})
 
-	value, err := run(t, "capability", testLimits(), b)
+	out, err := run(t, "capability", testLimits(), b)
 	if err != nil {
 		t.Fatalf("the call did not come back: %v", err)
 	}
 	if asked != "files.read" {
 		t.Errorf("the parent was asked for %q", asked)
 	}
-	if string(value) != `"the file's contents"` {
-		t.Errorf("got %s, want what the parent handed back", value)
+	if string(out.Value) != `"the file's contents"` {
+		t.Errorf("got %s, want what the parent handed back", out.Value)
 	}
 }
 

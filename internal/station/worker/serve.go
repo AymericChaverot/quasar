@@ -15,10 +15,15 @@ import (
 // got to check against the station's permissions, and an escape from the
 // interpreter would then buy an attacker something.
 
-// Requester is how the runtime asks for anything it cannot do, which is
-// anything at all.
+// Requester is how the runtime reaches the parent: to ask for anything it
+// cannot do, which is anything at all, and to write a line somebody may read.
 type Requester interface {
 	Request(capability string, args any) (json.RawMessage, error)
+
+	// Log sends one line up the pipe and does not wait. A script's own log is
+	// not a capability — it reaches nothing — and making it one would mean a
+	// station could not say what it was doing while it did it.
+	Log(text string)
 }
 
 // Engine runs one call and returns the value to send back.
@@ -67,6 +72,14 @@ func Serve(r io.Reader, w io.Writer, engine Engine) error {
 type requester struct {
 	conn *Conn
 	next int
+}
+
+func (q *requester) Log(text string) {
+	body, err := json.Marshal(text)
+	if err != nil {
+		return
+	}
+	_ = q.conn.Send(Message{Type: MsgLog, Value: body})
 }
 
 func (q *requester) Request(capability string, args any) (json.RawMessage, error) {

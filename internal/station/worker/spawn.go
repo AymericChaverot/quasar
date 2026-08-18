@@ -146,6 +146,19 @@ type ScriptError struct{ Message string }
 
 func (e *ScriptError) Error() string { return e.Message }
 
+// Outcome is what a call produced: its value, and everything the script wrote
+// on the way. The log survives a failed call on purpose — an action that threw
+// halfway through is the one whose log somebody actually needs.
+type Outcome struct {
+	Value json.RawMessage
+	Logs  []string
+}
+
+// maxLogLines caps what one call may write. A script logging in a loop should
+// not be able to fill the dashboard's memory, and nobody reads the ten
+// thousandth line of anything.
+const maxLogLines = 500
+
 // Run starts a worker, gives it one call, answers what it asks for, and
 // returns what it produced.
 //
@@ -153,9 +166,9 @@ func (e *ScriptError) Error() string { return e.Message }
 // function whatever happened inside it, so nothing a station did survives into
 // the next call, and anything it wants to remember has to have gone through
 // quasar.store — which is to say, past the broker.
-func Run(ctx context.Context, sp Spawner, call Call, lim Limits, b Broker) (json.RawMessage, error) {
+func Run(ctx context.Context, sp Spawner, call Call, lim Limits, b Broker) (Outcome, error) {
 	if len(sp.Argv) == 0 {
-		return nil, &Failure{Reason: FailSpawn, Detail: "no command to run"}
+		return Outcome{}, &Failure{Reason: FailSpawn, Detail: "no command to run"}
 	}
 	call.WallMS = int(lim.Wall / time.Millisecond)
 	call.MaxResultBytes = lim.MaxResultBytes
@@ -171,11 +184,11 @@ func Run(ctx context.Context, sp Spawner, call Call, lim Limits, b Broker) (json
 	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, &Failure{Reason: FailSpawn, Detail: err.Error()}
+		return Outcome{}, &Failure{Reason: FailSpawn, Detail: err.Error()}
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, &Failure{Reason: FailSpawn, Detail: err.Error()}
+		return Outcome{}, &Failure{Reason: FailSpawn, Detail: err.Error()}
 	}
 	// Kept and shown rather than discarded: a worker that died before it could
 	// say anything on the pipe usually said it here.
@@ -183,7 +196,7 @@ func Run(ctx context.Context, sp Spawner, call Call, lim Limits, b Broker) (json
 	cmd.Stderr = &limitedWriter{w: &stderr, left: 8 << 10}
 
 	if err := cmd.Start(); err != nil {
-		return nil, &Failure{Reason: FailSpawn, Detail: err.Error()}
+		return Outcome{}, &Failure{Reason: FailSpawn, Detail: err.Error()}
 	}
 
 	// Why the worker was killed, if it was. Written before the kill, so it is
@@ -201,7 +214,7 @@ func Run(ctx context.Context, sp Spawner, call Call, lim Limits, b Broker) (json
 	defer close(done)
 	go watchMemory(cmd.Process.Pid, lim.MaxMemoryBytes, done, func() { kill(FailMemory) })
 
-	value, callErr := exchange(ctx, NewConn(stdout, stdin), call, lim, b)
+	out, callErr := exchange(ctx, NewConn(stdout, stdin), call, lim, b)
 
 	// The worker is finished with either way; closing its input is what tells
 	// a well-behaved one to stop, and the kill is for the rest.
@@ -210,28 +223,29 @@ func Run(ctx context.Context, sp Spawner, call Call, lim Limits, b Broker) (json
 	waitErr := cmd.Wait()
 
 	if reason, ok := killed.Load().(string); ok {
-		return nil, &Failure{Reason: reason}
+		return out, &Failure{Reason: reason}
 	}
 	if callErr != nil {
 		var f *Failure
 		if errors.As(callErr, &f) && f.Reason == FailCrash && waitErr != nil {
 			f.Detail = crashDetail(waitErr, stderr.String())
 		}
-		return nil, callErr
+		return out, callErr
 	}
-	return value, nil
+	return out, nil
 }
 
 // exchange is the conversation: send the call, answer every request, stop at
 // the first result or error.
-func exchange(ctx context.Context, conn *Conn, call Call, lim Limits, b Broker) (json.RawMessage, error) {
+func exchange(ctx context.Context, conn *Conn, call Call, lim Limits, b Broker) (Outcome, error) {
+	var out Outcome
 	if err := conn.SendCall(call); err != nil {
-		return nil, &Failure{Reason: FailCrash, Detail: err.Error()}
+		return out, &Failure{Reason: FailCrash, Detail: err.Error()}
 	}
 	for {
 		m, err := conn.Receive()
 		if err != nil {
-			return nil, &Failure{Reason: FailCrash, Detail: err.Error()}
+			return out, &Failure{Reason: FailCrash, Detail: err.Error()}
 		}
 		switch m.Type {
 		case MsgRequest:
@@ -241,20 +255,26 @@ func exchange(ctx context.Context, conn *Conn, call Call, lim Limits, b Broker) 
 				reply.Value, reply.Error = nil, err.Error()
 			}
 			if err := conn.Send(reply); err != nil {
-				return nil, &Failure{Reason: FailCrash, Detail: err.Error()}
+				return out, &Failure{Reason: FailCrash, Detail: err.Error()}
+			}
+		case MsgLog:
+			var line string
+			if json.Unmarshal(m.Value, &line) == nil && len(out.Logs) < maxLogLines {
+				out.Logs = append(out.Logs, line)
 			}
 		case MsgResult:
 			// Checked here as well as in the worker: the cap is the parent's,
 			// and a worker that has been taken over is exactly the one that
 			// would ignore its own.
 			if len(m.Value) > lim.MaxResultBytes {
-				return nil, &Failure{Reason: FailTooLarge}
+				return out, &Failure{Reason: FailTooLarge}
 			}
-			return m.Value, nil
+			out.Value = m.Value
+			return out, nil
 		case MsgError:
-			return nil, &ScriptError{Message: m.Error}
+			return out, &ScriptError{Message: m.Error}
 		default:
-			return nil, &Failure{Reason: FailProtocol, Detail: "unexpected " + m.Type}
+			return out, &Failure{Reason: FailProtocol, Detail: "unexpected " + m.Type}
 		}
 	}
 }
