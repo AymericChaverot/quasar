@@ -62,12 +62,60 @@ func installBridge(vm *goja.Runtime, call worker.Call, req worker.Requester) err
 		return err
 	}
 
+	// Behind a permission, and therefore behind the parent: the worker holds
+	// no disk, no socket and no database, so each of these is a question
+	// rather than an action.
+	for name, ns := range map[string]*goja.Object{
+		"files": b.files(),
+		"env":   b.env(),
+	} {
+		if err := q.Set(name, ns); err != nil {
+			return err
+		}
+	}
+	if err := q.Set("exec", b.exec); err != nil {
+		return err
+	}
+	if err := q.Set("logs", b.logs); err != nil {
+		return err
+	}
+
 	for name, ns := range b.ungranted() {
 		if err := q.Set(name, ns); err != nil {
 			return err
 		}
 	}
 	return vm.Set("quasar", q)
+}
+
+// exec runs a command in one of the application's services.
+//
+// argv, not a shell string. A station interpolates constantly — a mod
+// filename, a player name, a value read out of a config file — and a shell in
+// this path would turn the first one carrying a semicolon into an injection.
+// Nothing between here and the daemon parses it.
+func (b *bridge) exec(service string, argv []string, opts goja.Value) goja.Value {
+	args := map[string]any{"service": service, "argv": argv}
+	if o, ok := opts.(*goja.Object); ok && o != nil {
+		if v := o.Get("stdin"); v != nil && !goja.IsUndefined(v) {
+			args["stdin"] = v.String()
+		}
+	}
+	return b.ask("exec", args)
+}
+
+// logs reads a service's recent output.
+func (b *bridge) logs(service string, opts goja.Value) goja.Value {
+	args := map[string]any{"service": service}
+	if o, ok := opts.(*goja.Object); ok && o != nil {
+		if v := o.Get("tail"); v != nil && !goja.IsUndefined(v) {
+			args["tail"] = v.ToInteger()
+		}
+		if v := o.Get("since"); v != nil && !goja.IsUndefined(v) {
+			args["since"] = v.String()
+		}
+	}
+	return b.ask("logs", args)
 }
 
 // app is the application the call is about, with the verbs that act on it
@@ -123,30 +171,73 @@ func (b *bridge) store() *goja.Object {
 	return obj
 }
 
-// ungranted are the namespaces whose implementations live on the other side of
-// the permission model. Each one exists so that reaching for it says which
-// line is missing from the document rather than failing as an undefined.
+// files reads and writes under the application's own folder, restricted by the
+// parent to the globs the document declared.
+func (b *bridge) files() *goja.Object {
+	obj := b.vm.NewObject()
+	obj.Set("list", func(path string) goja.Value { return b.ask("files.list", pathArg(path)) })
+	obj.Set("read", func(path string) goja.Value { return b.ask("files.read", pathArg(path)) })
+	obj.Set("readBytes", func(path string) goja.Value { return b.ask("files.readBytes", pathArg(path)) })
+	obj.Set("delete", func(path string) goja.Value { return b.ask("files.delete", pathArg(path)) })
+	obj.Set("mkdir", func(path string) goja.Value { return b.ask("files.mkdir", pathArg(path)) })
+	obj.Set("write", func(path string, content goja.Value) goja.Value {
+		return b.ask("files.write", map[string]any{"path": path, "content": text(content)})
+	})
+	return obj
+}
+
+// env reads and writes the named keys of the application's environment, one
+// key at a time because that is how the permission is written.
+func (b *bridge) env() *goja.Object {
+	obj := b.vm.NewObject()
+	obj.Set("get", func(key string) goja.Value {
+		return b.ask("env.get", map[string]any{"key": key})
+	})
+	obj.Set("set", func(key string, value goja.Value) goja.Value {
+		return b.ask("env.set", map[string]any{"key": key, "value": text(value)})
+	})
+	return obj
+}
+
+func pathArg(path string) map[string]any { return map[string]any{"path": path} }
+
+// text is a value on its way to a file or an environment line. An array of
+// bytes — what readBytes hands back, and what an action downloading a mod
+// passes straight through — becomes those bytes rather than "1,2,3".
+func text(v goja.Value) string {
+	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
+		return ""
+	}
+	if numbers, ok := v.Export().([]any); ok {
+		buf := make([]byte, 0, len(numbers))
+		for _, n := range numbers {
+			switch b := n.(type) {
+			case int64:
+				buf = append(buf, byte(b))
+			case float64:
+				buf = append(buf, byte(int64(b)))
+			default:
+				return v.String()
+			}
+		}
+		return string(buf)
+	}
+	return v.String()
+}
+
+// ungranted are the namespaces whose implementations are not here yet. Each
+// one exists so that reaching for it says which line is missing from the
+// document rather than failing as an undefined.
 func (b *bridge) ungranted() map[string]goja.Value {
 	out := map[string]goja.Value{
-		"exec":    b.vm.ToValue(b.refuse("exec", "quasar.exec")),
-		"logs":    b.vm.ToValue(b.refuse("logs", "quasar.logs")),
 		"service": b.vm.ToValue(b.refuse("net.internal", "quasar.service")),
 		"notify":  b.vm.ToValue(b.refuse("notify", "quasar.notify")),
 	}
-	for name, spec := range map[string]struct {
-		permission string
-		methods    []string
-	}{
-		"files": {"files", []string{"list", "read", "readBytes", "write", "delete", "mkdir"}},
-		"env":   {"env", []string{"get", "set"}},
-		"http":  {"net.external", []string{"get", "post"}},
-	} {
-		obj := b.vm.NewObject()
-		for _, m := range spec.methods {
-			obj.Set(m, b.refuse(spec.permission, "quasar."+name+"."+m))
-		}
-		out[name] = obj
+	http := b.vm.NewObject()
+	for _, m := range []string{"get", "post"} {
+		http.Set(m, b.refuse("net.external", "quasar.http."+m))
 	}
+	out["http"] = http
 	return out
 }
 

@@ -43,7 +43,9 @@ type asked struct {
 func (a *asked) Do(_ context.Context, capability string, args json.RawMessage) (json.RawMessage, error) {
 	a.capabilities = append(a.capabilities, capability)
 	if a.answer == nil {
-		return nil, errors.New("this station has not been granted " + capability)
+		// The wording the parent actually refuses with, so the tests below are
+		// about what an author would read.
+		return nil, errors.New(capability + `: this station's "files" permission does not cover it`)
 	}
 	return a.answer(capability, args)
 }
@@ -128,24 +130,57 @@ func TestAResultOverTheCapIsRefused(t *testing.T) {
 }
 
 // The rule that makes a station debuggable: reaching for something the
-// document did not declare says which line is missing.
-func TestAnUngrantedNamespaceNamesThePermission(t *testing.T) {
+// document did not declare says which line is missing, and the refusal comes
+// from the side of the boundary that holds the privileges rather than from a
+// binding somebody remembered not to inject.
+func TestAnUngrantedCapabilityNamesThePermission(t *testing.T) {
 	_, err, broker := call(t, `
 		export function peek() { return { data: quasar.files.read('data/server.properties') } }
 	`, "peek")
 
 	if err == nil {
-		t.Fatal("an ungranted namespace worked")
+		t.Fatal("an ungranted capability worked")
 	}
-	if !strings.Contains(err.Error(), `"files"`) || !strings.Contains(err.Error(), "quasar.files.read") {
-		t.Errorf("the error does not name the permission or what wanted it: %v", err)
+	if !strings.Contains(err.Error(), `"files"`) {
+		t.Errorf("the error does not name the permission: %v", err)
 	}
 	if strings.Contains(err.Error(), "undefined") {
 		t.Errorf("the error reads as a missing object rather than a missing permission: %v", err)
 	}
-	// And it never got as far as the parent, so nothing had to be refused.
-	if len(broker.capabilities) != 0 {
+	// It was refused where the privileges are, not where the script is.
+	if len(broker.capabilities) != 1 || broker.capabilities[0] != "files.read" {
 		t.Errorf("the parent was asked for %v", broker.capabilities)
+	}
+}
+
+// And nothing a station may write is ever undefined. An author who forgot a
+// permission should read about the permission, not about a property of
+// undefined.
+func TestEveryDocumentedNamespaceIsThere(t *testing.T) {
+	out, err, _ := call(t, `
+		export function look() {
+			const names = [
+				'quasar.app', 'quasar.app.restart', 'quasar.log', 'quasar.progress',
+				'quasar.store.get', 'quasar.store.set', 'quasar.store.delete', 'quasar.store.keys',
+				'quasar.exec', 'quasar.logs',
+				'quasar.files.list', 'quasar.files.read', 'quasar.files.readBytes',
+				'quasar.files.write', 'quasar.files.delete', 'quasar.files.mkdir',
+				'quasar.env.get', 'quasar.env.set',
+				'quasar.http.get', 'quasar.http.post', 'quasar.service', 'quasar.notify',
+			]
+			const missing = names.filter(n => eval('typeof ' + n) === 'undefined')
+			return { data: missing }
+		}
+	`, "look")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Data []string `json:"data"`
+	}
+	json.Unmarshal(out.Value, &got)
+	if len(got.Data) > 0 {
+		t.Errorf("undefined in a station's script: %v", got.Data)
 	}
 }
 

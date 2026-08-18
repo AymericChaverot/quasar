@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"quasar/internal/db"
+	"quasar/internal/docker"
 	"quasar/internal/files"
 	"quasar/internal/station"
 )
@@ -35,6 +36,30 @@ type stationCall struct {
 	app *db.App
 	doc station.Station
 	r   *http.Request
+
+	// dock is the containers half, named as an interface so the refusals can
+	// be tested without a Docker daemon. What is worth testing here is which
+	// commands get through and in what shape, not whether Docker runs them.
+	dock stationDocker
+}
+
+// stationDocker is all of the Docker client a station can reach. Two methods,
+// both narrowed to a named service, is the whole of it.
+type stationDocker interface {
+	ExecInService(ctx context.Context, a *db.App, service string, argv []string, stdin string) (docker.ExecResult, error)
+	TailLogs(ctx context.Context, a *db.App, service string, tail int, since string) (string, error)
+}
+
+// containers is the Docker client this call goes through, or a plain refusal
+// when the dashboard has none.
+func (c *stationCall) containers() (stationDocker, error) {
+	if c.dock != nil {
+		return c.dock, nil
+	}
+	if c.srv.dock == nil {
+		return nil, errors.New("this dashboard has no connection to Docker")
+	}
+	return c.srv.dock, nil
 }
 
 // Do performs one capability on the worker's behalf.
@@ -46,6 +71,10 @@ func (c *stationCall) Do(ctx context.Context, capability string, args json.RawMe
 		return c.files(capability, args)
 	case "env.get", "env.set":
 		return c.env(capability, args)
+	case "exec":
+		return c.exec(ctx, args)
+	case "logs":
+		return c.logs(ctx, args)
 	}
 	return nil, fmt.Errorf("this build of Quasar does not offer %s", capability)
 }
@@ -337,6 +366,84 @@ func trimEnvQuotes(v string) string {
 		return v[1 : len(v)-1]
 	}
 	return v
+}
+
+// ----------------------------------------------------------------- exec ----
+
+type execArgs struct {
+	Service string   `json:"service"`
+	Argv    []string `json:"argv"`
+	Stdin   string   `json:"stdin"`
+}
+
+// exec runs a command in one of the services the permission names.
+//
+// This is the strongest permission a station can hold — root on the container,
+// by design, and the install screen says so in those words. What narrows it is
+// the service list: a station granted exec on the game server has not been
+// granted it on the database beside it.
+func (c *stationCall) exec(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
+	var a execArgs
+	if err := json.Unmarshal(raw, &a); err != nil {
+		return nil, err
+	}
+	if !c.doc.Permissions.AllowsExec(a.Service) {
+		return nil, denied(fmt.Sprintf("running a command in %q", a.Service), "exec")
+	}
+	if len(a.Argv) == 0 {
+		return nil, errors.New("quasar.exec needs a command to run")
+	}
+	dock, err := c.containers()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := docker.ExecContext(ctx)
+	defer cancel()
+	result, err := dock.ExecInService(ctx, c.app, a.Service, a.Argv, a.Stdin)
+	if err != nil {
+		return nil, err
+	}
+
+	// Recorded whatever it returned: the audit log's question is what this
+	// station did, and a command that failed was still run.
+	c.audit("station.exec", a.Service+": "+strings.Join(a.Argv, " "))
+	return json.Marshal(result)
+}
+
+// ----------------------------------------------------------------- logs ----
+
+type logArgs struct {
+	Service string `json:"service"`
+	Tail    int    `json:"tail"`
+	Since   string `json:"since"`
+}
+
+// logs reads a named service's recent output.
+//
+// Separate from exec because it is far weaker and far more often the whole of
+// what a station needs: reading why a server refused to start is not the same
+// capability as being able to do anything at all inside it.
+func (c *stationCall) logs(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
+	var a logArgs
+	if err := json.Unmarshal(raw, &a); err != nil {
+		return nil, err
+	}
+	if !c.doc.Permissions.AllowsLogs(a.Service) {
+		return nil, denied(fmt.Sprintf("reading the logs of %q", a.Service), "logs")
+	}
+	dock, err := c.containers()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := docker.ExecContext(ctx)
+	defer cancel()
+	out, err := dock.TailLogs(ctx, c.app, a.Service, a.Tail, a.Since)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(out)
 }
 
 // ---------------------------------------------------------------- audit ----
