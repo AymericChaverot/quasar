@@ -13,6 +13,7 @@ import (
 	"quasar/internal/db"
 	"quasar/internal/docker"
 	"quasar/internal/files"
+	"quasar/internal/notify"
 	"quasar/internal/station"
 )
 
@@ -40,6 +41,9 @@ type stationCall struct {
 
 	// net is the way out, built on first use.
 	net *station.Fetcher
+
+	// sent counts the notifications this call has already sent.
+	sent int
 
 	// dock is the containers half, named as an interface so the refusals can
 	// be tested without a Docker daemon. What is worth testing here is which
@@ -84,6 +88,10 @@ func (c *stationCall) Do(ctx context.Context, capability string, args json.RawMe
 		return c.fetch(ctx, capability, args)
 	case "service":
 		return c.serviceURL(ctx, args)
+	case "lifecycle":
+		return c.lifecycle(ctx, args)
+	case "notify":
+		return c.notify(args)
 	}
 	return nil, fmt.Errorf("this build of Quasar does not offer %s", capability)
 }
@@ -534,6 +542,100 @@ func externalHost(raw string) string {
 		return ""
 	}
 	return strings.ToLower(u.Hostname())
+}
+
+// ------------------------------------------------------------ lifecycle ----
+
+type lifecycleArgs struct {
+	Verb  string `json:"verb"`
+	Image string `json:"image"`
+}
+
+// lifecycle drives the application the station is running on, in the verbs the
+// document listed and no others.
+//
+// It goes through exactly the same machinery as the buttons on the
+// application's page — the same Start, the same async deploy, the same
+// progress pane — because a station driving a redeploy down a second path
+// would be a second way for a deploy to go wrong.
+func (c *stationCall) lifecycle(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
+	var a lifecycleArgs
+	if err := json.Unmarshal(raw, &a); err != nil {
+		return nil, err
+	}
+	if !c.doc.Permissions.AllowsLifecycle(a.Verb) {
+		return nil, denied(fmt.Sprintf("%s on this application", a.Verb), "lifecycle")
+	}
+	if c.srv.dock == nil {
+		return nil, errors.New("this dashboard has no connection to Docker")
+	}
+
+	detail := a.Verb
+	switch a.Verb {
+	case "start":
+		if err := c.srv.dock.Start(ctx, c.app); err != nil {
+			return nil, err
+		}
+	case "stop":
+		if err := c.srv.dock.Stop(ctx, c.app); err != nil {
+			return nil, err
+		}
+	case "restart":
+		if err := c.srv.dock.Restart(ctx, c.app); err != nil {
+			return nil, err
+		}
+	case "redeploy":
+		// Asynchronous, like the button: a deploy outlives the request that
+		// started it, and a station action is not a place to wait for one.
+		c.srv.dock.DeployAsync(c.app, "station "+c.doc.ID)
+	case "set_image":
+		if a.Image == "" {
+			return nil, errors.New("setImage needs an image reference")
+		}
+		if err := db.UpdateAppImage(c.srv.db, c.app.ID, a.Image); err != nil {
+			return nil, err
+		}
+		c.app.ImageRef = a.Image
+		detail = "set_image to " + a.Image
+		c.srv.dock.UpdateAsync(c.app, "station "+c.doc.ID)
+	default:
+		return nil, fmt.Errorf("%q is not a lifecycle verb", a.Verb)
+	}
+
+	c.audit("station.lifecycle", detail)
+	return json.RawMessage("null"), nil
+}
+
+// --------------------------------------------------------------- notify ----
+
+// maxNotifications is what one call may send. A station that has something to
+// say says it once; one in a loop is a bug, and a bug that reaches somebody's
+// phone at three in the morning is a bug they remember.
+const maxNotifications = 3
+
+func (c *stationCall) notify(raw json.RawMessage) (json.RawMessage, error) {
+	var a struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(raw, &a); err != nil {
+		return nil, err
+	}
+	if !c.doc.Permissions.Notify {
+		return nil, denied("sending a notification", "notify")
+	}
+	if strings.TrimSpace(a.Message) == "" {
+		return nil, errors.New("quasar.notify needs something to say")
+	}
+	if c.sent >= maxNotifications {
+		return nil, fmt.Errorf("this station has already sent %d notifications in this call", c.sent)
+	}
+	c.sent++
+
+	// Named, because a message arriving out of nowhere is one nobody can act
+	// on: whose station, about which application.
+	notify.Send(c.srv.db, fmt.Sprintf("%s (%s): %s", c.doc.Name, c.app.Name, a.Message))
+	c.audit("station.notify", a.Message)
+	return json.RawMessage("null"), nil
 }
 
 // ---------------------------------------------------------------- audit ----

@@ -165,6 +165,15 @@ func UpdateAppPreBackup(db *sql.DB, k *secrets.Keyring, id, command string) erro
 	return err
 }
 
+// UpdateAppImage points an image application at a different reference, which
+// takes effect on the next deploy. It exists for a station upgrading the
+// server it manages — the version of a game server is an image tag, and
+// changing it is the whole of what "upgrade" means.
+func UpdateAppImage(db *sql.DB, id, imageRef string) error {
+	_, err := db.Exec("UPDATE apps SET image_ref = ? WHERE id = ?", imageRef, id)
+	return err
+}
+
 // SetAppOrder writes an app's explicit position in the list.
 func SetAppOrder(db *sql.DB, id string, order int) {
 	db.Exec("UPDATE apps SET sort_order = ? WHERE id = ?", order, id)

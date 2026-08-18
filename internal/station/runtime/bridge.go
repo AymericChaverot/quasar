@@ -83,12 +83,10 @@ func installBridge(vm *goja.Runtime, call worker.Call, req worker.Requester) err
 	if err := q.Set("service", b.service); err != nil {
 		return err
 	}
-
-	for name, ns := range b.ungranted() {
-		if err := q.Set(name, ns); err != nil {
-			return err
-		}
+	if err := q.Set("notify", b.notify); err != nil {
+		return err
 	}
+
 	return vm.Set("quasar", q)
 }
 
@@ -132,12 +130,28 @@ func (b *bridge) app(raw json.RawMessage) (*goja.Object, error) {
 		}
 	}
 	obj := b.vm.ToValue(fields).(*goja.Object)
-	for _, verb := range []string{"start", "stop", "restart", "redeploy", "setImage"} {
-		if err := obj.Set(verb, b.refuse("lifecycle", "quasar.app."+verb)); err != nil {
+
+	// The verbs, over the parent, which is where the list the operator
+	// accepted lives. setImage is spelled in JavaScript here and in snake_case
+	// in the document, because each reads as itself where it is written.
+	for _, verb := range []string{"start", "stop", "restart", "redeploy"} {
+		if err := obj.Set(verb, b.verb(verb)); err != nil {
 			return nil, err
 		}
 	}
+	if err := obj.Set("setImage", func(ref string) goja.Value {
+		return b.ask("lifecycle", map[string]any{"verb": "set_image", "image": ref})
+	}); err != nil {
+		return nil, err
+	}
 	return obj, nil
+}
+
+// verb is one lifecycle action, asked for by name.
+func (b *bridge) verb(name string) func(goja.FunctionCall) goja.Value {
+	return func(goja.FunctionCall) goja.Value {
+		return b.ask("lifecycle", map[string]any{"verb": name})
+	}
 }
 
 // log writes a line for whoever is reading the panel.
@@ -288,22 +302,11 @@ func (b *bridge) service(name string, port int) goja.Value {
 	return b.ask("service", map[string]any{"service": name, "port": port})
 }
 
-// ungranted are the namespaces whose implementations are not here yet. Each
-// one exists so that reaching for it says which line is missing from the
-// document rather than failing as an undefined.
-func (b *bridge) ungranted() map[string]goja.Value {
-	return map[string]goja.Value{
-		"notify": b.vm.ToValue(b.refuse("notify", "quasar.notify")),
-	}
-}
-
-// refuse is a function that throws, naming what the document would have to
-// declare for it to work.
-func (b *bridge) refuse(permission, what string) func(goja.FunctionCall) goja.Value {
-	return func(goja.FunctionCall) goja.Value {
-		panic(b.vm.NewGoError(fmt.Errorf(
-			"%s needs the %q permission, which this station has not been granted", what, permission)))
-	}
+// notify sends one message to whatever the operator configured — a webhook, a
+// push, an email. Rate-limited by the parent, because a station saying the
+// same thing in a loop reaches somebody's phone.
+func (b *bridge) notify(message string) goja.Value {
+	return b.ask("notify", map[string]any{"message": message})
 }
 
 // ask sends one capability request and returns what came back, throwing into
