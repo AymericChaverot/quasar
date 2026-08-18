@@ -13,6 +13,14 @@
   </div>
   <div class="flex items-center gap-3">
     {{if $.IsAdmin}}<a href="/apps/{{.ID}}/terminal" class="btn">{{template "icon_terminal"}}Terminal</a>{{end}}
+    {{/* Where the tabs above come from, said out loud: this page does more
+         than an ordinary application's, and the reason is one word. */}}
+    {{with .StationID}}
+    <a href="/stations" class="chip chip-name flex items-center gap-1.5"
+       title="Deployed from the {{.}} station">
+      <span class="station-mark">{{template "icon_layers"}}</span>{{.}}
+    </a>
+    {{end}}
     <span class="chip">{{.DeployType}}</span>
     {{/* A git app is two very different deployments behind one label, so the
          one it actually is belongs next to it. */}}

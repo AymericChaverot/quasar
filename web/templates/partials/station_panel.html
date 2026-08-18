@@ -244,15 +244,33 @@
 </div>
 {{end}}
 
-{{/* What an action had to say. A toast fades on its own; an error stays,
-     because the reason something failed is the thing somebody came to read. */}}
+{{/* What an action had to say, floating over the page near where it was
+     pressed. A toast goes on its own after a few seconds; an error stays until
+     it is dismissed, because the reason something failed is the thing somebody
+     came to read. */}}
 {{define "station_message"}}
 {{if .Error}}
-<div class="alert-err mb-4">
-  <p class="text-sm font-medium">That did not work</p>
-  <p class="mono mt-1 text-xs">{{.Error}}</p>
+<div class="station-toast station-toast-err" role="alert">
+  <div class="min-w-0">
+    <p class="text-sm font-medium">That did not work</p>
+    <p class="mono mt-1 text-xs">{{.Error}}</p>
+  </div>
+  <button type="button" class="station-toast-close" aria-label="Dismiss"
+          onclick="this.closest('.station-toast').remove()">&times;</button>
 </div>
 {{else if .Toast}}
-<div class="card station-toast mb-4 px-4 py-2 text-sm">{{.Toast}}</div>
+<div class="station-toast station-toast-ok" role="status">
+  <span class="min-w-0 text-sm">{{.Toast}}</span>
+  <button type="button" class="station-toast-close" aria-label="Dismiss"
+          onclick="this.closest('.station-toast').remove()">&times;</button>
+</div>
+<script>
+  (function () {
+    var toast = document.querySelector("#station-message .station-toast-ok");
+    if (!toast) return;
+    setTimeout(function () { toast.classList.add("is-going"); }, 6000);
+    setTimeout(function () { toast.remove(); }, 6400);
+  })();
+</script>
 {{end}}
 {{end}}

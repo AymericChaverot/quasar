@@ -38,6 +38,12 @@
         </td>
         <td>
           <a href="/apps/{{.ID}}" class="font-medium hover:underline">{{.Name}}</a>
+          {{/* An application deployed from a station has a page that does more
+               than the others', and nothing in a list of names would say so. */}}
+          {{with .StationID}}
+          <span class="station-mark ml-1.5" title="Deployed from the {{.}} station"
+                aria-label="from a station">{{template "icon_layers"}}</span>
+          {{end}}
         </td>
         <td>
           <a href="https://{{.Host}}" target="_blank" rel="noopener"

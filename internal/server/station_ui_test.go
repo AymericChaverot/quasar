@@ -162,6 +162,76 @@ func TestEveryComponentDraws(t *testing.T) {
 	}
 }
 
+// A message floats over the page rather than sitting at the top of the block:
+// the button that caused it is often three screens down from there, and a
+// message nobody scrolls back up to read is a message nobody reads.
+func TestAMessageFloatsAndCanBeDismissed(t *testing.T) {
+	s := testServer(t)
+	draw := func(result ui.Result) string {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := s.pages["app_detail"].ExecuteTemplate(&buf, "station_message", result); err != nil {
+			t.Fatal(err)
+		}
+		return html.UnescapeString(buf.String())
+	}
+
+	toast := draw(ui.Result{Toast: "Sodium installed"})
+	if !strings.Contains(toast, "station-toast") || !strings.Contains(toast, "Sodium installed") {
+		t.Errorf("a toast does not render:\n%s", toast)
+	}
+	// It goes on its own, because it is a transient message and says so.
+	if !strings.Contains(toast, "toast.remove()") {
+		t.Error("a toast stays on the page for ever")
+	}
+
+	// An error does not: the reason something failed is what somebody came to
+	// read, and it waits until they have.
+	failed := draw(ui.Result{Error: "no build of sodium for 1.20.1"})
+	if !strings.Contains(failed, "no build of sodium") {
+		t.Errorf("an error does not render:\n%s", failed)
+	}
+	if strings.Contains(failed, "setTimeout") {
+		t.Error("an error takes itself off the page")
+	}
+	if !strings.Contains(failed, "Dismiss") {
+		t.Error("an error cannot be dismissed, so it is there for ever")
+	}
+}
+
+// The block has two places for what comes back, and they are not the same
+// place: a toast floats, a long action's progress pane stays on the page where
+// it can be watched.
+func TestTheBlockKeepsToastsAndJobPanesApart(t *testing.T) {
+	block := &StationBlock{
+		App: &db.App{ID: "abcd1234"},
+		Doc: station.Station{Name: "Demo", UI: ui.UI{Tabs: []ui.Tab{
+			{ID: "t", Name: "T", Panels: []ui.Panel{{ID: "p", Type: "stat"}}},
+		}}},
+	}
+
+	s := testServer(t)
+	var buf bytes.Buffer
+	if err := s.pages["app_detail"].ExecuteTemplate(&buf, "station_block", block); err != nil {
+		t.Fatal(err)
+	}
+	page := buf.String()
+
+	if !strings.Contains(page, `id="station-message" class="station-toasts"`) {
+		t.Error("there is nowhere for a message to float")
+	}
+	if !strings.Contains(page, `id="station-jobs"`) {
+		t.Error("there is nowhere for a long action's pane to sit")
+	}
+	// The pane is inside the block, above the tabs; the toasts are not.
+	if strings.Index(page, `id="station-jobs"`) > strings.Index(page, "</section>") {
+		t.Error("the job pane is outside the block")
+	}
+	if strings.Index(page, `id="station-message"`) < strings.Index(page, "</section>") {
+		t.Error("the toasts are inside the block, where they would scroll away")
+	}
+}
+
 // A station's script exports helpers as well as actions, and the name of the
 // one to run arrives in a URL. Only what the interface actually reaches may be
 // run.

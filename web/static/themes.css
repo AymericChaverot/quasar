@@ -2586,3 +2586,77 @@ button[disabled] { cursor: progress; opacity: 0.65; }
 
 /* Room between one column and the next, which a bare table does not give. */
 .station-row td { padding-left: 0.5rem; padding-right: 0.5rem; }
+
+/* A station's messages float over the page rather than sitting at the top of
+   its block. The button that caused one is often three screens down from
+   there, and a message nobody scrolls back up to read is a message nobody
+   reads. */
+.station-toasts {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: min(26rem, calc(100vw - 2.5rem));
+  pointer-events: none;
+}
+
+.station-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem 0.625rem 0.875rem;
+  border: var(--border-w) solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  pointer-events: auto;
+  animation: station-toast-in 140ms ease-out;
+}
+.station-toast.is-going {
+  opacity: 0;
+  transform: translateY(0.375rem);
+  transition: opacity 400ms ease, transform 400ms ease;
+}
+.station-toast-ok { border-left: 3px solid var(--ok); }
+.station-toast-err { border-left: 3px solid var(--err); }
+
+.station-toast-close {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0 0.25rem;
+  line-height: 1;
+  font-size: 1.125rem;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.station-toast-close:hover { color: var(--text); }
+
+@keyframes station-toast-in {
+  from { opacity: 0; transform: translateY(0.5rem); }
+  to { opacity: 1; transform: none; }
+}
+
+/* A long action's pane, which is not a message: it sits in the block, above
+   the tabs, and it is there to be watched. */
+.station-jobs:not(:empty) { padding: 1rem 1rem 0; }
+
+/* The mark on an application deployed from a station, in the list and on its
+   own page. */
+.station-mark {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+  vertical-align: -0.125em;
+}
+.station-mark svg { width: 0.875rem; height: 0.875rem; }
+
+.station-icon-lg {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius);
+  object-fit: cover;
+  flex-shrink: 0;
+}

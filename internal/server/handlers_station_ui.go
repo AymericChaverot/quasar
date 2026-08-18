@@ -261,6 +261,9 @@ func (s *Server) handleStationAction(w http.ResponseWriter, r *http.Request) {
 	// and the answer is a pane to watch it in rather than a result: a browser
 	// that gives up waiting has not cancelled a mod download.
 	if slices.Contains(doc.UI.LongActions(), name) {
+		// A progress pane is not a toast: it belongs on the page, where it can
+		// be watched and where a reload finds it again.
+		w.Header().Set("HX-Retarget", "#station-jobs")
 		job, fresh := s.startLongAction(a, doc, name, input)
 		if !fresh {
 			s.audit(r, "station.action", doc.ID+" on "+a.Name, name+" was already running")

@@ -4,10 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -20,7 +20,6 @@ import (
 	"quasar/internal/catalog"
 	"quasar/internal/db"
 	"quasar/internal/docker"
-	"quasar/internal/station"
 )
 
 var (
@@ -149,14 +148,17 @@ func (s *Server) handleAppNew(w http.ResponseWriter, r *http.Request) {
 		// of their own came here to pick from that one.
 		"Sources": s.customCatalogs(),
 	}
-	// ?template=<id> prefills the form from a one-click catalog entry and
-	// ?station=<id> from an installed station, while ?p.NAME=value answers the
-	// choices either of them offers — which version of a game server, how much
-	// memory, which host port. Carrying them in the query string keeps the
-	// selection stateless and shareable: the address of a prefilled form is the
-	// whole of what was picked.
-	if t, stationID := s.prefillFrom(r, cat); t != nil {
-		v := t.Resolve(pickedParams(r))
+	// ?template=<id> prefills the form from a one-click catalog entry, and
+	// ?p.NAME=value answers the choices that entry offers — which version of a
+	// game server, how much memory, which host port. Carrying them in the query
+	// string keeps the selection stateless and shareable: the address of a
+	// prefilled form is the whole of what was picked.
+	//
+	// A station does not come through here. It has an install page of its own,
+	// because installing one is a different thing from filling in this form and
+	// should not have to look like it.
+	if t := cat.Get(r.URL.Query().Get("template")); t != nil {
+		v := t.Resolve(pickedParams(r.URL.Query()))
 		// The entry proposes an address, but a second server from the same
 		// entry would propose the one the first is already on. The public
 		// address has to be settled before the env is rendered, because
@@ -173,69 +175,20 @@ func (s *Server) handleAppNew(w http.ResponseWriter, r *http.Request) {
 			Port:           f.Port,
 			DataMount:      f.DataMount,
 			EnvContent:     f.Env,
-			StationID:      stationID,
 		}
 		data["Picked"] = t
 		data["Values"] = v
-		data["StationID"] = stationID
-		if stationID != "" {
-			// Carried through the form as the answers they were, because
-			// nothing else remembers them once they have been rendered into a
-			// compose file and an env — and a station's script reads them
-			// constantly.
-			if picked, err := json.Marshal(v); err == nil {
-				data["StationParams"] = string(picked)
-			}
-		}
 	}
 	s.render(w, r, "app_new", data)
 }
 
-// declaredParams keeps the submitted answers that the station actually asked
-// for, and only the values it accepts.
-//
-// This comes back from a form field, so it is whatever was posted. Running it
-// through Resolve is what makes it the choices the station offered rather than
-// a place to store arbitrary text that its own script would later read back and
-// trust.
-func declaredParams(st station.Station, raw string) string {
-	picked := catalog.Values{}
-	if raw != "" {
-		json.Unmarshal([]byte(raw), &picked)
-	}
-	out, err := json.Marshal(st.Template().Resolve(picked))
-	if err != nil {
-		return ""
-	}
-	return string(out)
-}
-
-// prefillFrom resolves what the form is being prefilled from, and — for a
-// station — which one, so the application records where its tabs come from.
-//
-// A station's deploy block is catalog.Template, which is the point rather than
-// a convenience: parameters, {{RANDOM}}, the compose rewriting and the host
-// port checks all apply to a station without a line of new code, and there is
-// one path to a deployed application rather than two that drift.
-func (s *Server) prefillFrom(r *http.Request, cat catalog.Catalog) (*catalog.Template, string) {
-	if id := r.URL.Query().Get("station"); id != "" {
-		st, ok := s.station(id)
-		if !ok {
-			return nil, ""
-		}
-		t := st.Template()
-		return &t, st.ID
-	}
-	return cat.Get(r.URL.Query().Get("template")), ""
-}
-
-// pickedParams reads the ?p.NAME=value pairs off the request. Nothing is
-// trusted here: Template.Resolve keeps only the parameters the entry declares
-// and only the values it accepts, so a hand-edited query string can pick from
-// what is offered and nothing else.
-func pickedParams(r *http.Request) catalog.Values {
+// pickedParams reads the p.NAME=value pairs out of a query string or a posted
+// form. Nothing is trusted here: Template.Resolve keeps only the parameters the
+// entry declares and only the values it accepts, so a hand-edited request can
+// pick from what is offered and nothing else.
+func pickedParams(values url.Values) catalog.Values {
 	out := catalog.Values{}
-	for k, vs := range r.URL.Query() {
+	for k, vs := range values {
 		if name, ok := strings.CutPrefix(k, "p."); ok && len(vs) > 0 {
 			out[name] = vs[0]
 		}
@@ -277,14 +230,6 @@ func (s *Server) handleAppCreate(w http.ResponseWriter, r *http.Request) {
 		CustomDomains:  normalizeDomains(form("custom_domains")),
 		Port:           80,
 	}
-	// Only a station that is actually installed may be recorded, so a
-	// hand-edited form cannot hang somebody else's tabs on an application.
-	if id := form("station_id"); id != "" {
-		if st, ok := s.station(id); ok {
-			a.StationID = id
-			a.StationParams = declaredParams(st, form("station_params"))
-		}
-	}
 	if p := form("port"); p != "" {
 		if n, err := strconv.Atoi(p); err == nil && n > 0 && n < 65536 {
 			a.Port = n
@@ -300,30 +245,42 @@ func (s *Server) handleAppCreate(w http.ResponseWriter, r *http.Request) {
 			a.MemLimitMB = n
 		}
 	}
-	if a.GitBranch == "" {
-		a.GitBranch = "main"
-	}
 
-	if errMsg := s.validateNewApp(a); errMsg != "" {
+	if errMsg := s.createApp(w, r, a); errMsg != "" {
 		s.render(w, r, "app_new", map[string]any{
 			"Title": "New application", "Domain": s.cfg.Domain,
 			"Error": errMsg, "Form": a,
 		})
-		return
+	}
+}
+
+// createApp checks, stores and deploys a new application, and returns what is
+// wrong with it — empty when it was created, in which case the redirect has
+// already been written.
+//
+// It is separate from the form that fills it in because there are now two of
+// those: the general one, and a station's own. What happens after the fields
+// are known should not depend on which page they came from.
+func (s *Server) createApp(w http.ResponseWriter, r *http.Request, a *db.App) string {
+	if a.GitBranch == "" {
+		a.GitBranch = "main"
+	}
+	if errMsg := s.validateNewApp(a); errMsg != "" {
+		return errMsg
 	}
 
 	a.ID = randomHex(4)
 	a.WebhookSecret = randomHex(16)
 
 	if err := db.InsertApp(s.db, s.keyring, a); err != nil {
-		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
-		return
+		return "database error: " + err.Error()
 	}
 	// A first deploy has nothing local to reuse: it has to pull the image or
 	// clone the repository.
 	s.dock.UpdateAsync(a, "create")
 	s.audit(r, "app.create", a.Name, a.Subdomain+" ("+a.DeployType+")")
 	http.Redirect(w, r, "/apps/"+a.ID, http.StatusSeeOther)
+	return ""
 }
 
 // normalizeDomains lowercases and deduplicates a comma-separated domain list.

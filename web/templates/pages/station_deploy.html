@@ -1,0 +1,153 @@
+{{define "content"}}
+{{with .Deploy}}
+{{$station := .Station}}
+<div class="mb-8 max-w-3xl">
+  <a href="/stations" class="back-link">Stations</a>
+  <div class="mt-2 flex items-start gap-3">
+    {{with $station.UI.Theme.Icon}}<img src="{{.}}" alt="" class="station-icon-lg" aria-hidden="true">{{end}}
+    <div class="min-w-0">
+      <h1 class="page-title">{{$station.Name}}</h1>
+      <p class="help mt-1!">{{$station.Description}}</p>
+      <p class="faint mt-1 text-xs">
+        <span class="chip">{{$station.Version}}</span>
+        {{with $station.Author}} by {{.}}{{end}}
+        · <span class="mono">{{$station.ID}}</span>
+      </p>
+    </div>
+  </div>
+</div>
+
+{{if .Error}}
+<div class="alert-err mb-6 max-w-3xl">
+  <p class="font-medium">This could not be installed:</p>
+  <p class="mono mt-1 text-xs">{{.Error}}</p>
+</div>
+{{end}}
+
+<form method="post" action="/stations/{{$station.ID}}/deploy" class="max-w-3xl space-y-8">
+
+  {{/* The station's own questions, and nothing else. Everything the
+       new-application form would have asked has already been answered by the
+       document, and is behind Advanced options below. */}}
+  {{if .Params}}
+  <section class="space-y-4">
+    <h2 class="h-label">{{$station.Name}} asks</h2>
+    <div class="card grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
+      {{$d := .}}
+      {{range .Params}}
+      <div>
+        <label class="label" for="p-{{.Name}}">{{.Title}}</label>
+        {{$v := $d.Value .}}
+        {{if eq .Type "select"}}
+        <select id="p-{{.Name}}" name="p.{{.Name}}" class="input">
+          {{range .Options}}<option value="{{.}}" {{if eq . $v}}selected{{end}}>{{.}}</option>{{end}}
+        </select>
+        {{else}}
+        <input id="p-{{.Name}}" name="p.{{.Name}}" class="input"
+               type="{{if or (eq .Type "number") (eq .Type "port")}}number{{else}}text{{end}}"
+               {{if eq .Type "port"}}min="1" max="65535"{{end}}
+               value="{{$v}}" autocomplete="off">
+        {{end}}
+        {{with .Help}}<p class="help">{{.}}</p>{{end}}
+      </div>
+      {{end}}
+    </div>
+  </section>
+  {{else}}
+  <p class="help">This station asks nothing. Install it and it will deploy as its author set it up.</p>
+  {{end}}
+
+  {{/* Restated here rather than only on the install screen: this is the page
+       where somebody decides to actually run the thing, and what it may reach
+       is part of that decision. */}}
+  <section class="space-y-4">
+    <h2 class="h-label">What it is allowed to do on this server</h2>
+    <div class="card p-4">
+      {{if .Grants}}
+      <ul class="space-y-2">
+        {{range .Grants}}
+        <li class="text-sm">
+          <span class="{{if .Strong}}font-medium{{end}}">{{.Title}}</span>
+          {{with .Detail}}<span class="faint mono block text-xs">{{.}}</span>{{end}}
+        </li>
+        {{end}}
+      </ul>
+      <p class="help">
+        These were declared by whoever wrote the station and accepted when it was installed.
+        They are not chosen per application: a revision that asks for anything more is held
+        until somebody accepts the new list on
+        <a href="/settings/stations" class="link">Settings → Stations</a>.
+      </p>
+      {{else}}
+      <p class="text-sm">
+        Nothing. This station can compute and return values, and reach nothing else on this server.
+      </p>
+      {{end}}
+    </div>
+  </section>
+
+  {{/* Everything the general form would have asked. Empty means "use what the
+       station worked out", which is the answer almost every time. */}}
+  <details class="card p-4">
+    <summary class="cursor-pointer select-none text-sm font-medium">Advanced options</summary>
+    <p class="help mt-2">
+      Left blank, each of these is worked out from your answers above. Fill one in to run a
+      second copy under another name, or to put it on an address of your choosing.
+    </p>
+    {{with .Proposed}}
+    <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div>
+        <label class="label" for="adv-name">Name</label>
+        <input id="adv-name" name="name" type="text" class="input" placeholder="{{.Name}}">
+      </div>
+      <div>
+        <label class="label" for="adv-subdomain">Address</label>
+        <div class="flex items-center gap-2">
+          <input id="adv-subdomain" name="subdomain" type="text" class="input mono" placeholder="{{.Subdomain}}">
+          <span class="faint mono text-sm">.{{$.Domain}}</span>
+        </div>
+      </div>
+      <div class="sm:col-span-2">
+        <label class="label" for="adv-domains">Custom domains</label>
+        <input id="adv-domains" name="custom_domains" type="text" class="input mono"
+               placeholder="comma-separated, optional">
+      </div>
+      <div>
+        <label class="label" for="adv-cpu">CPU limit</label>
+        <input id="adv-cpu" name="cpu_limit" type="number" step="0.1" min="0" class="input" placeholder="unlimited">
+      </div>
+      <div>
+        <label class="label" for="adv-mem">Memory limit (MB)</label>
+        <input id="adv-mem" name="mem_limit_mb" type="number" min="0" class="input" placeholder="unlimited">
+      </div>
+    </div>
+
+    <p class="h-label mt-6">What it will run</p>
+    <dl class="mt-2 space-y-1 text-xs">
+      <div class="flex justify-between gap-4">
+        <dt class="faint">Deploy type</dt><dd class="mono">{{.DeployType}}</dd>
+      </div>
+      {{with .ImageRef}}
+      <div class="flex justify-between gap-4"><dt class="faint">Image</dt><dd class="mono">{{.}}</dd></div>
+      {{end}}
+      {{with .ComposeService}}
+      <div class="flex justify-between gap-4"><dt class="faint">Routed service</dt><dd class="mono">{{.}}</dd></div>
+      {{end}}
+      <div class="flex justify-between gap-4">
+        <dt class="faint">Port</dt><dd class="mono">{{.Port}}</dd>
+      </div>
+    </dl>
+    {{with .ComposeYAML}}
+    <pre class="mono mt-3 max-h-64 overflow-auto rounded p-3 text-xs"
+         style="background: var(--surface-2)">{{.}}</pre>
+    {{end}}
+    {{end}}
+  </details>
+
+  <div class="flex flex-wrap items-center gap-3">
+    <button type="submit" class="btn-primary px-4 py-2">{{template "icon_deploy"}}Install and deploy</button>
+    <a href="/stations" class="btn px-4 py-2">Cancel</a>
+  </div>
+</form>
+{{end}}
+{{end}}

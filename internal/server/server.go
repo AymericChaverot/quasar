@@ -262,6 +262,11 @@ func (s *Server) routes() {
 	// than mixed into the catalogue: one is software to browse, the other is a
 	// program somebody wrote for you.
 	s.viewer("GET /stations", s.handleStationsPage)
+	// Installing a station is its own page, not the new-application form with
+	// a station in it: somebody else has already answered everything that form
+	// asks, and the only questions left are the station's own.
+	s.admin("GET /stations/{id}/deploy", s.handleStationDeployForm)
+	s.admin("POST /stations/{id}/deploy", s.handleStationDeploy)
 	// A station is a program somebody else wrote, and installing one is
 	// accepting what it may reach. Reading the page is an admin's business for
 	// the same reason writing a catalogue is.

@@ -6,8 +6,13 @@
     A station is an application that arrives with a control surface of its own — tabs, actions and
     views somebody wrote for one service in particular. It deploys like a catalogue entry and
     produces an ordinary application; what it adds is the page you get afterwards.
-    It is also a program, so it is installed by reading what it asks to be allowed to do, and
-    accepting it.
+  </p>
+  <p class="help max-w-3xl mt-2!">
+    It is also a program somebody else wrote, so what it may reach on this server is declared in
+    its own document — a list of services, paths, environment keys and addresses, each one named.
+    You are shown that list in plain words here and accept it, or you do not install the station;
+    there is nothing to configure per application afterwards. A revision that asks for anything
+    more is held, and keeps running the one you accepted until you accept the new list.
   </p>
 </div>
 
@@ -43,6 +48,12 @@
 
       <div>
         <p class="text-sm font-medium">This station will be allowed to:</p>
+        <p class="help mt-1!">
+          Its author declared these in the document; there is nothing to tick. Installing it grants
+          the list as a whole — a station is a program, and one running with half of what it asked
+          for fails in ways nobody could explain. If any of it is more than you want to give, the
+          answer is not to install it.
+        </p>
         {{if .Grants}}
         <ul class="mt-2 space-y-2">
           {{range .Grants}}

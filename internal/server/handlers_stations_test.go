@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"quasar/internal/catalog"
 	"quasar/internal/db"
 	"quasar/internal/station"
 )
@@ -47,6 +48,19 @@ ui:
 script: |
   export function hello() { return { data: { value: 1 } } }
 `
+
+// testStationWithParams is the same station with something to ask, which is
+// what the install page is about.
+var testStationWithParams = strings.Replace(testStation,
+	"deploy:\n  deploy_type: compose",
+	`deploy:
+  app_name: "Demo {{SIZE}}"
+  subdomain: "demo-{{SIZE}}"
+  params:
+    - {name: SIZE, label: How big, kind: select, default: small, options: [small, large]}
+  env: |
+    SIZE={{SIZE}}
+  deploy_type: compose`, 1)
 
 // bodyText is the rendered page with its HTML escapes undone, so a test can
 // assert on the sentence an operator reads rather than on &#34;.
@@ -235,42 +249,97 @@ func TestDeleteRemovesAStation(t *testing.T) {
 	}
 }
 
-// A station deploys down the catalogue's own path: its deploy block is a
-// catalogue entry, so the prefilled form is the one every other application
-// arrives at, and what makes it a station is the one hidden field saying so.
-func TestDeployingAStationPrefillsItsDeployBlock(t *testing.T) {
+// Installing a station asks the station's own questions and nothing else.
+// Everything the new-application form would have asked has already been
+// answered by the document, and is behind Advanced options for the rare case
+// where somebody wants to override one.
+func TestTheInstallPageAsksOnlyWhatTheStationAsks(t *testing.T) {
 	s, _ := catalogTestServer(t)
-	install(t, s, testStation, "")
+	install(t, s, testStationWithParams, "")
 
-	r := httptest.NewRequest("GET", "/apps/new?station=demo", nil)
+	r := httptest.NewRequest("GET", "/stations/demo/deploy", nil)
+	r.SetPathValue("id", "demo")
 	w := httptest.NewRecorder()
-	s.handleAppNew(w, r)
+	s.handleStationDeployForm(w, r)
 	if w.Code != http.StatusOK {
-		t.Fatalf("status %d, want the prefilled form", w.Code)
+		t.Fatalf("status %d, want the install page:\n%s", w.Code, w.Body)
 	}
 
 	body := bodyText(w)
 	for _, want := range []string{
-		`name="station_id" value="demo"`, // where the tabs will come from
-		"nginx:alpine",                   // the compose file, in the textarea
-		`value="app"`,                    // the service the domain routes to
+		"Demo asks",                            // the station's own questions
+		`name="p.SIZE"`,                        // as fields named after them
+		"What it is allowed to do",             // and what accepting it means
+		"Run any command inside the container", // in the same words as the install screen
+		"Advanced options",                     // everything else, folded away
+		"Install and deploy",
 	} {
 		if !strings.Contains(body, want) {
-			t.Errorf("the form was not prefilled from the station: no %q", want)
+			t.Errorf("the install page does not have %q", want)
 		}
+	}
+
+	// The machinery is out of the way rather than absent: an operator who
+	// wants a second copy under another name can still say so.
+	advanced := strings.Index(body, "Advanced options")
+	if i := strings.Index(body, "nginx:alpine"); i < advanced {
+		t.Error("the image is shown above the fold, where nobody needs it")
 	}
 }
 
-// A station nobody installed prefills nothing rather than half a form. The id
-// arrives in a query string, and a query string is typed by anybody.
-func TestAnUnknownStationPrefillsNothing(t *testing.T) {
+// The station's questions become the application, and the application keeps
+// the answers because its script reads them back.
+func TestInstallingAStationFillsTheApplicationFromItsDocument(t *testing.T) {
+	s, _ := catalogTestServer(t)
+	doc, err := station.Parse(testStationWithParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tpl := doc.Template()
+	values := tpl.Resolve(catalog.Values{"SIZE": "large"})
+	app, kept := s.fillFrom(tpl, values)
+
+	if app.Name != "Demo large" || app.Subdomain != "demo-large" {
+		t.Errorf("the answers did not reach the name or the address: %+v", app)
+	}
+	if !strings.Contains(app.EnvContent, "SIZE=large") {
+		t.Errorf("the answers did not reach the environment: %q", app.EnvContent)
+	}
+	if !strings.Contains(app.ComposeYAML, "nginx:alpine") || app.ComposeService != "app" {
+		t.Errorf("the deploy block did not reach the application: %+v", app)
+	}
+	if kept != `{"SIZE":"large"}` {
+		t.Errorf("the answers kept for the script are %s", kept)
+	}
+}
+
+// A value the station never offered is not one an operator can pick, whatever
+// they post: the answers are read back by the station's own script, and this is
+// where that stops being a place to put arbitrary text.
+func TestOnlyOfferedAnswersSurvive(t *testing.T) {
+	s, _ := catalogTestServer(t)
+	doc, _ := station.Parse(testStationWithParams)
+
+	tpl := doc.Template()
+	values := tpl.Resolve(catalog.Values{"SIZE": "enormous", "SOMETHING_ELSE": "x"})
+	_, kept := s.fillFrom(tpl, values)
+
+	if kept != `{"SIZE":"small"}` {
+		t.Errorf("kept %s, want the declared default and nothing it did not offer", kept)
+	}
+}
+
+// A station nobody installed has no install page, rather than an empty one.
+func TestAnUnknownStationHasNoInstallPage(t *testing.T) {
 	s, _ := catalogTestServer(t)
 
-	r := httptest.NewRequest("GET", "/apps/new?station=nothing", nil)
+	r := httptest.NewRequest("GET", "/stations/nothing/deploy", nil)
+	r.SetPathValue("id", "nothing")
 	w := httptest.NewRecorder()
-	s.handleAppNew(w, r)
-	if strings.Contains(bodyText(w), `name="station_id"`) {
-		t.Error("the form carries a station that is not installed")
+	s.handleStationDeployForm(w, r)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status %d, want a 404", w.Code)
 	}
 }
 

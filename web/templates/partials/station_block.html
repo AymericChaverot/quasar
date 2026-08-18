@@ -31,8 +31,10 @@
     {{end}}
   </div>
 
-  {{/* Where a toast or a refused action lands, once, wherever it came from. */}}
-  <div id="station-message" aria-live="polite"></div>
+  {{/* A long action's progress pane, which belongs on the page: it is a thing
+       to watch, and it survives a reload. Actions that start one retarget
+       here. */}}
+  <div id="station-jobs" class="station-jobs"></div>
 
   {{range $i, $tab := .Tabs}}
   <div class="station-pane {{if ne $i 0}}hidden{{end}}" data-station-pane="{{$tab.ID}}">
@@ -50,6 +52,12 @@
   </div>
   {{end}}
 </section>
+
+{{/* Where a toast or a refused action lands, wherever on the page it came
+     from. It floats rather than sitting at the top of the block, because the
+     button that caused it is often three screens down from there — a message
+     nobody scrolls back up to read is a message nobody reads. */}}
+<div id="station-message" class="station-toasts" aria-live="polite"></div>
 
 <script>
   (function () {
