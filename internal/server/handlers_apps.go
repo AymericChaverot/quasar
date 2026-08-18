@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"quasar/internal/catalog"
 	"quasar/internal/db"
 	"quasar/internal/docker"
+	"quasar/internal/station"
 )
 
 var (
@@ -176,8 +178,36 @@ func (s *Server) handleAppNew(w http.ResponseWriter, r *http.Request) {
 		data["Picked"] = t
 		data["Values"] = v
 		data["StationID"] = stationID
+		if stationID != "" {
+			// Carried through the form as the answers they were, because
+			// nothing else remembers them once they have been rendered into a
+			// compose file and an env — and a station's script reads them
+			// constantly.
+			if picked, err := json.Marshal(v); err == nil {
+				data["StationParams"] = string(picked)
+			}
+		}
 	}
 	s.render(w, r, "app_new", data)
+}
+
+// declaredParams keeps the submitted answers that the station actually asked
+// for, and only the values it accepts.
+//
+// This comes back from a form field, so it is whatever was posted. Running it
+// through Resolve is what makes it the choices the station offered rather than
+// a place to store arbitrary text that its own script would later read back and
+// trust.
+func declaredParams(st station.Station, raw string) string {
+	picked := catalog.Values{}
+	if raw != "" {
+		json.Unmarshal([]byte(raw), &picked)
+	}
+	out, err := json.Marshal(st.Template().Resolve(picked))
+	if err != nil {
+		return ""
+	}
+	return string(out)
 }
 
 // prefillFrom resolves what the form is being prefilled from, and — for a
@@ -250,8 +280,9 @@ func (s *Server) handleAppCreate(w http.ResponseWriter, r *http.Request) {
 	// Only a station that is actually installed may be recorded, so a
 	// hand-edited form cannot hang somebody else's tabs on an application.
 	if id := form("station_id"); id != "" {
-		if _, ok := s.station(id); ok {
+		if st, ok := s.station(id); ok {
 			a.StationID = id
+			a.StationParams = declaredParams(st, form("station_params"))
 		}
 	}
 	if p := form("port"); p != "" {

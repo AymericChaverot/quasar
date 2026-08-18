@@ -260,6 +260,7 @@
   {{/* Which station this application's extra tabs will come from, carried
        through the form so it survives the review the operator does here. */}}
   {{with .StationID}}<input type="hidden" name="station_id" value="{{.}}">{{end}}
+  {{with .StationParams}}<input type="hidden" name="station_params" value="{{.}}">{{end}}
   <section class="space-y-4">
     <h2 class="h-label">General</h2>
     <div class="grid grid-cols-2 gap-4">

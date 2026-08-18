@@ -206,6 +206,30 @@ func (r Root) Remove(rel string) error {
 	return os.Remove(target)
 }
 
+// Mkdir creates one directory, and only one: the parent has to exist already.
+//
+// It goes through resolveNew for the same reason every other write does — the
+// parent is resolved through its symlinks and checked against the root, and the
+// name that is joined onto the answer cannot itself be a path. A directory that
+// is already there is not an error, because the caller wanted it to exist and
+// it does.
+func (r Root) Mkdir(rel string) error {
+	if !r.writable {
+		return ErrReadOnly
+	}
+	target, err := r.resolveNew(rel)
+	if err != nil {
+		return err
+	}
+	if info, err := os.Lstat(target); err == nil {
+		if info.IsDir() {
+			return nil
+		}
+		return ErrNotDir
+	}
+	return os.Mkdir(target, 0o755)
+}
+
 // Editable reports whether a file can be opened in the editor: writable
 // storage, text, and small enough that what is shown is the whole of it.
 func (r Root) Editable(p Preview) bool {

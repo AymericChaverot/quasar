@@ -56,6 +56,14 @@ type App struct {
 	// that is removed leaves a perfectly ordinary application behind.
 	StationID string
 
+	// StationParams are the answers given when the station was deployed, as a
+	// JSON object of strings. They are kept because nothing else remembers
+	// them: the deploy renders them into a compose file and an env, and
+	// neither can be read back as the choices they were — while a station's
+	// script reads quasar.app.params constantly, because "which mod loader is
+	// this" is the first thing any of its actions needs to know.
+	StationParams string
+
 	CreatedAt time.Time
 }
 
@@ -84,7 +92,7 @@ func (a *App) CustomDomainList() []string {
 	return out
 }
 
-const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, compose_service, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, station_id, created_at"
+const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, compose_service, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, station_id, station_params, created_at"
 
 // scanApp reads one row and decrypts its at-rest-encrypted columns, so every
 // *App leaving the db package carries plaintext EnvContent/ComposeYAML —
@@ -95,7 +103,7 @@ func scanApp(row interface{ Scan(...any) error }, k *secrets.Keyring) (*App, err
 		&a.GitBranch, &a.GitBuild, &a.ComposeYAML, &a.ComposeService, &a.Port, &a.EnvContent, &a.DataMount,
 		&a.WebhookSecret, &a.CPULimit, &a.MemLimitMB, &a.CustomDomains,
 		&a.HealthPath, &a.BasicAuthUser, &a.BasicAuthHash, &a.SortOrder,
-		&a.PreBackupCmd, &a.RateLimit, &a.IPAllowCIDRs, &a.SecurityHeaders, &a.StationID, &a.CreatedAt)
+		&a.PreBackupCmd, &a.RateLimit, &a.IPAllowCIDRs, &a.SecurityHeaders, &a.StationID, &a.StationParams, &a.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -127,12 +135,12 @@ func InsertApp(db *sql.DB, k *secrets.Keyring, a *App) error {
 		return fmt.Errorf("encrypt pre-backup command: %w", err)
 	}
 	// New apps go to the bottom of the manually ordered list.
-	_, err = db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, compose_service, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, station_id, sort_order)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM apps))`,
+	_, err = db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, compose_service, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, station_id, station_params, sort_order)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM apps))`,
 		a.ID, a.Name, a.Subdomain, a.DeployType, a.ImageRef, a.GitURL, a.GitBranch, a.GitBuild, composeYAML, a.ComposeService,
 		a.Port, envContent, a.DataMount, a.WebhookSecret, a.CPULimit, a.MemLimitMB, a.CustomDomains,
 		a.HealthPath, a.BasicAuthUser, a.BasicAuthHash, preBackup,
-		a.RateLimit, a.IPAllowCIDRs, a.SecurityHeaders, a.StationID)
+		a.RateLimit, a.IPAllowCIDRs, a.SecurityHeaders, a.StationID, a.StationParams)
 	return err
 }
 
@@ -225,6 +233,10 @@ func UpdateAppCompose(db *sql.DB, k *secrets.Keyring, id, composeYAML string) er
 }
 
 func DeleteApp(db *sql.DB, id string) error {
+	// Whatever a station remembered about this application goes with it: a
+	// scratch space that outlived the thing it was about would come back as
+	// stale answers under the next application to take the id.
+	DeleteStationStore(db, id)
 	_, err := db.Exec("DELETE FROM apps WHERE id = ?", id)
 	return err
 }

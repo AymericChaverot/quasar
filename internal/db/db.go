@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS apps (
 	ip_allow_cidrs TEXT NOT NULL DEFAULT '',
 	security_headers INTEGER NOT NULL DEFAULT 0,
 	station_id     TEXT NOT NULL DEFAULT '',
+	station_params TEXT NOT NULL DEFAULT '',
 	created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -172,6 +173,19 @@ CREATE TABLE IF NOT EXISTS stations (
 	updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- The small key-value space a station gets, scoped to one application and one
+-- station. It needs no permission because it can reach nothing else — but it
+-- does need a table, because a station's script runs in a process that holds
+-- no disk and nothing in it survives the call.
+CREATE TABLE IF NOT EXISTS station_store (
+	app_id     TEXT NOT NULL,
+	station_id TEXT NOT NULL,
+	key        TEXT NOT NULL,
+	value      TEXT NOT NULL,
+	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY (app_id, station_id, key)
+);
+
 CREATE TABLE IF NOT EXISTS api_tokens (
 	id           INTEGER PRIMARY KEY AUTOINCREMENT,
 	name         TEXT NOT NULL,
@@ -228,6 +242,9 @@ var migrations = []string{
 	// Empty means "not deployed from a station", which every application that
 	// existed before stations did is.
 	"ALTER TABLE apps ADD COLUMN station_id TEXT NOT NULL DEFAULT ''",
+	// The choices a station was deployed with, which quasar.app.params reads
+	// back. Empty for everything that was not deployed from a station.
+	"ALTER TABLE apps ADD COLUMN station_params TEXT NOT NULL DEFAULT ''",
 }
 
 func Open(path string) (*sql.DB, error) {
