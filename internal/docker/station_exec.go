@@ -82,6 +82,33 @@ func (c *Client) containerForService(ctx context.Context, a *db.App, service str
 	return "", &ErrNoService{Service: service, Running: running}
 }
 
+// ServiceHost is the name a named service can be reached at from the
+// dashboard, which shares the traefik network with application containers.
+//
+// It is resolved here and handed to the station rather than composed by the
+// script, so a station never learns another container's name and has nothing
+// to guess with: quasar.service returns an address for a service its document
+// declared, or it returns nothing.
+func (c *Client) ServiceHost(ctx context.Context, a *db.App, service string) (string, error) {
+	if !c.UsesCompose(a) {
+		if _, err := c.appContainer(ctx, a.ID); err != nil {
+			return "", err
+		}
+		return ContainerName(a.ID), nil
+	}
+	for _, ct := range c.composeContainers(ctx, a.ID) {
+		if ct.Labels["com.docker.compose.service"] != service {
+			continue
+		}
+		if len(ct.Names) == 0 {
+			return "", fmt.Errorf("the container for %q has no name", service)
+		}
+		// Container names come back from the API with a leading slash.
+		return strings.TrimPrefix(ct.Names[0], "/"), nil
+	}
+	return "", &ErrNoService{Service: service}
+}
+
 // ExecInService runs argv inside one named service of an application.
 //
 // argv is passed to the daemon as it stands. There is no shell anywhere in

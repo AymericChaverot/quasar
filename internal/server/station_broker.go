@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 
@@ -37,6 +38,9 @@ type stationCall struct {
 	doc station.Station
 	r   *http.Request
 
+	// net is the way out, built on first use.
+	net *station.Fetcher
+
 	// dock is the containers half, named as an interface so the refusals can
 	// be tested without a Docker daemon. What is worth testing here is which
 	// commands get through and in what shape, not whether Docker runs them.
@@ -48,6 +52,7 @@ type stationCall struct {
 type stationDocker interface {
 	ExecInService(ctx context.Context, a *db.App, service string, argv []string, stdin string) (docker.ExecResult, error)
 	TailLogs(ctx context.Context, a *db.App, service string, tail int, since string) (string, error)
+	ServiceHost(ctx context.Context, a *db.App, service string) (string, error)
 }
 
 // containers is the Docker client this call goes through, or a plain refusal
@@ -75,6 +80,10 @@ func (c *stationCall) Do(ctx context.Context, capability string, args json.RawMe
 		return c.exec(ctx, args)
 	case "logs":
 		return c.logs(ctx, args)
+	case "http.get", "http.post":
+		return c.fetch(ctx, capability, args)
+	case "service":
+		return c.serviceURL(ctx, args)
 	}
 	return nil, fmt.Errorf("this build of Quasar does not offer %s", capability)
 }
@@ -444,6 +453,87 @@ func (c *stationCall) logs(ctx context.Context, raw json.RawMessage) (json.RawMe
 		return nil, err
 	}
 	return json.Marshal(out)
+}
+
+// ------------------------------------------------------------------ net ----
+
+type fetchArgs struct {
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
+	Body    string            `json:"body"`
+}
+
+type serviceArgs struct {
+	Service string `json:"service"`
+	Port    int    `json:"port"`
+}
+
+// fetcher is the station's way out, built once per call because resolving the
+// containers behind net.internal costs a Docker round trip and most calls make
+// no request at all.
+func (c *stationCall) fetcher(ctx context.Context) *station.Fetcher {
+	if c.net != nil {
+		return c.net
+	}
+	internal := map[string]string{}
+	if dock, err := c.containers(); err == nil {
+		for _, service := range c.doc.Permissions.InternalServices() {
+			if host, err := dock.ServiceHost(ctx, c.app, service); err == nil {
+				internal[service] = host
+			}
+		}
+	}
+	c.net = station.NewFetcher(c.doc.Permissions, internal)
+	return c.net
+}
+
+// fetch performs one request, if the document said it could.
+func (c *stationCall) fetch(ctx context.Context, capability string, raw json.RawMessage) (json.RawMessage, error) {
+	var a fetchArgs
+	if err := json.Unmarshal(raw, &a); err != nil {
+		return nil, err
+	}
+	method := http.MethodGet
+	if capability == "http.post" {
+		method = http.MethodPost
+	}
+
+	resp, err := c.fetcher(ctx).Do(ctx, method, a.URL, a.Headers, a.Body)
+	if err != nil {
+		return nil, err
+	}
+	// Only what left this server is recorded. An internal request never left
+	// the machine, and an audit log that cannot be skimmed is one nobody
+	// skims — what an operator wants to find in it is the traffic that went
+	// somewhere they would have to trust.
+	if host := externalHost(a.URL); host != "" && c.doc.Permissions.AllowsHost(host) {
+		c.audit("station.http.external", fmt.Sprintf("%s %s → %d", method, a.URL, resp.Status))
+	}
+	return json.Marshal(resp)
+}
+
+// serviceURL hands out an address on the internal network for a service and a
+// port the document declared.
+func (c *stationCall) serviceURL(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
+	var a serviceArgs
+	if err := json.Unmarshal(raw, &a); err != nil {
+		return nil, err
+	}
+	url, err := c.fetcher(ctx).ServiceURL(a.Service, a.Port)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(url)
+}
+
+// externalHost is the host of a URL that was meant for the internet, empty for
+// anything else.
+func externalHost(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
 }
 
 // ---------------------------------------------------------------- audit ----

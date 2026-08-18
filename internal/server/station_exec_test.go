@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -22,6 +23,14 @@ type fakeDocker struct {
 	result  docker.ExecResult
 	logs    string
 	tail    int
+	hosts   map[string]string
+}
+
+func (f *fakeDocker) ServiceHost(_ context.Context, _ *db.App, service string) (string, error) {
+	if host, ok := f.hosts[service]; ok {
+		return host, nil
+	}
+	return "", errors.New("no container for " + service)
 }
 
 func (f *fakeDocker) ExecInService(_ context.Context, _ *db.App, service string, argv []string, stdin string) (docker.ExecResult, error) {
@@ -129,6 +138,30 @@ func TestTruncatedOutputSaysSo(t *testing.T) {
 	// capability: "the command failed" is often the answer an action wanted.
 	if result.Code != 1 || result.Stderr != "boom" {
 		t.Errorf("result = %+v", result)
+	}
+}
+
+// quasar.service resolves a container the parent found, for a service and a
+// port the document declared. The script never learns a container's name any
+// other way.
+func TestServiceResolvesThroughTheParent(t *testing.T) {
+	c, dock := execFor(t, station.Permissions{NetInternal: station.NetInternal{
+		Services: []string{"minecraft"}, Ports: []int{8123},
+	}})
+	dock.hosts = map[string]string{"minecraft": "qs-abcd1234-minecraft-1"}
+
+	got, err := ask(t, c, "service", map[string]any{"service": "minecraft", "port": 8123})
+	if err != nil {
+		t.Fatalf("a declared service was refused: %v", err)
+	}
+	var url string
+	json.Unmarshal(got, &url)
+	if url != "http://qs-abcd1234-minecraft-1:8123" {
+		t.Errorf("service = %q", url)
+	}
+
+	if _, err := ask(t, c, "service", map[string]any{"service": "minecraft", "port": 25575}); err == nil {
+		t.Error("a port the document never named was handed out")
 	}
 }
 

@@ -68,6 +68,7 @@ func installBridge(vm *goja.Runtime, call worker.Call, req worker.Requester) err
 	for name, ns := range map[string]*goja.Object{
 		"files": b.files(),
 		"env":   b.env(),
+		"http":  b.http(),
 	} {
 		if err := q.Set(name, ns); err != nil {
 			return err
@@ -77,6 +78,9 @@ func installBridge(vm *goja.Runtime, call worker.Call, req worker.Requester) err
 		return err
 	}
 	if err := q.Set("logs", b.logs); err != nil {
+		return err
+	}
+	if err := q.Set("service", b.service); err != nil {
 		return err
 	}
 
@@ -225,20 +229,72 @@ func text(v goja.Value) string {
 	return v.String()
 }
 
+// http is the way out, over the parent, which is where the allowlist lives.
+func (b *bridge) http() *goja.Object {
+	obj := b.vm.NewObject()
+	obj.Set("get", func(url string, opts goja.Value) goja.Value { return b.request("http.get", url, opts) })
+	obj.Set("post", func(url string, opts goja.Value) goja.Value { return b.request("http.post", url, opts) })
+	return obj
+}
+
+// request performs one and hands back a response with a json() on it, because
+// the first thing every action does with an answer is parse it.
+func (b *bridge) request(capability, url string, opts goja.Value) goja.Value {
+	args := map[string]any{"url": url}
+	if o, ok := opts.(*goja.Object); ok && o != nil {
+		if v := o.Get("headers"); v != nil && !goja.IsUndefined(v) {
+			args["headers"] = v.Export()
+		}
+		if v := o.Get("body"); v != nil && !goja.IsUndefined(v) {
+			args["body"] = text(v)
+		}
+		// A json option is the common case written out: an object to send,
+		// with the header that says so.
+		if v := o.Get("json"); v != nil && !goja.IsUndefined(v) {
+			if body, err := json.Marshal(v.Export()); err == nil {
+				args["body"] = string(body)
+				headers, _ := args["headers"].(map[string]any)
+				if headers == nil {
+					headers = map[string]any{}
+				}
+				headers["Content-Type"] = "application/json"
+				args["headers"] = headers
+			}
+		}
+	}
+
+	resp := b.ask(capability, args)
+	obj, ok := resp.(*goja.Object)
+	if !ok {
+		return resp
+	}
+	obj.Set("json", func() goja.Value {
+		body := obj.Get("body")
+		if body == nil || goja.IsUndefined(body) {
+			return goja.Undefined()
+		}
+		var v any
+		if err := json.Unmarshal([]byte(body.String()), &v); err != nil {
+			panic(b.vm.NewGoError(fmt.Errorf("the answer is not JSON: %w", err)))
+		}
+		return b.vm.ToValue(v)
+	})
+	return obj
+}
+
+// service is the address of one of the application's own containers, handed
+// out by the parent for a service and a port the document declared.
+func (b *bridge) service(name string, port int) goja.Value {
+	return b.ask("service", map[string]any{"service": name, "port": port})
+}
+
 // ungranted are the namespaces whose implementations are not here yet. Each
 // one exists so that reaching for it says which line is missing from the
 // document rather than failing as an undefined.
 func (b *bridge) ungranted() map[string]goja.Value {
-	out := map[string]goja.Value{
-		"service": b.vm.ToValue(b.refuse("net.internal", "quasar.service")),
-		"notify":  b.vm.ToValue(b.refuse("notify", "quasar.notify")),
+	return map[string]goja.Value{
+		"notify": b.vm.ToValue(b.refuse("notify", "quasar.notify")),
 	}
-	http := b.vm.NewObject()
-	for _, m := range []string{"get", "post"} {
-		http.Set(m, b.refuse("net.external", "quasar.http."+m))
-	}
-	out["http"] = http
-	return out
 }
 
 // refuse is a function that throws, naming what the document would have to
