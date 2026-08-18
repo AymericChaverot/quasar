@@ -37,6 +37,7 @@
         <nav class="main-nav">
           <a href="/" class="nav-link {{navActive .Nav "apps"}}">Dashboard</a>
           {{if .IsAdmin}}<a href="/apps/new" class="nav-link {{navActive .Nav "new"}}">New application</a>{{end}}
+          {{if .HasStations}}<a href="/stations" class="nav-link {{navActive .Nav "stations"}}">Stations</a>{{end}}
           <a href="/logs" class="nav-link {{navActive .Nav "logs"}}">Logs</a>
           <a href="/audit" class="nav-link {{navActive .Nav "audit"}}">Audit</a>
           <a href="/system" class="nav-link {{navActive .Nav "system"}}">System</a>

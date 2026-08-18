@@ -48,7 +48,15 @@ type App struct {
 	BasicAuthUser   string  // Traefik basic auth username, empty = no protection
 	BasicAuthHash   string  // bcrypt hash in htpasswd format
 	SortOrder       int     // manual position in the dashboard list
-	CreatedAt       time.Time
+
+	// StationID names the station this application was deployed from, empty
+	// for every other application. It is the one field a station adds, and it
+	// only says where the extra tabs on this page come from: everything else
+	// about the row is what any application carries, which is why a station
+	// that is removed leaves a perfectly ordinary application behind.
+	StationID string
+
+	CreatedAt time.Time
 }
 
 // IPAllowList splits IPAllowCIDRs into entries for the Traefik middleware.
@@ -76,7 +84,7 @@ func (a *App) CustomDomainList() []string {
 	return out
 }
 
-const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, compose_service, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, created_at"
+const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, compose_service, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, station_id, created_at"
 
 // scanApp reads one row and decrypts its at-rest-encrypted columns, so every
 // *App leaving the db package carries plaintext EnvContent/ComposeYAML —
@@ -87,7 +95,7 @@ func scanApp(row interface{ Scan(...any) error }, k *secrets.Keyring) (*App, err
 		&a.GitBranch, &a.GitBuild, &a.ComposeYAML, &a.ComposeService, &a.Port, &a.EnvContent, &a.DataMount,
 		&a.WebhookSecret, &a.CPULimit, &a.MemLimitMB, &a.CustomDomains,
 		&a.HealthPath, &a.BasicAuthUser, &a.BasicAuthHash, &a.SortOrder,
-		&a.PreBackupCmd, &a.RateLimit, &a.IPAllowCIDRs, &a.SecurityHeaders, &a.CreatedAt)
+		&a.PreBackupCmd, &a.RateLimit, &a.IPAllowCIDRs, &a.SecurityHeaders, &a.StationID, &a.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -119,12 +127,12 @@ func InsertApp(db *sql.DB, k *secrets.Keyring, a *App) error {
 		return fmt.Errorf("encrypt pre-backup command: %w", err)
 	}
 	// New apps go to the bottom of the manually ordered list.
-	_, err = db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, compose_service, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, sort_order)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM apps))`,
+	_, err = db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, compose_service, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, station_id, sort_order)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM apps))`,
 		a.ID, a.Name, a.Subdomain, a.DeployType, a.ImageRef, a.GitURL, a.GitBranch, a.GitBuild, composeYAML, a.ComposeService,
 		a.Port, envContent, a.DataMount, a.WebhookSecret, a.CPULimit, a.MemLimitMB, a.CustomDomains,
 		a.HealthPath, a.BasicAuthUser, a.BasicAuthHash, preBackup,
-		a.RateLimit, a.IPAllowCIDRs, a.SecurityHeaders)
+		a.RateLimit, a.IPAllowCIDRs, a.SecurityHeaders, a.StationID)
 	return err
 }
 

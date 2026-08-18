@@ -11,6 +11,7 @@ import (
 
 	"quasar/internal/auth"
 	"quasar/internal/config"
+	"quasar/internal/db"
 	"quasar/internal/docker"
 	"quasar/internal/files"
 	"quasar/internal/secrets"
@@ -247,6 +248,10 @@ func (s *Server) routes() {
 	s.admin("GET /settings/catalogs/{id}/entries/{entry}", s.handleCatalogEntryForm)
 	s.admin("POST /settings/catalogs/{id}/entries/{entry}", s.handleCatalogEntrySave)
 	s.admin("POST /settings/catalogs/{id}/entries/{entry}/delete", s.handleCatalogEntryDelete)
+	// The stations an operator can deploy from, on a page of their own rather
+	// than mixed into the catalogue: one is software to browse, the other is a
+	// program somebody wrote for you.
+	s.viewer("GET /stations", s.handleStationsPage)
 	// A station is a program somebody else wrote, and installing one is
 	// accepting what it may reach. Reading the page is an admin's business for
 	// the same reason writing a catalogue is.
@@ -446,6 +451,10 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, dat
 	data["Theme"] = themeFrom(r)
 	data["Version"] = version.Version
 	data["Nav"] = navSection(r.URL.Path)
+	// The Stations entry only appears once there is a station to reach from
+	// it. An install with none has no business carrying a navigation entry for
+	// a page that would be empty.
+	data["HasStations"] = db.CountEnabledStations(s.db) > 0
 	// Injected for every page so templates can hide controls a viewer would
 	// only get a 403 from. requireAdmin is what actually enforces it; this is
 	// presentation.
@@ -481,6 +490,8 @@ func navSection(path string) string {
 		return "new"
 	case path == "/" || strings.HasPrefix(path, "/apps/"):
 		return "apps"
+	case strings.HasPrefix(path, "/stations"):
+		return "stations"
 	case strings.HasPrefix(path, "/logs"):
 		return "logs"
 	case strings.HasPrefix(path, "/audit"):

@@ -130,6 +130,23 @@ func UpdateStation(db *sql.DB, s *Station) error {
 	return err
 }
 
+// CountEnabledStations is what the header asks on every page: whether there is
+// a Stations page worth linking to at all. An install with no station has no
+// business carrying a navigation entry for one.
+func CountEnabledStations(db *sql.DB) int {
+	var n int
+	db.QueryRow("SELECT COUNT(*) FROM stations WHERE enabled = 1").Scan(&n)
+	return n
+}
+
+// CountAppsForStation is how many applications were deployed from a station,
+// which is what makes removing one a decision rather than a click.
+func CountAppsForStation(db *sql.DB, stationID string) int {
+	var n int
+	db.QueryRow("SELECT COUNT(*) FROM apps WHERE station_id = ?", stationID).Scan(&n)
+	return n
+}
+
 func SetStationEnabled(db *sql.DB, id int64, enabled bool) error {
 	_, err := db.Exec("UPDATE stations SET enabled = ? WHERE id = ?", enabled, id)
 	return err

@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS apps (
 	rate_limit     INTEGER NOT NULL DEFAULT 0,
 	ip_allow_cidrs TEXT NOT NULL DEFAULT '',
 	security_headers INTEGER NOT NULL DEFAULT 0,
+	station_id     TEXT NOT NULL DEFAULT '',
 	created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -224,6 +225,9 @@ var migrations = []string{
 	// a single repository on one, and every existing value is still a valid
 	// scope — the widest kind.
 	"ALTER TABLE git_credentials RENAME COLUMN host TO scope",
+	// Empty means "not deployed from a station", which every application that
+	// existed before stations did is.
+	"ALTER TABLE apps ADD COLUMN station_id TEXT NOT NULL DEFAULT ''",
 }
 
 func Open(path string) (*sql.DB, error) {

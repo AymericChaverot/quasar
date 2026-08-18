@@ -1,0 +1,105 @@
+{{define "content"}}
+<div class="mb-8">
+  <h1 class="page-title">Stations</h1>
+  <p class="help max-w-3xl mt-2!">
+    Applications that arrive with a control surface of their own. Deploying one produces an
+    ordinary application — the same containers, logs, storage and backups — with the tabs its
+    author wrote for it on top.
+  </p>
+</div>
+
+{{if .Stations}}
+<div class="grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+  {{range .Stations}}
+  {{/* A station that asks nothing goes straight to the prefilled form; one
+       with choices to make opens its own panel first, because the answers are
+       part of the address that form is reached at. */}}
+  <a {{if .Deploy.Params}}href="#station-params-{{.ID}}" data-params="station-params-{{.ID}}"
+     {{else}}href="/apps/new?station={{.ID}}"{{end}}
+     class="station-card card block p-4 transition-colors hover:border-[var(--border-strong)]">
+    <p class="text-sm font-medium">{{.Name}}</p>
+    <p class="faint mt-0.5 text-xs">{{.Description}}</p>
+    <p class="faint mt-2 text-xs">
+      <span class="chip chip-name">{{.Version}}</span>
+      {{with .Author}} by {{.}}{{end}}
+    </p>
+  </a>
+  {{end}}
+</div>
+
+{{/* One panel per station that asks something, each a plain GET form at the
+     address the cards link to. Answering it is what turns one station into a
+     particular server: this version, that much memory, that port. */}}
+{{range .Stations}}{{if .Deploy.Params}}
+<form method="get" action="/apps/new" id="station-params-{{.ID}}" class="station-params hidden mt-6 max-w-3xl">
+  <input type="hidden" name="station" value="{{.ID}}">
+  <div class="mb-4 flex items-center gap-3">
+    <button type="button" class="btn station-params-back">{{template "icon_arrow_left"}}Back</button>
+    <div>
+      <p class="text-sm font-medium">{{.Name}}</p>
+      <p class="faint text-xs">{{.Description}}</p>
+    </div>
+  </div>
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    {{$id := .ID}}
+    {{range .Deploy.Params}}
+    <div>
+      <label for="p-{{$id}}-{{.Name}}" class="label">{{.Title}}</label>
+      {{if eq .Type "select"}}
+      <select id="p-{{$id}}-{{.Name}}" name="p.{{.Name}}" class="input">
+        {{$def := .Default}}
+        {{range .Options}}<option value="{{.}}" {{if eq . $def}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      {{else}}
+      <input id="p-{{$id}}-{{.Name}}" name="p.{{.Name}}" class="input"
+             type="{{if or (eq .Type "number") (eq .Type "port")}}number{{else}}text{{end}}"
+             {{if eq .Type "port"}}min="1" max="65535"{{end}}
+             value="{{.Default}}" autocomplete="off">
+      {{end}}
+      {{with .Help}}<p class="help">{{.}}</p>{{end}}
+    </div>
+    {{end}}
+  </div>
+  <button type="submit" class="btn-primary mt-5 px-4 py-2">Use these settings</button>
+</form>
+{{end}}{{end}}
+{{else}}
+<div class="empty max-w-3xl p-8 text-center">
+  <p class="text-sm">No station installed.</p>
+  <p class="help mt-1!">
+    A station is a document somebody wrote for one service in particular.
+    {{if .IsAdmin}}Install one from <a href="/settings/stations" class="underline">Settings → Stations</a>.{{end}}
+  </p>
+</div>
+{{end}}
+
+<script>
+  (function () {
+    // The same arrangement the catalogue uses: the grid and the parameter
+    // panels are one page, and picking a station swaps which is shown.
+    const panels = [...document.querySelectorAll(".station-params")];
+    const grid = document.querySelector(".grid");
+    if (!panels.length || !grid) return;
+
+    function showGrid() {
+      for (const p of panels) p.classList.add("hidden");
+      grid.classList.remove("hidden");
+    }
+    for (const card of document.querySelectorAll(".station-card")) {
+      if (!card.dataset.params) continue;
+      card.addEventListener("click", function (e) {
+        e.preventDefault();
+        const panel = document.getElementById(card.dataset.params);
+        if (!panel) return;
+        grid.classList.add("hidden");
+        panel.classList.remove("hidden");
+        const first = panel.querySelector("input, select");
+        if (first) first.focus();
+      });
+    }
+    for (const back of document.querySelectorAll(".station-params-back")) {
+      back.addEventListener("click", showGrid);
+    }
+  })();
+</script>
+{{end}}

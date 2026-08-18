@@ -235,6 +235,45 @@ func TestDeleteRemovesAStation(t *testing.T) {
 	}
 }
 
+// A station deploys down the catalogue's own path: its deploy block is a
+// catalogue entry, so the prefilled form is the one every other application
+// arrives at, and what makes it a station is the one hidden field saying so.
+func TestDeployingAStationPrefillsItsDeployBlock(t *testing.T) {
+	s, _ := catalogTestServer(t)
+	install(t, s, testStation, "")
+
+	r := httptest.NewRequest("GET", "/apps/new?station=demo", nil)
+	w := httptest.NewRecorder()
+	s.handleAppNew(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d, want the prefilled form", w.Code)
+	}
+
+	body := bodyText(w)
+	for _, want := range []string{
+		`name="station_id" value="demo"`, // where the tabs will come from
+		"nginx:alpine",                   // the compose file, in the textarea
+		`value="app"`,                    // the service the domain routes to
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the form was not prefilled from the station: no %q", want)
+		}
+	}
+}
+
+// A station nobody installed prefills nothing rather than half a form. The id
+// arrives in a query string, and a query string is typed by anybody.
+func TestAnUnknownStationPrefillsNothing(t *testing.T) {
+	s, _ := catalogTestServer(t)
+
+	r := httptest.NewRequest("GET", "/apps/new?station=nothing", nil)
+	w := httptest.NewRecorder()
+	s.handleAppNew(w, r)
+	if strings.Contains(bodyText(w), `name="station_id"`) {
+		t.Error("the form carries a station that is not installed")
+	}
+}
+
 // A new revision asking for nothing that was not already accepted is applied
 // on the spot. That is the whole point of re-fetching: fix the mod manager
 // once, and every application running the station gets the fix.

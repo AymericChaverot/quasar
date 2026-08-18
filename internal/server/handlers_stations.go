@@ -55,7 +55,13 @@ type StationView struct {
 	// Prev is the revision one click back, for a station whose last update
 	// broke a panel.
 	Prev station.Station
+
+	appCount int
 }
+
+// Apps is how many applications were deployed from this station, which is what
+// makes removing one a decision rather than a click.
+func (v StationView) Apps() int { return v.appCount }
 
 // Held reports a station running one revision with another waiting.
 func (v StationView) Held() bool { return v.PendingYAML != "" }
@@ -89,9 +95,67 @@ func (s *Server) stationViews() []StationView {
 		if row.PrevYAML != "" {
 			v.Prev, _ = checkStation(row.PrevYAML)
 		}
+		v.appCount = db.CountAppsForStation(s.db, row.StationID)
 		out = append(out, v)
 	}
 	return out
+}
+
+// stations are the installed stations an operator can deploy from: enabled,
+// and still reading as a station.
+//
+// A broken one is skipped rather than allowed to fail the page. Nothing here
+// was not already validated when it was approved, so reaching the log line
+// means a document changed out from under the check — and the settings page is
+// where an operator would find that out, not the page they were trying to
+// deploy from.
+func (s *Server) stations() []station.Station {
+	rows, err := db.ListStations(s.db)
+	if err != nil {
+		log.Printf("station: reading installed stations: %v", err)
+		return nil
+	}
+	var out []station.Station
+	for _, row := range rows {
+		if !row.Enabled {
+			continue
+		}
+		st, errs := checkStation(row.YAML)
+		if len(errs) > 0 {
+			log.Printf("station: %q will not read, leaving it out: %v", row.StationID, errs[0])
+			continue
+		}
+		out = append(out, st)
+	}
+	return out
+}
+
+// station finds one installed station by its id.
+func (s *Server) station(id string) (station.Station, bool) {
+	row := db.GetStationByStationID(s.db, id)
+	if row == nil || !row.Enabled {
+		return station.Station{}, false
+	}
+	st, errs := checkStation(row.YAML)
+	if len(errs) > 0 {
+		return station.Station{}, false
+	}
+	return st, true
+}
+
+// handleStationsPage is the Stations entry in the navigation: a card per
+// installed station, kept well away from the sixty-odd catalogue entries.
+//
+// That separation is the whole point of the distinction the format draws. The
+// catalogue is where an operator browses software; this is where they browse
+// programs somebody wrote for them, and mixing the two would bury the second
+// in the first.
+func (s *Server) handleStationsPage(w http.ResponseWriter, r *http.Request) {
+	s.render(w, r, "stations", map[string]any{
+		"Title":    "Stations",
+		"Stations": s.stations(),
+		"Domain":   s.cfg.Domain,
+	})
 }
 
 // stationReview is a document that has been read and is waiting to be

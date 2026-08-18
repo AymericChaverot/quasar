@@ -147,12 +147,13 @@ func (s *Server) handleAppNew(w http.ResponseWriter, r *http.Request) {
 		// of their own came here to pick from that one.
 		"Sources": s.customCatalogs(),
 	}
-	// ?template=<id> prefills the form from a one-click catalog entry, and
-	// ?p.NAME=value answers the choices that entry offers — which version of a
-	// game server, how much memory, which host port. Carrying them in the query
-	// string keeps the selection stateless and shareable: the address of a
-	// prefilled form is the whole of what was picked.
-	if t := cat.Get(r.URL.Query().Get("template")); t != nil {
+	// ?template=<id> prefills the form from a one-click catalog entry and
+	// ?station=<id> from an installed station, while ?p.NAME=value answers the
+	// choices either of them offers — which version of a game server, how much
+	// memory, which host port. Carrying them in the query string keeps the
+	// selection stateless and shareable: the address of a prefilled form is the
+	// whole of what was picked.
+	if t, stationID := s.prefillFrom(r, cat); t != nil {
 		v := t.Resolve(pickedParams(r))
 		// The entry proposes an address, but a second server from the same
 		// entry would propose the one the first is already on. The public
@@ -170,11 +171,32 @@ func (s *Server) handleAppNew(w http.ResponseWriter, r *http.Request) {
 			Port:           f.Port,
 			DataMount:      f.DataMount,
 			EnvContent:     f.Env,
+			StationID:      stationID,
 		}
 		data["Picked"] = t
 		data["Values"] = v
+		data["StationID"] = stationID
 	}
 	s.render(w, r, "app_new", data)
+}
+
+// prefillFrom resolves what the form is being prefilled from, and — for a
+// station — which one, so the application records where its tabs come from.
+//
+// A station's deploy block is catalog.Template, which is the point rather than
+// a convenience: parameters, {{RANDOM}}, the compose rewriting and the host
+// port checks all apply to a station without a line of new code, and there is
+// one path to a deployed application rather than two that drift.
+func (s *Server) prefillFrom(r *http.Request, cat catalog.Catalog) (*catalog.Template, string) {
+	if id := r.URL.Query().Get("station"); id != "" {
+		st, ok := s.station(id)
+		if !ok {
+			return nil, ""
+		}
+		t := st.Template()
+		return &t, st.ID
+	}
+	return cat.Get(r.URL.Query().Get("template")), ""
 }
 
 // pickedParams reads the ?p.NAME=value pairs off the request. Nothing is
@@ -224,6 +246,13 @@ func (s *Server) handleAppCreate(w http.ResponseWriter, r *http.Request) {
 		DataMount:      form("data_mount"),
 		CustomDomains:  normalizeDomains(form("custom_domains")),
 		Port:           80,
+	}
+	// Only a station that is actually installed may be recorded, so a
+	// hand-edited form cannot hang somebody else's tabs on an application.
+	if id := form("station_id"); id != "" {
+		if _, ok := s.station(id); ok {
+			a.StationID = id
+		}
 	}
 	if p := form("port"); p != "" {
 		if n, err := strconv.Atoi(p); err == nil && n > 0 && n < 65536 {
