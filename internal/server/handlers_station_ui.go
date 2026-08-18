@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -255,6 +256,20 @@ func (s *Server) handleStationAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// An action the document declared long runs detached from this request,
+	// and the answer is a pane to watch it in rather than a result: a browser
+	// that gives up waiting has not cancelled a mod download.
+	if slices.Contains(doc.UI.LongActions(), name) {
+		job, fresh := s.startLongAction(a, doc, name, input)
+		if !fresh {
+			s.audit(r, "station.action", doc.ID+" on "+a.Name, name+" was already running")
+		} else {
+			s.audit(r, "station.action", doc.ID+" on "+a.Name, name+" (background)")
+		}
+		s.renderPartial(w, "station_job", job.view(a.ID, name))
+		return
+	}
+
 	out, err := s.runStation(r.Context(), r, a, doc, CallAction, name, input)
 	if err != nil {
 		s.renderPartial(w, "station_message", ui.Result{Error: stationProblem(name, err)})
@@ -267,6 +282,26 @@ func (s *Server) handleStationAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.renderPartial(w, "station_message", result)
+}
+
+// handleStationJob draws a long action's pane: what it has written so far, and
+// whether it is still writing.
+//
+// It survives a page reload because the job does not live in the request that
+// started it — reopening the application's page and pressing the same button
+// finds the job already running and shows it, rather than starting a second.
+func (s *Server) handleStationJob(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	action := r.PathValue("action")
+	job := s.jobs.get(a.ID, action)
+	if job == nil {
+		http.Error(w, "nothing is running", http.StatusNotFound)
+		return
+	}
+	s.renderPartial(w, "station_job", job.view(a.ID, action))
 }
 
 // stationOffers reports whether the document reaches this action from anywhere.

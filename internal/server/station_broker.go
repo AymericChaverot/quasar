@@ -45,6 +45,10 @@ type stationCall struct {
 	// sent counts the notifications this call has already sent.
 	sent int
 
+	// job is the progress pane a long action is being watched in, empty for
+	// every ordinary call.
+	job *stationJob
+
 	// dock is the containers half, named as an interface so the refusals can
 	// be tested without a Docker daemon. What is worth testing here is which
 	// commands get through and in what shape, not whether Docker runs them.
@@ -69,6 +73,15 @@ func (c *stationCall) containers() (stationDocker, error) {
 		return nil, errors.New("this dashboard has no connection to Docker")
 	}
 	return c.srv.dock, nil
+}
+
+// Log receives a line the script wrote while it is still running. It is how a
+// long action's progress reaches the pane somebody is watching, rather than
+// arriving all at once when there is nothing left to wait for.
+func (c *stationCall) Log(line string) {
+	if c.job != nil {
+		c.job.Log(line)
+	}
 }
 
 // Do performs one capability on the worker's behalf.

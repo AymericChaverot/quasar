@@ -72,6 +72,10 @@ type Panel struct {
 	Confirm     string `yaml:"confirm,omitempty"`
 	Placeholder string `yaml:"placeholder,omitempty"`
 
+	// Long runs a button's or a search's action as a background job; see
+	// Action.Long.
+	Long bool `yaml:"long,omitempty"`
+
 	// log
 	Service string `yaml:"service,omitempty"`
 	Tail    int    `yaml:"tail,omitempty"`
@@ -114,6 +118,12 @@ type Action struct {
 	Action  string `yaml:"action"`
 	Tone    string `yaml:"tone,omitempty"`
 	Confirm string `yaml:"confirm,omitempty"`
+
+	// Long runs this action as a background job with a progress pane, instead
+	// of holding a request open for it. Upgrading a server or downloading
+	// forty mods does not fit in an HTTP request, and a browser that gave up
+	// waiting must not be the thing that cancelled it.
+	Long bool `yaml:"long,omitempty"`
 }
 
 // Field is one input of a form.
@@ -156,6 +166,28 @@ var (
 // documented.
 func PanelTypes() []string {
 	return slices.Concat(StructurePanels, DataPanels, InputPanels, EmbedPanels)
+}
+
+// LongActions are the ones declared to run as background jobs. It is read
+// where an action is about to be run, so that "long" is a property of the
+// document rather than of whichever button happened to be pressed.
+func (u UI) LongActions() []string {
+	var out []string
+	add := func(name string, long bool) {
+		if long && name != "" && !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	for _, t := range u.Tabs {
+		eachPanel(t.Panels, func(p Panel) {
+			add(p.Action, p.Long)
+			add(p.Submit.Action, p.Submit.Long)
+			for _, a := range p.RowActions {
+				add(a.Action, a.Long)
+			}
+		})
+	}
+	return out
 }
 
 // Actions lists every action the interface can reach, in the order it declares

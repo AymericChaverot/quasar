@@ -26,6 +26,11 @@ const (
 	CallSource = "source"
 	CallAction = "action"
 	CallHook   = "hook"
+
+	// CallLong is an action that opted out of the ceiling by running as a
+	// background job. Nobody is holding a request open for it, so the only
+	// bound that matters is that it ends.
+	CallLong = "long"
 )
 
 func stationLimits(kind string) worker.Limits {
@@ -35,8 +40,29 @@ func stationLimits(kind string) worker.Limits {
 		lim.Wall = 60 * time.Second
 	case CallHook:
 		lim.Wall = 120 * time.Second
+	case CallLong:
+		lim.Wall = 25 * time.Minute
+		lim.Grace = time.Minute
 	}
 	return lim
+}
+
+// runStationJob is runStation with somewhere for the progress to go while it
+// is still happening.
+func (s *Server) runStationJob(ctx context.Context, a *db.App, doc station.Station,
+	action string, input map[string]any, job *stationJob) (worker.Outcome, error) {
+
+	body, err := json.Marshal(input)
+	if err != nil {
+		return worker.Outcome{}, err
+	}
+	sp, err := worker.Self()
+	if err != nil {
+		return worker.Outcome{}, err
+	}
+	call := worker.Call{Script: doc.Script, Action: action, Input: body, App: s.appContext(ctx, a)}
+	broker := &stationCall{srv: s, app: a, doc: doc, job: job}
+	return worker.Run(ctx, sp, call, stationLimits(CallLong), broker)
 }
 
 // runStation runs one action of a station for one application, and returns

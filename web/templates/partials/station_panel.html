@@ -205,6 +205,42 @@
      cannot put markup on this page by calling it markdown. */}}
 {{define "station_markdown"}}<p class="whitespace-pre-wrap">{{.}}</p>{{end}}
 
+{{/* A long action, while it runs and after it has finished.
+
+     It polls rather than streams: what it is showing is a handful of lines a
+     minute, the pane has to survive a reload anyway, and a request that ends
+     between two draws is one less thing holding a connection open. The output
+     stays afterwards, because the output is where somebody reads why the
+     upgrade failed. */}}
+{{define "station_job"}}
+<div class="card mb-4 p-4"
+     {{if .Running}}hx-get="/apps/{{.AppID}}/station/job/{{.Action}}"
+     hx-trigger="every 1s" hx-swap="outerHTML"{{end}}>
+  <p class="flex items-center gap-2 text-sm font-medium">
+    {{.Action}}
+    {{if .Running}}<span class="badge badge-warn">running · {{.Elapsed}}</span>
+    {{else if .Problem}}<span class="badge badge-err">failed</span>
+    {{else}}<span class="badge badge-ok">done · {{.Elapsed}}</span>{{end}}
+  </p>
+
+  {{with .Lines}}
+  <pre class="mono mt-3 max-h-64 overflow-auto rounded p-3 text-xs"
+       style="background: var(--surface-2)">{{range .}}{{.}}
+{{end}}</pre>
+  {{else}}
+  {{if .Running}}<p class="faint mt-2 text-xs">Started. Nothing reported yet.</p>{{end}}
+  {{end}}
+
+  {{if .Problem}}
+  <div class="alert-err mt-3">
+    <p class="mono text-xs">{{.Problem}}</p>
+  </div>
+  {{else if .Toast}}
+  <p class="mt-3 text-sm" style="color: var(--ok)">{{.Toast}}</p>
+  {{end}}
+</div>
+{{end}}
+
 {{/* What an action had to say. A toast fades on its own; an error stays,
      because the reason something failed is the thing somebody came to read. */}}
 {{define "station_message"}}

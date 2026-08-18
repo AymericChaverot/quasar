@@ -259,8 +259,19 @@ func exchange(ctx context.Context, conn *Conn, call Call, lim Limits, b Broker) 
 			}
 		case MsgLog:
 			var line string
-			if json.Unmarshal(m.Value, &line) == nil && len(out.Logs) < maxLogLines {
+			if json.Unmarshal(m.Value, &line) != nil {
+				break
+			}
+			if len(out.Logs) < maxLogLines {
 				out.Logs = append(out.Logs, line)
+			}
+			// A broker that wants the lines as they happen says so by having a
+			// Log method. A long action's progress pane is the reason: what it
+			// is showing is a call that has not finished, and gathering the
+			// lines up to return at the end would show nothing until there was
+			// nothing left to wait for.
+			if live, ok := b.(interface{ Log(string) }); ok {
+				live.Log(line)
 			}
 		case MsgResult:
 			// Checked here as well as in the worker: the cap is the parent's,

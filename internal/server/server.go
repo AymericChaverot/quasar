@@ -57,6 +57,10 @@ type Server struct {
 	// traefik is the edge-router update in flight, for the same reason and read
 	// the same way — by the Environment card, which polls while one is running.
 	traefik traefikRun
+
+	// jobs are the long station actions running now, and the ones somebody may
+	// still come back to read.
+	jobs stationJobRegistry
 }
 
 func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) (*Server, error) {
@@ -278,6 +282,7 @@ func (s *Server) routes() {
 	// goes is read out of the document and never out of the URL.
 	s.admin("/apps/{id}/station/embed/{panel}/{path...}", s.handleStationEmbed)
 	s.admin("POST /apps/{id}/station/action/{action}", s.handleStationAction)
+	s.admin("GET /apps/{id}/station/job/{action}", s.handleStationJob)
 	s.admin("POST /settings/stations/{id}/toggle", s.handleStationToggle)
 	s.admin("POST /settings/stations/{id}/delete", s.handleStationDelete)
 	s.admin("POST /settings/notify-test", s.handleNotifyTest)
