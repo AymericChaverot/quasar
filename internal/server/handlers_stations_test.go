@@ -1,7 +1,9 @@
 package server
 
 import (
+	"database/sql"
 	"html"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -54,18 +56,52 @@ func bodyText(w *httptest.ResponseRecorder) string {
 
 // install runs the two steps an operator goes through: read the document, then
 // accept what it asks for.
-func install(t *testing.T, s *Server, doc string) {
+func install(t *testing.T, s *Server, doc, sourceURL string) {
 	t.Helper()
 	st, err := station.Parse(doc)
 	if err != nil {
 		t.Fatalf("the test document does not parse: %v", err)
 	}
 	w := post(t, s.handleStationInstall, "/settings/stations", url.Values{
-		"yaml": {doc}, "accepted": {st.Permissions.Hash()},
+		"yaml": {doc}, "source_url": {sourceURL}, "accepted": {st.Permissions.Hash()},
 	})
 	if w.Code != http.StatusSeeOther {
 		t.Fatalf("status %d, want a redirect — the document was rejected:\n%s", w.Code, w.Body)
 	}
+}
+
+// postStation calls one of the handlers that act on an installed station,
+// which take their subject from the path.
+func postStation(t *testing.T, h http.HandlerFunc, id int64) *httptest.ResponseRecorder {
+	t.Helper()
+	r := httptest.NewRequest("POST", "/settings/stations/x", nil)
+	r.SetPathValue("id", strconv.FormatInt(id, 10))
+	w := httptest.NewRecorder()
+	h(w, r)
+	return w
+}
+
+// origin is an address serving whatever the test currently wants a re-fetch to
+// find there, which is the situation the holding rule exists for: the document
+// at a URL is not the document that was approved.
+func origin(t *testing.T, doc *string) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, *doc)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL + "/station.yaml"
+}
+
+// only returns the single installed station, and fails if there is not exactly
+// one.
+func only(t *testing.T, database *sql.DB) *db.Station {
+	t.Helper()
+	rows, err := db.ListStations(database)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("%d stations stored (%v), want 1", len(rows), err)
+	}
+	return rows[0]
 }
 
 // Reading a document shows what it would be allowed to do, in words, and
@@ -95,7 +131,7 @@ func TestReviewShowsThePermissionsAndStoresNothing(t *testing.T) {
 
 func TestInstallStoresAnAcceptedStation(t *testing.T) {
 	s, database := catalogTestServer(t)
-	install(t, s, testStation)
+	install(t, s, testStation, "")
 
 	rows, err := db.ListStations(database)
 	if err != nil || len(rows) != 1 {
@@ -142,7 +178,7 @@ func TestInstallRefusesAnApprovalForSomethingElse(t *testing.T) {
 // somebody else's.
 func TestASecondStationCannotTakeAnIdInUse(t *testing.T) {
 	s, database := catalogTestServer(t)
-	install(t, s, testStation)
+	install(t, s, testStation, "")
 
 	other := strings.Replace(testStation, "name: Demo", "name: Something else", 1)
 	w := post(t, s.handleStationReview, "/settings/stations/review", url.Values{"yaml": {other}})
@@ -189,17 +225,140 @@ func TestARejectedDocumentComesBack(t *testing.T) {
 
 func TestDeleteRemovesAStation(t *testing.T) {
 	s, database := catalogTestServer(t)
-	install(t, s, testStation)
-	rows, _ := db.ListStations(database)
+	install(t, s, testStation, "")
 
-	req := httptest.NewRequest("POST", "/settings/stations/1/delete", nil)
-	req.SetPathValue("id", strconv.FormatInt(rows[0].ID, 10))
-	w := httptest.NewRecorder()
-	s.handleStationDelete(w, req)
-	if w.Code != http.StatusSeeOther {
+	if w := postStation(t, s.handleStationDelete, only(t, database).ID); w.Code != http.StatusSeeOther {
 		t.Fatalf("status %d, want a redirect", w.Code)
 	}
 	if rows, _ := db.ListStations(database); len(rows) != 0 {
 		t.Errorf("%d stations left after a delete", len(rows))
+	}
+}
+
+// A new revision asking for nothing that was not already accepted is applied
+// on the spot. That is the whole point of re-fetching: fix the mod manager
+// once, and every application running the station gets the fix.
+func TestARefetchAskingForNothingNewIsApplied(t *testing.T) {
+	s, database := catalogTestServer(t)
+	served := testStation
+	url := origin(t, &served)
+	install(t, s, served, url)
+
+	next := strings.Replace(testStation, `version: "1.0.0"`, `version: "1.1.0"`, 1)
+	served = next
+
+	if w := postStation(t, s.handleStationRefetch, only(t, database).ID); w.Code != http.StatusSeeOther {
+		t.Fatalf("status %d, want a redirect:\n%s", w.Code, w.Body)
+	}
+	row := only(t, database)
+	if row.YAML != next {
+		t.Error("the new revision is not the one running")
+	}
+	if row.PrevYAML != testStation {
+		t.Error("the revision it replaced was not kept")
+	}
+	if row.PendingYAML != "" {
+		t.Error("a revision that asked for nothing new was held anyway")
+	}
+}
+
+// The rule the whole model rests on. A station imported by URL is re-fetched by
+// hand later; if a new revision could quietly widen what it reaches, the
+// operator would be handing out a capability they never granted.
+func TestARefetchThatAsksForMoreIsHeld(t *testing.T) {
+	s, database := catalogTestServer(t)
+	served := testStation
+	url := origin(t, &served)
+	install(t, s, served, url)
+
+	greedy := strings.Replace(testStation,
+		`allow: ["api.example.com"]`, `allow: ["api.example.com", "elsewhere.example.com"]`, 1)
+	greedy = strings.Replace(greedy, `version: "1.0.0"`, `version: "2.0.0"`, 1)
+	served = greedy
+
+	if w := postStation(t, s.handleStationRefetch, only(t, database).ID); w.Code != http.StatusSeeOther {
+		t.Fatalf("status %d, want a redirect:\n%s", w.Code, w.Body)
+	}
+	row := only(t, database)
+	if row.YAML != testStation {
+		t.Error("the running revision was replaced by one nobody accepted")
+	}
+	if row.PendingYAML != greedy {
+		t.Error("the new revision was not kept for approval")
+	}
+
+	// And the page says what it would additionally be allowed to do, which is
+	// the only part of it anybody needs to read.
+	w := httptest.NewRequest("GET", "/settings/stations", nil)
+	rec := httptest.NewRecorder()
+	s.handleStations(rec, w)
+	body := bodyText(rec)
+	if !strings.Contains(body, "Revision 2.0.0 is waiting") || !strings.Contains(body, "elsewhere.example.com") {
+		t.Errorf("the page does not say what is waiting or why:\n%s", body)
+	}
+}
+
+func TestAcceptingAHeldRevisionRunsIt(t *testing.T) {
+	s, database := catalogTestServer(t)
+	served := testStation
+	url := origin(t, &served)
+	install(t, s, served, url)
+
+	greedy := strings.Replace(testStation, `allow: ["api.example.com"]`, `allow: ["elsewhere.example.com"]`, 1)
+	served = greedy
+	postStation(t, s.handleStationRefetch, only(t, database).ID)
+
+	if w := postStation(t, s.handleStationAccept, only(t, database).ID); w.Code != http.StatusSeeOther {
+		t.Fatalf("status %d, want a redirect:\n%s", w.Code, w.Body)
+	}
+	row := only(t, database)
+	if row.YAML != greedy || row.PendingYAML != "" {
+		t.Error("accepting did not promote the waiting revision")
+	}
+	st, _ := station.Parse(greedy)
+	if row.PermsHash != st.Permissions.Hash() {
+		t.Error("what was accepted was not what got recorded")
+	}
+}
+
+// Re-fetching an address that still serves the same document changes nothing —
+// in particular it does not overwrite the revision to go back to.
+func TestTheSameRevisionFetchedTwiceIsANoOp(t *testing.T) {
+	s, database := catalogTestServer(t)
+	served := testStation
+	url := origin(t, &served)
+	install(t, s, served, url)
+
+	postStation(t, s.handleStationRefetch, only(t, database).ID)
+	row := only(t, database)
+	if row.PrevYAML != "" || row.PendingYAML != "" {
+		t.Errorf("a re-fetch of the same document moved something: prev=%d pending=%d",
+			len(row.PrevYAML), len(row.PendingYAML))
+	}
+}
+
+// An update that breaks a panel is one click back, and the application it
+// belongs to never stopped.
+func TestRevertRestoresThePreviousDocument(t *testing.T) {
+	s, database := catalogTestServer(t)
+	served := testStation
+	url := origin(t, &served)
+	install(t, s, served, url)
+
+	next := strings.Replace(testStation, `version: "1.0.0"`, `version: "1.1.0"`, 1)
+	served = next
+	postStation(t, s.handleStationRefetch, only(t, database).ID)
+
+	if w := postStation(t, s.handleStationRevert, only(t, database).ID); w.Code != http.StatusSeeOther {
+		t.Fatalf("status %d, want a redirect:\n%s", w.Code, w.Body)
+	}
+	row := only(t, database)
+	if row.YAML != testStation {
+		t.Error("reverting did not put the earlier revision back")
+	}
+	// And the revert is itself revertible: the one just left is where a second
+	// click goes.
+	if row.PrevYAML != next {
+		t.Error("reverting threw away the revision it stepped off")
 	}
 }

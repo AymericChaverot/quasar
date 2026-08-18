@@ -35,6 +35,39 @@ type Grant struct {
 	// in the container is root on it by design, and reaching the internet is
 	// an exfiltration channel with their signature on it.
 	Strong bool
+
+	// Added marks a grant a new revision asks for and the accepted one did
+	// not. It is the only part of an update screen anybody needs to read
+	// carefully, so it is the part worth marking.
+	Added bool
+}
+
+// AddedSince is this revision's permissions, with everything the accepted one
+// did not already grant marked. A grant whose detail grew — one more service,
+// one more host — counts as new, because it is.
+func (p Permissions) AddedSince(old Permissions) []Grant {
+	held := old.Summary()
+	out := p.Summary()
+	for i := range out {
+		out[i].Added = !slices.ContainsFunc(held, func(g Grant) bool {
+			return g.Title == out[i].Title && g.Detail == out[i].Detail
+		})
+	}
+	return out
+}
+
+// DroppedSince is what the accepted revision granted and this one does not
+// ask for. Nothing has to be approved to give a capability up, but an operator
+// reading what changed should be told the whole of it.
+func (p Permissions) DroppedSince(old Permissions) []Grant {
+	now := p.Summary()
+	var out []Grant
+	for _, g := range old.Summary() {
+		if !slices.ContainsFunc(now, func(x Grant) bool { return x.Title == g.Title && x.Detail == g.Detail }) {
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // Granted reports whether the document asks for anything at all.

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -13,8 +14,8 @@ import (
 	"quasar/internal/station"
 )
 
-// Settings → Stations: installing a station, and everything that can be done
-// to one afterwards.
+// Settings → Stations: installing a station, updating one, and going back when
+// an update turns out to have been a mistake.
 //
 // Importing is deliberately two steps rather than one. A station is a program
 // somebody else wrote, running with capabilities on a machine the operator
@@ -23,19 +24,44 @@ import (
 // in plain words, and only a second submit carrying the hash of what was shown
 // stores anything. A one-step import would make the approval screen a thing to
 // click past, which is worth less than no approval screen at all.
+//
+// Updating has the same rule with the teeth in a different place: a re-fetched
+// revision asking for exactly what was already accepted is applied, and one
+// asking for more is stored and held. The station keeps running the revision
+// the operator approved until they approve the new one. Without that, a
+// station imported by URL could be handed net.external by whoever controls the
+// address, at a moment nobody was looking.
 
 // StationView is one installed station as the page shows it: the row, plus
-// what reading its document says about it. A station whose document no longer
-// parses is still listed — this page is the only place that would ever say so.
+// what reading its documents says about them. A station whose document no
+// longer parses is still listed — this page is the only place that would ever
+// say so.
 type StationView struct {
 	*db.Station
 
-	// Doc is the approved revision, read back. The row is the text; this is
+	// Doc is the approved revision, read back: the row is the text, this is
 	// what the text says.
 	Doc      station.Station
 	Grants   []station.Grant
 	Problems []string
+
+	// Pending is a revision that has been fetched and is waiting, with its
+	// permissions marked against what was accepted. Only the marked ones
+	// matter, and they are the reason the revision is not running.
+	Pending        station.Station
+	PendingGrants  []station.Grant
+	PendingDropped []station.Grant
+
+	// Prev is the revision one click back, for a station whose last update
+	// broke a panel.
+	Prev station.Station
 }
+
+// Held reports a station running one revision with another waiting.
+func (v StationView) Held() bool { return v.PendingYAML != "" }
+
+// Revertible reports a station with somewhere to go back to.
+func (v StationView) Revertible() bool { return v.PrevYAML != "" }
 
 func (s *Server) stationViews() []StationView {
 	rows, err := db.ListStations(s.db)
@@ -46,11 +72,22 @@ func (s *Server) stationViews() []StationView {
 	out := make([]StationView, 0, len(rows))
 	for _, row := range rows {
 		v := StationView{Station: row}
+
 		doc, errs := checkStation(row.YAML)
 		v.Doc = doc
 		v.Grants = doc.Permissions.Summary()
 		for _, err := range errs {
 			v.Problems = append(v.Problems, err.Error())
+		}
+
+		if row.PendingYAML != "" {
+			pending, _ := checkStation(row.PendingYAML)
+			v.Pending = pending
+			v.PendingGrants = pending.Permissions.AddedSince(doc.Permissions)
+			v.PendingDropped = pending.Permissions.DroppedSince(doc.Permissions)
+		}
+		if row.PrevYAML != "" {
+			v.Prev, _ = checkStation(row.PrevYAML)
 		}
 		out = append(out, v)
 	}
@@ -139,8 +176,7 @@ func checkStation(doc string) (station.Station, []error) {
 // handleStationReview reads a pasted document and shows what it would be
 // allowed to do. Nothing is stored.
 func (s *Server) handleStationReview(w http.ResponseWriter, r *http.Request) {
-	f := readStationForm(r)
-	s.review(w, r, f)
+	s.review(w, r, readStationForm(r))
 }
 
 // handleStationFetch imports from a URL: fetched once, now, and shown for
@@ -165,14 +201,8 @@ func (s *Server) review(w http.ResponseWriter, r *http.Request, f stationForm) {
 		s.renderStationsError(w, r, f, errs)
 		return
 	}
-	// An id collision is refused rather than resolved. A catalogue entry
-	// describes third-party software two people may legitimately both
-	// describe; a station is a program, and one replacing another silently is
-	// not a feature.
-	if held := db.GetStationByStationID(s.db, st.ID); held != nil {
-		s.renderStationsError(w, r, f, []error{fmt.Errorf(
-			"The id %q is already held by the station %q. Re-fetch that one to update it, or give this document an id of its own.",
-			st.ID, held.Name)})
+	if err := idAvailable(s.db, st.ID); err != nil {
+		s.renderStationsError(w, r, f, []error{err})
 		return
 	}
 
@@ -187,7 +217,25 @@ func (s *Server) review(w http.ResponseWriter, r *http.Request, f stationForm) {
 	s.render(w, r, "stations_settings", data)
 }
 
-// handleStationInstall stores a station whose permissions have been accepted.
+// idAvailable refuses an id another station already holds.
+//
+// A catalogue entry reusing an id replaces the entry it names, and that is the
+// useful reading there: an entry describes third-party software two people may
+// legitimately both describe. A station is a program, and one program replacing
+// another because they picked the same name is not a feature. Updating an
+// installed station goes through its own re-fetch, which knows which station it
+// is updating.
+func idAvailable(database *sql.DB, id string) error {
+	held := db.GetStationByStationID(database, id)
+	if held == nil {
+		return nil
+	}
+	return fmt.Errorf("The id %q is already held by the station %q. Re-fetch that one to update it, "+
+		"or remove it first if this is meant to take its place.", id, held.Name)
+}
+
+// handleStationInstall stores a station whose permissions have been accepted,
+// whether that is a first install or a new revision of one already here.
 //
 // The document is read again here rather than trusted from the review: what is
 // installed has to be what the hash was computed over, or the approval screen
@@ -205,9 +253,9 @@ func (s *Server) handleStationInstall(w http.ResponseWriter, r *http.Request) {
 			"This document is not the one whose permissions were shown. Read it again before installing it.")})
 		return
 	}
-	if held := db.GetStationByStationID(s.db, st.ID); held != nil {
-		s.renderStationsError(w, r, f, []error{fmt.Errorf(
-			"The id %q is already held by the station %q.", st.ID, held.Name)})
+
+	if err := idAvailable(s.db, st.ID); err != nil {
+		s.renderStationsError(w, r, f, []error{err})
 		return
 	}
 
@@ -226,6 +274,140 @@ func (s *Server) handleStationInstall(w http.ResponseWriter, r *http.Request) {
 	s.audit(r, "station.import", st.ID, versionAndSource(st.Version, f.SourceURL))
 	s.audit(r, "station.permissions.grant", st.ID, grantDetail(st))
 	redirectStations(w, r, "Station “"+st.Name+"” installed.")
+}
+
+// handleStationRefetch reads the address a station was imported from again.
+//
+// A revision asking for exactly what was accepted is applied on the spot,
+// which is the point of the whole arrangement: fix the mod manager once and
+// three servers get the fix. A revision asking for anything more is stored and
+// held, and the station keeps running what it was running.
+func (s *Server) handleStationRefetch(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	row := db.GetStation(s.db, id)
+	if row == nil {
+		redirectStations(w, r, "That station is gone.")
+		return
+	}
+	if row.SourceURL == "" {
+		redirectStations(w, r, "“"+row.Name+"” was pasted in rather than fetched, so there is nowhere to re-fetch it from.")
+		return
+	}
+
+	doc, err := fetchDocument(row.SourceURL, "station", maxStationBytes)
+	if err != nil {
+		s.renderStationsError(w, r, stationForm{ID: id, SourceURL: row.SourceURL}, []error{err})
+		return
+	}
+	st, errs := checkStation(doc)
+	if len(errs) > 0 {
+		s.renderStationsError(w, r, stationForm{ID: id, SourceURL: row.SourceURL, YAML: doc}, errs)
+		return
+	}
+	if st.ID != row.StationID {
+		s.renderStationsError(w, r, stationForm{ID: id, SourceURL: row.SourceURL, YAML: doc}, []error{fmt.Errorf(
+			"That address now serves a station with the id %q, not %q. It is a different station, so nothing was changed.",
+			st.ID, row.StationID)})
+		return
+	}
+
+	if doc == row.YAML {
+		redirectStations(w, r, "“"+row.Name+"” is already the revision at that address.")
+		return
+	}
+
+	hash := st.Permissions.Hash()
+	if hash != row.PermsHash {
+		row.PendingYAML, row.PendingHash = doc, hash
+		if err := db.UpdateStation(s.db, row); err != nil {
+			s.renderStationsError(w, r, stationForm{ID: id}, []error{err})
+			return
+		}
+		s.audit(r, "station.hold", row.StationID, "version "+st.Version+" asks for more than was accepted")
+		redirectStations(w, r, "Revision "+st.Version+" of “"+row.Name+"” asks for more than you accepted. "+
+			"It is waiting below; the running revision is unchanged.")
+		return
+	}
+
+	row.PrevYAML, row.YAML = row.YAML, doc
+	row.Name, row.PendingYAML, row.PendingHash = st.Name, "", ""
+	if err := db.UpdateStation(s.db, row); err != nil {
+		s.renderStationsError(w, r, stationForm{ID: id}, []error{err})
+		return
+	}
+	s.audit(r, "station.update", row.StationID, "version "+st.Version+" from "+row.SourceURL)
+	redirectStations(w, r, "“"+row.Name+"” updated to "+st.Version+". It asks for nothing you had not already accepted.")
+}
+
+// handleStationAccept promotes the waiting revision, permissions and all.
+func (s *Server) handleStationAccept(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	row := db.GetStation(s.db, id)
+	if row == nil || row.PendingYAML == "" {
+		redirectStations(w, r, "There is no revision waiting.")
+		return
+	}
+	st, errs := checkStation(row.PendingYAML)
+	if len(errs) > 0 {
+		s.renderStationsError(w, r, stationForm{ID: id, YAML: row.PendingYAML}, errs)
+		return
+	}
+
+	row.PrevYAML, row.YAML, row.PermsHash = row.YAML, row.PendingYAML, row.PendingHash
+	row.Name, row.PendingYAML, row.PendingHash = st.Name, "", ""
+	if err := db.UpdateStation(s.db, row); err != nil {
+		s.renderStationsError(w, r, stationForm{ID: id}, []error{err})
+		return
+	}
+	s.audit(r, "station.update", row.StationID, "version "+st.Version)
+	s.audit(r, "station.permissions.grant", row.StationID, grantDetail(st))
+	redirectStations(w, r, "Station “"+row.Name+"” updated to "+st.Version+".")
+}
+
+// handleStationDiscard throws the waiting revision away. The next re-fetch
+// will find it again if it is still being served.
+func (s *Server) handleStationDiscard(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	row := db.GetStation(s.db, id)
+	if row == nil || row.PendingYAML == "" {
+		redirectStations(w, r, "There is no revision waiting.")
+		return
+	}
+	row.PendingYAML, row.PendingHash = "", ""
+	if err := db.UpdateStation(s.db, row); err != nil {
+		s.renderStationsError(w, r, stationForm{ID: id}, []error{err})
+		return
+	}
+	s.audit(r, "station.discard", row.StationID, "")
+	redirectStations(w, r, "Discarded the revision waiting for “"+row.Name+"”.")
+}
+
+// handleStationRevert puts the previous revision back, and keeps the one it
+// replaced so the revert is itself revertible. Every revision here has been
+// approved before, so going back asks nothing of the operator — which is the
+// point: an update that broke a panel is one click, and the application never
+// stopped.
+func (s *Server) handleStationRevert(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	row := db.GetStation(s.db, id)
+	if row == nil || row.PrevYAML == "" {
+		redirectStations(w, r, "There is no earlier revision to go back to.")
+		return
+	}
+	st, errs := checkStation(row.PrevYAML)
+	if len(errs) > 0 {
+		s.renderStationsError(w, r, stationForm{ID: id, YAML: row.PrevYAML}, errs)
+		return
+	}
+
+	row.YAML, row.PrevYAML = row.PrevYAML, row.YAML
+	row.Name, row.PermsHash = st.Name, st.Permissions.Hash()
+	if err := db.UpdateStation(s.db, row); err != nil {
+		s.renderStationsError(w, r, stationForm{ID: id}, []error{err})
+		return
+	}
+	s.audit(r, "station.revert", row.StationID, "back to version "+st.Version)
+	redirectStations(w, r, "Station “"+row.Name+"” is back on "+st.Version+".")
 }
 
 // versionAndSource is what the audit entry says an import brought in.

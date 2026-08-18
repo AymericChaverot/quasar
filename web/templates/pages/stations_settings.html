@@ -95,6 +95,7 @@
             <span class="faint">{{.Doc.Version}}</span>
             {{if not .Enabled}}<span class="badge badge-muted">off</span>{{end}}
             {{if .Problems}}<span class="badge badge-muted">needs fixing</span>{{end}}
+            {{if .Held}}<span class="badge badge-warn">revision waiting</span>{{end}}
           </p>
           <p class="faint mt-0.5 text-xs">
             <span class="mono">{{.StationID}}</span>
@@ -104,6 +105,16 @@
           </p>
         </div>
         <div class="flex shrink-0 flex-wrap gap-2">
+          {{if .SourceURL}}
+          <form method="post" action="/settings/stations/{{.ID}}/fetch">
+            <button type="submit" class="btn py-1! text-xs">{{template "icon_restart"}}Re-fetch</button>
+          </form>
+          {{end}}
+          {{if .Revertible}}
+          <form method="post" action="/settings/stations/{{.ID}}/revert">
+            <button type="submit" class="btn py-1! text-xs">Back to {{.Prev.Version}}</button>
+          </form>
+          {{end}}
           <form method="post" action="/settings/stations/{{.ID}}/toggle">
             <button type="submit" class="btn py-1! text-xs">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
           </form>
@@ -120,6 +131,46 @@
         <ul class="mt-2 list-disc space-y-1 pl-5">
           {{range .Problems}}<li class="mono text-xs">{{.}}</li>{{end}}
         </ul>
+      </div>
+      {{end}}
+
+      {{/* A revision that was fetched and is not running, because it asks for
+           something nobody accepted. This card is where that gets decided. */}}
+      {{if .Held}}
+      <div class="card p-4" style="border-color: var(--warn)">
+        <p class="text-sm font-medium">Revision {{.Pending.Version}} is waiting</p>
+        <p class="help mt-1!">
+          It asks for more than you accepted, so it has not been applied. “{{.Name}}” is still
+          running {{.Doc.Version}}.
+        </p>
+        <p class="h-label mt-3">It would additionally be allowed to</p>
+        <ul class="mt-2 space-y-2">
+          {{range .PendingGrants}}{{if .Added}}
+          <li class="text-sm">
+            <span class="{{if .Strong}}font-medium{{end}}">{{.Title}}</span>
+            {{with .Detail}}<span class="faint mono block text-xs">{{.}}</span>{{end}}
+          </li>
+          {{end}}{{end}}
+        </ul>
+        {{with .PendingDropped}}
+        <p class="h-label mt-3">And would give up</p>
+        <ul class="mt-2 space-y-1">
+          {{range .}}<li class="faint text-xs">{{.Title}}{{with .Detail}} — {{.}}{{end}}</li>{{end}}
+        </ul>
+        {{end}}
+        <div class="mt-4 flex flex-wrap gap-2">
+          <form method="post" action="/settings/stations/{{.ID}}/accept">
+            <button type="submit" class="btn-primary px-3 py-1.5 text-xs">Accept revision {{.Pending.Version}}</button>
+          </form>
+          <form method="post" action="/settings/stations/{{.ID}}/discard">
+            <button type="submit" class="btn px-3 py-1.5 text-xs">Discard it</button>
+          </form>
+        </div>
+        <details class="mt-3 text-sm">
+          <summary class="cursor-pointer select-none">Read it</summary>
+          <pre class="mono mt-3 max-h-96 overflow-auto rounded p-3 text-xs"
+               style="background: var(--surface-2)">{{.PendingYAML}}</pre>
+        </details>
       </div>
       {{end}}
 
