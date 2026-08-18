@@ -16,6 +16,11 @@ import (
 )
 
 func main() {
+	// Before anything else opens a database, a Docker connection or the master
+	// key: a worker gets none of them, and the way to be sure of that is for
+	// this process never to have had them.
+	runWorkerMode()
+
 	cfg := config.Load()
 
 	database, err := db.Open(cfg.DBPath)
