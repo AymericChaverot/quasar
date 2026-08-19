@@ -243,11 +243,11 @@ func (r Root) Open(rel string) (*os.File, fs.FileInfo, error) {
 	}
 	info, err := f.Stat()
 	if err != nil {
-		f.Close()
+		_ = f.Close() // the reason for giving up is already on its way back
 		return nil, nil, err
 	}
 	if info.IsDir() {
-		f.Close()
+		_ = f.Close() // the reason for giving up is already on its way back
 		return nil, nil, ErrNotDir
 	}
 	return f, info, nil

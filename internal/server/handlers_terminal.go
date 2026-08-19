@@ -48,8 +48,10 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 
 	shell, execID, err := s.dock.InteractiveShell(ctx, a)
 	if err != nil {
-		conn.Write(ctx, websocket.MessageBinary, []byte("failed to open shell: "+err.Error()+"\r\n"))
-		conn.Close(websocket.StatusNormalClosure, "no shell")
+		// Both are a courtesy to a socket that is about to go: the failure is
+		// already decided, and there is nothing left to fall back to.
+		_ = conn.Write(ctx, websocket.MessageBinary, []byte("failed to open shell: "+err.Error()+"\r\n"))
+		_ = conn.Close(websocket.StatusNormalClosure, "no shell")
 		return
 	}
 	defer shell.Close()
@@ -69,7 +71,7 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if err != nil {
-				conn.Close(websocket.StatusNormalClosure, "shell exited")
+				_ = conn.Close(websocket.StatusNormalClosure, "shell exited") // the shell is gone either way
 				return
 			}
 		}

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"math"
 	"net/http"
 	"strings"
@@ -73,7 +74,11 @@ func writeAPIError(w http.ResponseWriter, status int, msg string) {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	// The status line has already gone out, so there is no way left to report
+	// a half-written body to the caller — only to whoever reads the log.
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("api: writing the response body: %v", err)
+	}
 }
 
 // apiApp is the shape an app takes over the API: identity, configuration that

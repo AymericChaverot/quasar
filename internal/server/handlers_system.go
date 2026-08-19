@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -184,8 +185,10 @@ func dirWritable(dir string) bool {
 	if err != nil {
 		return false
 	}
-	f.Close()
-	os.Remove(f.Name())
+	// The create already answered the question; clearing up after it is a
+	// courtesy, not part of the answer.
+	_ = f.Close()
+	_ = os.Remove(f.Name())
 	return true
 }
 
@@ -433,7 +436,9 @@ func (s *Server) handleMasterKeyDownload(w http.ResponseWriter, r *http.Request)
 	s.audit(r, "master-key.download", "", "")
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="quasar-master.key"`)
-	w.Write(key)
+	if _, err := w.Write(key); err != nil {
+		log.Printf("master key download: %v", err)
+	}
 }
 
 // offsiteView is the object-storage configuration as the form shows it. The
@@ -451,6 +456,16 @@ func offsiteView(database *sql.DB) map[string]any {
 
 // handleOffsiteSettings stores the object-storage destination for backups.
 func (s *Server) handleOffsiteSettings(w http.ResponseWriter, r *http.Request) {
+	// One form, saved key by key. Any key that failed makes "saved" a lie, and
+	// the first failure is the only one worth showing — the rest are the same
+	// locked database again.
+	var failed error
+	save := func(key, value string) {
+		if err := db.SetSetting(s.db, key, value); err != nil && failed == nil {
+			failed = err
+		}
+	}
+
 	for field, key := range map[string]string{
 		"offsite_endpoint":   db.SettingOffsiteEndpoint,
 		"offsite_region":     db.SettingOffsiteRegion,
@@ -458,7 +473,7 @@ func (s *Server) handleOffsiteSettings(w http.ResponseWriter, r *http.Request) {
 		"offsite_prefix":     db.SettingOffsitePrefix,
 		"offsite_access_key": db.SettingOffsiteAccessKey,
 	} {
-		db.SetSetting(s.db, key, strings.TrimSpace(r.FormValue(field)))
+		save(key, strings.TrimSpace(r.FormValue(field)))
 	}
 
 	// Encrypted at rest like an app's env content: this key can read and delete
@@ -469,10 +484,14 @@ func (s *Server) handleOffsiteSettings(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "could not store the secret key: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		db.SetSetting(s.db, db.SettingOffsiteSecretKey, enc)
+		save(db.SettingOffsiteSecretKey, enc)
 	}
 	if r.FormValue("clear_offsite_secret_key") == "on" {
-		db.SetSetting(s.db, db.SettingOffsiteSecretKey, "")
+		save(db.SettingOffsiteSecretKey, "")
+	}
+	if failed != nil {
+		http.Error(w, failed.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	s.audit(r, "settings.offsite", db.GetSetting(s.db, db.SettingOffsiteBucket), "")
@@ -541,9 +560,15 @@ func (s *Server) handleBackupSettings(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("backup_auto") == "on" {
 		auto = "true"
 	}
-	db.SetSetting(s.db, db.SettingBackupAuto, auto)
+	if err := db.SetSetting(s.db, db.SettingBackupAuto, auto); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if v := r.FormValue("retention"); v != "" {
-		db.SetSetting(s.db, db.SettingBackupRetention, v)
+		if err := db.SetSetting(s.db, db.SettingBackupRetention, v); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 	http.Redirect(w, r, "/system?msg=Backup settings saved.", http.StatusSeeOther)
 }

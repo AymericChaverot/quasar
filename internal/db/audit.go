@@ -28,6 +28,7 @@ const (
 // so it is kept far longer than logs — but still bounded, because this database
 // shares a small disk with everything else.
 const MaxAuditEntries = 20_000
+
 // RecordAudit appends an entry. The error comes back, but a caller is not
 // meant to fail on it: an audit write must never be the reason an operation
 // the user asked for fails — which is not the same as nobody being told it

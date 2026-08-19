@@ -340,7 +340,10 @@ func (s *Server) handleAppEnvSave(w http.ResponseWriter, r *http.Request) {
 	if a.DeployType == "compose" {
 		if yaml := r.FormValue("compose_yaml"); yaml != "" {
 			a.ComposeYAML = yaml
-			db.UpdateAppCompose(s.db, s.keyring, a.ID, yaml)
+			if err := db.UpdateAppCompose(s.db, s.keyring, a.ID, yaml); err != nil {
+				http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 	if err := s.dock.WriteEnvFile(a); err != nil {

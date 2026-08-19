@@ -68,7 +68,7 @@ func AuthenticateToken(db *sql.DB, secret string) (name, role string, err error)
 		return "", "", errors.New("invalid token")
 	}
 	// Best-effort: a failed timestamp update must not reject a valid request.
-	db.Exec("UPDATE api_tokens SET last_used_at = ? WHERE id = ?", time.Now(), id)
+	_, _ = db.Exec("UPDATE api_tokens SET last_used_at = ? WHERE id = ?", time.Now(), id)
 	return name, role, nil
 }
 

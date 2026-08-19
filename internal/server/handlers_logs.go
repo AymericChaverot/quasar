@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"html"
 	"html/template"
 	"net/http"
@@ -70,14 +69,17 @@ func streamLogLines(w http.ResponseWriter, r *http.Request, follow func(send fun
 		// is newline-delimited, so a rendered line must not carry one — it
 		// would split into two events and truncate the line.
 		rendered := strings.ReplaceAll(string(renderLogEntry(l.TS, l.Text)), "\n", " ")
-		fmt.Fprintf(w, "data: <div>%s</div>\n\n", rendered)
+		if !sse(w, "data: <div>%s</div>\n\n", rendered) {
+			return
+		}
 		flusher.Flush()
 	})
 	// A cancelled request is the normal way this ends — the reader navigated
 	// away — and has no error to report to a response nobody is reading.
 	if err != nil && r.Context().Err() == nil {
-		fmt.Fprintf(w, "data: <div class=\"text-red-400\">log stream error: %s</div>\n\n", html.EscapeString(err.Error()))
-		flusher.Flush()
+		if sse(w, "data: <div class=\"text-red-400\">log stream error: %s</div>\n\n", html.EscapeString(err.Error())) {
+			flusher.Flush()
+		}
 	}
 }
 

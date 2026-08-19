@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -251,12 +252,16 @@ func (s *Server) handleUpdateStatus(w http.ResponseWriter, r *http.Request) {
 	run := s.update.state()
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	json.NewEncoder(w).Encode(map[string]any{
+	// The header is already out, so a broken pipe has nowhere to be reported
+	// but the log.
+	if err := json.NewEncoder(w).Encode(map[string]any{
 		"phase":   run.phase,
 		"target":  run.target,
 		"percent": run.percent,
 		"detail":  run.detail,
 		"error":   run.err,
 		"version": version.Version,
-	})
+	}); err != nil {
+		log.Printf("update status: writing the response body: %v", err)
+	}
 }

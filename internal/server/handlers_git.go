@@ -197,7 +197,10 @@ func (s *Server) handleGitCredentialDelete(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "bad id", http.StatusBadRequest)
 		return
 	}
-	db.DeleteGitCredential(s.db, id)
+	if err := db.DeleteGitCredential(s.db, id); err != nil {
+		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	s.audit(r, "git-credential.delete", r.PathValue("id"), "")
 	redirectGit(w, r, "msg", "Credential deleted. Repositories it covered fall back to the next widest credential, or to anonymous access.")
 }

@@ -158,11 +158,11 @@ func (r Root) Save(rel string, src io.Reader, max int64) (int64, error) {
 	// file that exactly fills the cap from one that overruns it.
 	n, err := io.Copy(tmp, io.LimitReader(src, max+1))
 	if err != nil {
-		tmp.Close()
+		_ = tmp.Close() // the deferred remove is what matters here
 		return 0, err
 	}
 	if n > max {
-		tmp.Close()
+		_ = tmp.Close() // the deferred remove is what matters here
 		return 0, ErrTooLarge
 	}
 	if err := tmp.Chmod(mode); err != nil && !errors.Is(err, os.ErrInvalid) {

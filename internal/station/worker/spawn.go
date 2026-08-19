@@ -218,8 +218,8 @@ func Run(ctx context.Context, sp Spawner, call Call, lim Limits, b Broker) (Outc
 
 	// The worker is finished with either way; closing its input is what tells
 	// a well-behaved one to stop, and the kill is for the rest.
-	stdin.Close()
-	io.Copy(io.Discard, stdout)
+	_ = stdin.Close()
+	_, _ = io.Copy(io.Discard, stdout)
 	waitErr := cmd.Wait()
 
 	if reason, ok := killed.Load().(string); ok {

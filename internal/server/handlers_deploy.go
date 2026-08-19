@@ -2,7 +2,6 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -59,11 +58,13 @@ func (s *Server) handleAppDeployLog(w http.ResponseWriter, r *http.Request) {
 	gen, seq := int64(-1), -1
 	for {
 		snap, changed := s.dock.WatchDeploy(a.ID, gen, seq)
-		if snap.Reset {
-			fmt.Fprint(w, "event: reset\ndata: \n\n")
+		if snap.Reset && !sse(w, "event: reset\ndata: \n\n") {
+			return
 		}
 		for _, l := range snap.Lines {
-			fmt.Fprintf(w, "event: line\ndata: %s\n\n", renderDeployLine(l))
+			if !sse(w, "event: line\ndata: %s\n\n", renderDeployLine(l)) {
+				return
+			}
 		}
 		state, err := json.Marshal(deployState{
 			Active:   snap.Gen > 0,
@@ -76,7 +77,9 @@ func (s *Server) handleAppDeployLog(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return
 		}
-		fmt.Fprintf(w, "event: state\ndata: %s\n\n", state)
+		if !sse(w, "event: state\ndata: %s\n\n", state) {
+			return
+		}
 		flusher.Flush()
 		gen, seq = snap.Gen, snap.Seq
 
@@ -85,7 +88,9 @@ func (s *Server) handleAppDeployLog(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-time.After(deployLogKeepalive):
-			fmt.Fprint(w, ": still here\n\n")
+			if !sse(w, ": still here\n\n") {
+				return
+			}
 			flusher.Flush()
 		}
 	}
