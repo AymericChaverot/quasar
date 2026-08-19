@@ -1,0 +1,124 @@
+/* --- Terminal brutalism extras --------------------------------------------- */
+
+[data-theme="terminal"] body {
+  text-shadow: 0 0 6px color-mix(in srgb, var(--text) 40%, transparent);
+}
+[data-theme="terminal"] ::selection {
+  background: var(--text);
+  color: var(--bg);
+  text-shadow: none;
+}
+[data-theme="terminal"] h1 {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+[data-theme="terminal"] .btn:hover,
+[data-theme="terminal"] .btn-danger:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  text-shadow: none;
+}
+[data-theme="terminal"] .btn-danger:hover { background: var(--err); border-color: var(--err); }
+[data-theme="terminal"] input,
+[data-theme="terminal"] textarea,
+[data-theme="terminal"] select,
+[data-theme="terminal"] button {
+  text-shadow: inherit;
+}
+/* Subtle CRT scanlines over the whole page. */
+[data-theme="terminal"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 2px,
+    rgba(0, 0, 0, 0.35) 3px,
+    transparent 4px
+  );
+  opacity: 0.25;
+}
+
+/* --- Marathon HUD extras --------------------------------------------------- */
+
+[data-theme="marathon"] h1,
+[data-theme="marathon"] .brand,
+[data-theme="marathon"] .h-label,
+[data-theme="marathon"] .btn,
+[data-theme="marathon"] .btn-primary,
+[data-theme="marathon"] .btn-danger,
+[data-theme="marathon"] .chip {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+[data-theme="marathon"] .h-label { color: var(--accent); }
+/* The shared accent rule squares off into a registration block, as on the
+   key art. */
+[data-theme="marathon"] .h-label::before {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+/* Hazard stripe along the bottom edge of the header. */
+[data-theme="marathon"] .site-header {
+  border-bottom-color: var(--accent);
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--accent) 55%, transparent) 0 8px,
+    transparent 8px 16px
+  );
+  background-repeat: no-repeat;
+  background-size: 100% 3px;
+  background-position: bottom;
+}
+[data-theme="marathon"] .chip { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+[data-theme="marathon"] .table-wrap thead { border-bottom-color: var(--accent); }
+[data-theme="marathon"] .btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+/* --- Nebula ---------------------------------------------------------------- */
+
+/* The object the theme is named after, standing in for a background image: a
+   cool wash bleeding down from behind the header, so the page has a light
+   source instead of being a flat sheet of near-black. Deliberately not tinted
+   with the accent — a sulfur haze over near-black goes olive, and it would
+   also blunt the accent everywhere it actually carries meaning. Cool ground,
+   warm accent. Fixed and pointer-transparent, and behind everything: it must
+   never intercept a click or a scroll meant for the content. */
+[data-theme="nebula"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(48rem 26rem at 50% -8rem, color-mix(in srgb, var(--info) 11%, transparent), transparent 72%),
+    radial-gradient(34rem 20rem at 88% 4rem, color-mix(in srgb, var(--info) 6%, transparent), transparent 70%);
+}
+
+/* The header sits over that wash, so it needs its own ground to stay readable
+   rather than the translucent surface the other themes use. */
+[data-theme="nebula"] .site-header {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+
+/* --- Synthwave glow -------------------------------------------------------- */
+
+[data-theme="synthwave"] .brand {
+  color: var(--accent);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+[data-theme="synthwave"] .site-header {
+  border-bottom-color: var(--accent);
+  box-shadow: 0 1px 16px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+[data-theme="synthwave"] .badge {
+  box-shadow: 0 0 8px color-mix(in srgb, currentColor 25%, transparent);
+}

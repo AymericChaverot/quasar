@@ -1,0 +1,119 @@
+/* --- Work in flight -------------------------------------------------------- */
+
+/* A control that has fired a request and is waiting on the answer. The spinner
+   takes the icon's place rather than being added beside it, so the button keeps
+   its width and its label stays where it was. htmx puts .htmx-request on
+   whatever hx-indicator names — here, the button itself; .is-working is the
+   same state set by hand, for a plain form whose submit navigates the page and
+   so has no htmx request to be indicated. */
+.spinner {
+  display: inline-block;
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-badge);
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  animation: spin 620ms linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.btn .spinner,
+.btn-primary .spinner,
+.btn-danger .spinner { display: none; }
+
+.btn.htmx-request .spinner,
+.btn-primary.htmx-request .spinner,
+.btn-danger.htmx-request .spinner,
+.btn.is-working .spinner,
+.btn-primary.is-working .spinner,
+.btn-danger.is-working .spinner { display: inline-block; }
+
+.btn.htmx-request .ico,
+.btn-primary.htmx-request .ico,
+.btn-danger.htmx-request .ico,
+.btn.is-working .ico,
+.btn-primary.is-working .ico,
+.btn-danger.is-working .ico { display: none; }
+
+/* A word that names something happening right now: DEPLOYING on a badge, the
+   heading over an update, the line naming the step a deploy is on. A band of
+   full-strength colour travels along the letters over a slightly dimmed ground,
+   so the text itself carries the sense of work under way and nothing has to be
+   found room for beside it.
+
+   Built from currentColor alone, which is what lets one class serve all of
+   them: it shimmers an amber badge, a muted phase line and the page's own text
+   colour, each in its own colour and in every theme, with nothing to keep in
+   step. It goes on the element that holds the words and nothing else — a span
+   inside a badge, the paragraph that is only the phase line — so the sweep is
+   measured across the text rather than across a whole row of it. */
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .shimmer {
+    /* Full strength is held across a plateau rather than touched at a single
+       point: a lone peak with ramps either side spends most of its width part
+       lit, so the band reads as a thin bright line with a wide dull halo and
+       the sweep looks narrower and weaker than its stops suggest.
+
+       The lit span comes to a little over one box width, so something is always
+       under way somewhere in the text — below that the band leaves on the right
+       before the next has entered on the left, and the sweep reads as a pulse
+       with a pause rather than as travel. Both ends of the gradient are the dim
+       ground, which is what lets it tile without a seam. */
+    background-image: linear-gradient(
+      100deg,
+      color-mix(in srgb, currentColor 55%, transparent) 20%,
+      currentColor 40%,
+      currentColor 60%,
+      color-mix(in srgb, currentColor 55%, transparent) 80%
+    );
+    background-size: 200% 100%;
+    background-repeat: repeat-x;
+    -webkit-background-clip: text;
+    background-clip: text;
+    /* Not `color: transparent`, which would resolve the currentColor the
+       gradient is built from to transparent and paint nothing at all. This
+       empties the glyphs while leaving the colour itself in place. */
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 1s linear infinite;
+  }
+}
+
+/* One tile is twice the box wide and the sweep travels exactly one tile, so the
+   frame the loop ends on is the frame it began on: the band leaves to the right
+   while its neighbour is already entering from the left, and the restart falls
+   in the middle of that with nothing to see.
+
+   Travelling less than a whole tile — or tiling turned off — is what made the
+   band reappear at the left edge fully formed each time round. */
+@keyframes shimmer {
+  from { background-position: 0 0; }
+  to   { background-position: -200% 0; }
+}
+
+/* The blanket reduced-motion rule further down only stops the sweep, and a
+   sweep stopped partway leaves the text dimmed and lit from one side for good.
+   So the effect is undone here instead of frozen. */
+@media (prefers-reduced-motion: reduce) {
+  .shimmer {
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+    animation: none;
+  }
+}
+
+/* Tailwind's reset stopped giving buttons the hand cursor in v4, so every
+   button on the page would fall back to the arrow. Restored here rather than
+   class by class, since nothing in this interface uses a button that is not
+   meant to be clicked. The :not() keeps the disabled rule below in charge. */
+button:not(:disabled),
+[role="button"]:not(:disabled) { cursor: pointer; }
+
+/* A button htmx has disabled for the duration of its request must stop looking
+   pressable, or the second click that does nothing reads as the interface
+   ignoring it. */
+button[disabled] { cursor: progress; opacity: 0.65; }
+.btn[disabled]:hover,
+.btn-danger[disabled]:hover { background: transparent; }
+.btn-primary[disabled]:hover { background: var(--accent); border-color: var(--accent); }

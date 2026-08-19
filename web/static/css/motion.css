@@ -1,0 +1,30 @@
+/* --- Motion ---------------------------------------------------------------- */
+
+/* Short enough to feel like the control responding rather than an animation
+   playing. Suppressed entirely for anyone who has asked for less movement. */
+.btn,
+.btn-primary,
+.btn-danger,
+.btn-signout,
+.nav-link,
+.link,
+.back-link,
+.input,
+.select,
+.reorder-btn,
+.modal-close,
+.table-wrap tbody tr {
+  transition: color 100ms ease, background-color 100ms ease,
+              border-color 100ms ease, box-shadow 100ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after,
+  *::backdrop { /* the modal fades through its backdrop, which is not a child */
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

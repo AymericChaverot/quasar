@@ -1,0 +1,627 @@
+/* --- Stations -------------------------------------------------------------- */
+
+/* A station is one block with a tab strip, at the top of an application's page.
+   It is drawn from the same tokens as everything else — and, from step by step
+   further along, from those tokens with a station's own accent mixed in — so a
+   station written against one theme is legible when it lands on another.
+
+   The scope stops at this block. A station is a shareable program, and one that
+   could repaint the navigation or the top bar could draw a convincing "update
+   available", or a convincing login screen. */
+
+.station {
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.station-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-bottom: var(--border-w) solid var(--border);
+  background: var(--surface-2);
+}
+
+.station-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem 0;
+  border-bottom: var(--border-w) solid var(--border);
+}
+
+.station-tab {
+  cursor: pointer;
+  padding: 0.375rem 0.75rem;
+  border: var(--border-w) solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.station-tab:hover { color: var(--text); }
+.station-tab.is-on {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+  /* Sits on the strip's own border rather than above it, so the open tab reads
+     as continuous with the panel below it. */
+  margin-bottom: calc(-1 * var(--border-w));
+  padding-bottom: calc(0.375rem + var(--border-w));
+}
+
+.station-pane { padding: 1rem; }
+
+.station-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+/* Cards on one row are as tall as the tallest of them, and their contents sit
+   at the bottom.
+
+   Left alone, a grid row is as tall as its tallest cell and every shorter card
+   keeps its own height, so a row of three ends up two short cards floating
+   beside a long one with a hole under each. Stretching them is half the fix;
+   the other half is where the extra room goes. It goes above the content and
+   below the heading — the headings stay in a line across the row, which is what
+   makes it read as a row, and the numbers sit on a line of their own. */
+.station-cell {
+  grid-column: span 6;
+  display: flex;
+}
+.station-cell > .card {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.station-body { margin-top: auto; }
+
+/* After .station-cell, not before it: these carry the same weight as the span
+   it sets, so the one that wins is the one written last. */
+@media (min-width: 48rem) {
+  .station-half { grid-column: span 3; }
+  .station-third { grid-column: span 2; }
+}
+
+/* The recap before a station is installed: a handful of labelled facts, on
+   tracks rather than justified apart. Two columns keep the values in a line
+   down the card, which is what makes four rows readable as a summary instead of
+   as four unrelated sentences. */
+.recap {
+  display: grid;
+  grid-template-columns: minmax(6rem, max-content) 1fr;
+  gap: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+}
+.recap-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+}
+.recap dt { color: var(--text-muted); }
+.recap dd { min-width: 0; overflow-wrap: anywhere; }
+
+/* What a station is allowed to do, on the one screen whose whole purpose is
+   being read. The shape in front of each line is what makes eight sentences
+   scannable; the two worth a second look wear the warning colour, because a
+   glance should land on them before it lands anywhere else. */
+.grant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+.grant {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  font-size: 0.875rem;
+}
+.grant-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 0.0625rem;
+  color: var(--text-muted);
+}
+.grant-icon svg { width: 1rem; height: 1rem; }
+.grant.is-strong .grant-icon { color: var(--warn); }
+.grant.is-strong .grant-title { font-weight: 500; }
+
+/* Gold is gold on every theme. It is not a palette token because no theme gets
+   to reinterpret it: a star that came out green on Nebula and blue on Nord
+   would stop reading as a star. */
+:root { --star: #e0a92b; }
+
+/* A station on the Stations page. The whole card is the link — an anchor may
+   not contain a button, so the anchor stretches over the card with a
+   pseudo-element and the star sits above that. */
+.station-card {
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.12s;
+}
+.station-card:hover { border-color: var(--border-strong); }
+.station-card-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+/* The mark as the card's ground: large, tilted off square so it reads as a
+   printed device rather than as an icon somebody forgot to shrink, and faint
+   enough that the words in front of it are never competing with it. */
+.station-card-glyph {
+  position: absolute;
+  right: -1.75rem;
+  top: 50%;
+  color: var(--accent);
+  opacity: 0.06;
+  transform: translateY(-50%) rotate(-12deg);
+  pointer-events: none;
+}
+/* Centred on the card's own middle rather than tucked into a corner, and run
+   off the right-hand edge rather than fitted inside it: the silhouette is wide
+   and shallow, a card is wide and shallow, and one that stopped short of the
+   border would read as a picture placed on the card instead of as the ground
+   the card is printed on. The stroke thins as the drawing grows, for the same
+   reason a rule drawn at a hundred pixels is not the same rule drawn at
+   fourteen. */
+.station-card-glyph svg {
+  width: 9rem;
+  height: 9rem;
+  stroke-width: 1;
+}
+
+/* Out of the way until it is wanted, and permanent once it has been used. A
+   control that is always visible on every card is a column of grey stars down
+   a page nobody asked to be about starring. */
+.station-star {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius);
+  color: var(--text-faint);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 180ms ease-in-out, color 180ms ease-in-out, transform 180ms ease-in-out;
+}
+.station-card:hover .station-star,
+.station-star:focus-visible { opacity: 1; }
+.station-star:hover { color: var(--star); transform: scale(1.1); }
+.station-star svg { width: 1rem; height: 1rem; }
+
+.station-card.is-favorite .station-star {
+  opacity: 1;
+  color: var(--star);
+}
+.station-card.is-favorite .station-star svg { fill: currentColor; }
+
+/* And the card says so from across the page: a soft gold wash out of the top
+   left corner, which is legible as "this one is mine" long before the star at
+   the other end of the card is. It fades in and out with the star rather than
+   appearing, because a card that flashed gold on a click would read as an
+   alert. */
+.station-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* Further off the left edge than the top: it is a glow leaking in from
+     outside the card, and one centred on the corner reads as a badge stuck
+     there. Wide and soft, with the falloff carrying most of the way across it,
+     so what lands on the card is a wash rather than a disc with an edge. */
+  width: 10rem;
+  height: 10rem;
+  transform: translate(-58%, -30%);
+  border-radius: 999px;
+  background: radial-gradient(circle,
+    color-mix(in srgb, var(--star) 17%, transparent) 0%,
+    color-mix(in srgb, var(--star) 9%, transparent) 38%,
+    transparent 76%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease-in-out;
+}
+.station-card.is-favorite::before { opacity: 1; }
+
+/* On an application deployed from a station, everything Quasar provides for
+   every application folds into this. The summary is a bar rather than a line of
+   text: it is the only thing between the station and the bottom of the page,
+   and it has to read as a lid on something rather than as a stray link. */
+.advanced-block > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  transition: color 0.12s, border-color 0.12s, background 0.12s, border-radius 0.12s;
+}
+.advanced-block > summary::-webkit-details-marker { display: none; }
+.advanced-block > summary:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.advanced-block > summary .ico { flex-shrink: 0; }
+
+/* Open, the summary stops being a button and becomes the top edge of a box:
+   the corners it shares with the body square off, the seam between them goes,
+   and the border carries on down both sides of what was revealed.
+ 
+   This is the whole of the fix for a fold that read as doing nothing. What it
+   opened used to appear underneath it, unbounded, looking exactly like the page
+   simply carrying on — so the click seemed inert and the sections seemed
+   unrelated to it. Belonging is drawn, not asserted. */
+.advanced-block[open] > summary {
+  color: var(--text);
+  background: var(--surface-2);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.advanced-body {
+  /* The top padding is load-bearing, not spacing. With none, and no top border
+     either, the first section's own margin collapses straight out through the
+     top of this box and pushes the whole thing down — leaving the body floating
+     an inch below the summary, its side borders starting nowhere and the lid
+     attached to nothing. Padding closes that edge, so the box begins exactly
+     where the summary ends. */
+  padding: 1.25rem 1rem;
+  border: var(--border-w) solid var(--border);
+  border-top: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+  /* And it arrives rather than blinking into existence, which is the other half
+     of knowing the click did something. */
+  animation: advanced-open 200ms ease-out;
+}
+
+
+/* The reveal clips rather than slides. A box that arrives by moving is a box
+   whose top edge is detached from the summary for the length of the animation
+   — briefly, but that seam is the exact thing this fold was fixed for, and it
+   should not come back two hundred milliseconds at a time. Clipping pins the
+   top edge and rolls the rest down out from under it. */
+@keyframes advanced-open {
+  from { opacity: 0; clip-path: inset(0 0 30% 0); }
+  to { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+
+/* Says what is under the lid, so opening it is a decision rather than a poke. */
+.advanced-note {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+@media (max-width: 48rem) {
+  /* Narrow, the note is more than the row can carry, and the chevron inherits
+     the job of holding the right-hand end. */
+  .advanced-note { display: none; }
+  .advanced-caret { margin-left: auto; }
+}
+
+/* The one part of the control that moves, so the state is legible from the
+   control itself and not only from the height of the page. */
+.advanced-caret {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  transition: transform 200ms ease, color 0.12s;
+}
+.advanced-block > summary:hover .advanced-caret { color: var(--text); }
+.advanced-block[open] .advanced-caret {
+  transform: rotate(180deg);
+  color: var(--text);
+}
+
+/* Refresh the station and nothing else. Reloading the page to see whether a
+   mod finished installing throws away the tab somebody was on and the place
+   they had scrolled to, which is a lot to pay for one number. */
+.station-head-end {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.station-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: var(--border-w) solid transparent;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.station-refresh:hover {
+  color: var(--accent);
+  border-color: var(--border);
+  background: var(--surface);
+}
+.station-refresh svg { width: 0.875rem; height: 0.875rem; }
+.station-refresh.is-turning svg { animation: spin 620ms ease-in-out; }
+
+/* Whose work this is, at the foot of it. */
+.station-foot {
+  padding: 0.5rem 1rem 0.75rem;
+  text-align: right;
+  font-size: 0.6875rem;
+  color: var(--text-faint);
+}
+
+/* A panel with nothing to draw yet, which is not a panel that failed. */
+.station-waiting {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+/* One number, at the size a number worth looking at is read at. */
+.station-stat {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.station-row + .station-row td { border-top: 1px solid var(--border); }
+
+/* The four tones mean the same thing inside a station as everywhere else: a red
+   that means "stopped" on the dashboard must not mean something else here. */
+.station-tone-accent { border-color: var(--accent); }
+.station-tone-ok { border-color: var(--ok); }
+.station-tone-warn { border-color: var(--warn); }
+.station-tone-err { border-color: var(--err); }
+
+.station-prose { color: var(--text); }
+
+/* A bar that fills, for the one number a gauge is about. */
+.station-gauge {
+  margin-top: 0.5rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.station-gauge > span {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  background: var(--accent);
+}
+
+/* A list of things that happened, in the order they happened.
+
+   The dot is placed off the line's own geometry rather than off a number that
+   happened to look close: the border's centre is the padding away from the
+   item, plus half the border, and the dot is pulled back half its own width
+   from there. Written as a constant it was a pixel to the left of the line at
+   one border width and further at the other, which reads as a mistake because
+   it is one. */
+.station-timeline {
+  --timeline-dot: 0.4375rem;
+  list-style: none;
+  padding-left: 1rem;
+  border-left: var(--border-w) solid var(--border);
+}
+.station-timeline > li {
+  position: relative;
+  padding-bottom: 0.625rem;
+}
+.station-timeline > li::before {
+  content: "";
+  position: absolute;
+  left: calc(-1rem - var(--border-w) / 2 - var(--timeline-dot) / 2);
+  top: 0.45rem;
+  width: var(--timeline-dot);
+  height: var(--timeline-dot);
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+/* A station's own tokens land on #station and reach only what is inside it.
+   These are the rules that read them: the tint, which cannot be a redefinition
+   of --surface because a custom property may not be defined in terms of
+   itself, and the three shape choices a document can make. */
+
+.station .card,
+.station-pane > .station-grid > .station-cell > .card {
+  background: var(--station-surface, var(--surface));
+}
+.station-head {
+  background: var(--station-surface-2, var(--surface-2));
+}
+.station-pane {
+  padding: var(--station-pad, 1rem);
+}
+.station .h-label,
+.station-tab {
+  text-transform: var(--station-case, none);
+  letter-spacing: var(--station-tracking, normal);
+}
+.station-stat {
+  font-family: var(--station-display, var(--font-body));
+}
+
+.station-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+/* A station table's header. It reads like h-label and is not one: h-label is a
+   flex box with an accent rule in front of it, which is right for a section
+   heading and collapses a table's header row. */
+.station-th {
+  padding: 0 0.5rem 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+.station-th.text-right { text-align: right; }
+.station-th.text-center { text-align: center; }
+
+/* Room between one column and the next, which a bare table does not give. */
+.station-row td { padding-left: 0.5rem; padding-right: 0.5rem; }
+
+/* A station's messages float over the page rather than sitting at the top of
+   its block. The button that caused one is often three screens down from
+   there, and a message nobody scrolls back up to read is a message nobody
+   reads. */
+.station-toasts {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: min(26rem, calc(100vw - 2.5rem));
+  pointer-events: none;
+}
+
+/* A floor under the width as well as a ceiling over it. A toast sized purely
+   to "Saved" is a smudge in the corner of a 27-inch screen, and one nobody
+   notices is one that did not happen. */
+.station-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  min-width: min(18rem, calc(100vw - 2.5rem));
+  min-height: 3rem;
+  padding: 0.75rem 0.875rem;
+  border: var(--border-w) solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  pointer-events: auto;
+  animation: station-toast-in 140ms ease-out;
+  /* The words are the page's own colour. Green text on a green stripe is a
+     message that has been shouted rather than said, and it is the icon and the
+     stripe that carry which of the three this is. */
+  color: var(--text);
+}
+.station-toast.is-going {
+  opacity: 0;
+  transform: translateY(0.375rem);
+  transition: opacity 400ms ease, transform 400ms ease;
+}
+
+/* Said twice: the stripe down the side and the shape in front of the words. A
+   stripe on its own is a colour, and a colour on its own is not a message to
+   anybody who cannot tell this green from that red. */
+.station-toast-ok { border-left: 3px solid var(--ok); }
+.station-toast-warn { border-left: 3px solid var(--warn); }
+.station-toast-err { border-left: 3px solid var(--err); }
+
+.station-toast-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 0.0625rem;
+}
+.station-toast-icon svg { width: 1.125rem; height: 1.125rem; }
+.station-toast-ok .station-toast-icon { color: var(--ok); }
+.station-toast-warn .station-toast-icon { color: var(--warn); }
+.station-toast-err .station-toast-icon { color: var(--err); }
+
+.station-toast-close {
+  flex-shrink: 0;
+  padding: 0 0.25rem;
+  line-height: 1;
+  font-size: 1.125rem;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.station-toast-close:hover { color: var(--text); }
+
+@keyframes station-toast-in {
+  from { opacity: 0; transform: translateY(0.5rem); }
+  to { opacity: 1; transform: none; }
+}
+
+/* A long action's pane, which is not a message: it sits in the block, above
+   the tabs, and it is there to be watched. */
+.station-jobs:not(:empty) { padding: 1rem 1rem 0; }
+
+/* The mark on an application deployed from a station, in the list and on its
+   own page. */
+.station-mark {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+  vertical-align: -0.125em;
+}
+.station-mark svg { width: 0.875rem; height: 0.875rem; }
+
+/* An application's name in the list, with the station mark in front of it. The
+   slot is the same width on every row, mark or no mark, so a list of mostly
+   ordinary applications does not have one name indented and the rest not. */
+.app-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+}
+.station-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 0.875rem;
+}
+
+/* The default mark, for a station whose document brought no icon of its own.
+   Drawn at the size the document's icon would have been so the two are
+   interchangeable wherever a station is named. */
+.station-icon-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
+  color: var(--accent);
+}
+.station-icon-fallback svg { width: 1rem; height: 1rem; }
+.station-icon-fallback-lg { width: 2.25rem; height: 2.25rem; }
+.station-icon-fallback-lg svg { width: 1.5rem; height: 1.5rem; }
+
+.station-icon-lg {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius);
+  object-fit: cover;
+  flex-shrink: 0;
+}

@@ -93,7 +93,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.Serve
 // files read out of an embed.FS have a zero modification time, so there is no
 // Last-Modified to revalidate against and every page load would pull the fonts
 // down again. Their names are tied to their contents, so they can be pinned
-// hard; nothing else here can, since themes.css changes under a fixed name.
+// hard; nothing else here can, since the stylesheets change under fixed names.
 func staticAssets(root fs.FS) http.Handler {
 	files := http.FileServerFS(root)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
