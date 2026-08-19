@@ -270,6 +270,12 @@ func (s *Server) routes() {
 	// a station in it: somebody else has already answered everything that form
 	// asks, and the only questions left are the station's own.
 	s.admin("GET /stations/{id}/deploy", s.handleStationDeployForm)
+	// And the last button is not the form's submit. Between the two is a recap
+	// of what is about to exist and where, with the way back to the answers
+	// that decided it: installing takes an address on the operator's domain and
+	// starts pulling an image, which is worth a dozen words of warning.
+	s.admin("POST /stations/{id}/deploy/review", s.handleStationDeployReview)
+	s.admin("POST /stations/{id}/deploy/edit", s.handleStationDeployEdit)
 	s.admin("POST /stations/{id}/deploy", s.handleStationDeploy)
 	// A station is a program somebody else wrote, and installing one is
 	// accepting what it may reach. Reading the page is an admin's business for

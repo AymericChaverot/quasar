@@ -2506,6 +2506,25 @@ button[disabled] { cursor: progress; opacity: 0.65; }
 }
 .station-body { margin-top: auto; }
 
+/* The recap before a station is installed: a handful of labelled facts, on
+   tracks rather than justified apart. Two columns keep the values in a line
+   down the card, which is what makes four rows readable as a summary instead of
+   as four unrelated sentences. */
+.recap {
+  display: grid;
+  grid-template-columns: minmax(6rem, max-content) 1fr;
+  gap: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+}
+.recap-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+}
+.recap dt { color: var(--text-muted); }
+.recap dd { min-width: 0; overflow-wrap: anywhere; }
+
 /* What a station is allowed to do, on the one screen whose whole purpose is
    being read. The shape in front of each line is what makes eight sentences
    scannable; the two worth a second look wear the warning colour, because a

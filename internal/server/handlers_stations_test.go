@@ -272,7 +272,7 @@ func TestTheInstallPageAsksOnlyWhatTheStationAsks(t *testing.T) {
 		"What it is allowed to do",             // and what accepting it means
 		"Run any command inside the container", // in the same words as the install screen
 		"Advanced options",                     // everything else, folded away
-		"Install and deploy",
+		"Review and install",                   // and the recap between here and the deploy
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the install page does not have %q", want)
@@ -284,6 +284,47 @@ func TestTheInstallPageAsksOnlyWhatTheStationAsks(t *testing.T) {
 	advanced := strings.Index(body, "Advanced options")
 	if i := strings.Index(body, "nginx:alpine"); i < advanced {
 		t.Error("the image is shown above the fold, where nobody needs it")
+	}
+}
+
+// Between the form and the deploy is a recap. Installing takes an address on
+// the operator's domain, writes an environment and starts pulling an image, and
+// the person pressing the button is often the one least likely to know that;
+// reading what is about to exist, with a way back to the answers that decided
+// it, is what makes it a decision.
+func TestTheRecapSaysWhatIsAboutToBeCreated(t *testing.T) {
+	s, _ := catalogTestServer(t)
+	install(t, s, testStationWithParams, "")
+
+	form := strings.NewReader("p.SIZE=large")
+	r := httptest.NewRequest("POST", "/stations/demo/deploy/review", form)
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.SetPathValue("id", "demo")
+	w := httptest.NewRecorder()
+	s.handleStationDeployReview(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d, want the recap:\n%s", w.Code, w.Body)
+	}
+
+	body := bodyText(w)
+	for _, want := range []string{
+		"What this will create",
+		"Demo large",  // the name it will take
+		"demo-large.", // and the address, on this server's domain
+		"What you answered",
+		"large",                      // the answer that decided both
+		`name="p.SIZE"`,              // carried forward, so the deploy has it
+		"Install and deploy",         // the button that does it
+		"/stations/demo/deploy/edit", // and the way back to change it
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the recap does not have %q:\n%s", want, body)
+		}
+	}
+
+	// Nothing has happened: the recap is a screen, not a step.
+	if apps, _ := db.ListApps(s.db, s.keyring); len(apps) != 0 {
+		t.Errorf("reviewing a station created %d applications", len(apps))
 	}
 }
 

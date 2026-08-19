@@ -25,7 +25,100 @@
 </div>
 {{end}}
 
+{{if .Recap}}
+{{/* Nothing has happened yet, and that is what this screen is for.
+
+     The next button creates an application, takes an address on the operator's
+     domain, writes an environment and starts pulling an image — and whoever is
+     pressing it is often the person least likely to know that any of that is
+     what "install" meant. A dozen words saying what will exist and where, with
+     the way back to the answers that decided it, is what makes it a decision
+     rather than the end of a form.
+
+     Every answer travels as a hidden field, so both buttons below carry the
+     whole of what was filled in: one forward into the deploy, one back to the
+     form with nothing lost. */}}
 <form method="post" action="/stations/{{$station.ID}}/deploy" class="max-w-3xl space-y-8">
+  {{$d := .}}
+  {{range .Params}}<input type="hidden" name="p.{{.Name}}" value="{{$d.Value .}}">{{end}}
+  {{with .Advanced}}
+  <input type="hidden" name="name" value="{{.Name}}">
+  <input type="hidden" name="subdomain" value="{{.Subdomain}}">
+  <input type="hidden" name="custom_domains" value="{{.CustomDomains}}">
+  <input type="hidden" name="cpu_limit" value="{{.CPULimit}}">
+  <input type="hidden" name="mem_limit_mb" value="{{.MemLimitMB}}">
+  {{end}}
+
+  <section class="space-y-4">
+    <h2 class="h-label">What this will create</h2>
+    <div class="card p-4">
+      <dl class="recap">
+        <div class="recap-row">
+          <dt>Application</dt>
+          <dd class="font-medium">{{.RecapName}}</dd>
+        </div>
+        <div class="recap-row">
+          <dt>Address</dt>
+          <dd class="mono">{{.RecapSubdomain}}.{{$.Domain}}</dd>
+        </div>
+        {{with .Proposed}}
+        <div class="recap-row">
+          <dt>Runs</dt>
+          <dd class="mono">{{if .ImageRef}}{{.ImageRef}}{{else}}{{.DeployType}}{{end}}</dd>
+        </div>
+        {{end}}
+        {{with .Advanced.CustomDomains}}
+        <div class="recap-row"><dt>Custom domains</dt><dd class="mono">{{.}}</dd></div>
+        {{end}}
+        {{with .Advanced.CPULimit}}
+        <div class="recap-row"><dt>CPU limit</dt><dd class="mono">{{.}}</dd></div>
+        {{end}}
+        {{with .Advanced.MemLimitMB}}
+        <div class="recap-row"><dt>Memory limit</dt><dd class="mono">{{.}} MB</dd></div>
+        {{end}}
+      </dl>
+    </div>
+  </section>
+
+  {{if .Params}}
+  <section class="space-y-4">
+    <h2 class="h-label">What you answered</h2>
+    <div class="card p-4">
+      <dl class="recap">
+        {{range .Params}}
+        <div class="recap-row">
+          <dt>{{.Title}}</dt>
+          <dd class="mono">{{$d.Value .}}</dd>
+        </div>
+        {{end}}
+      </dl>
+    </div>
+  </section>
+  {{end}}
+
+  <section class="space-y-4">
+    <h2 class="h-label">What it is allowed to do on this server</h2>
+    <div class="card p-4">
+      {{if .Grants}}
+      {{template "grant_list" .Grants}}
+      {{else}}
+      <p class="text-sm">
+        Nothing. This station can compute and return values, and reach nothing else on this server.
+      </p>
+      {{end}}
+    </div>
+  </section>
+
+  <div class="flex flex-wrap items-center gap-3">
+    <button type="submit" class="btn-primary px-4 py-2">{{template "icon_deploy"}}Install and deploy</button>
+    <button type="submit" class="btn px-4 py-2"
+            formaction="/stations/{{$station.ID}}/deploy/edit">{{template "icon_arrow_left"}}Change something</button>
+    <a href="/stations" class="btn px-4 py-2">Cancel</a>
+  </div>
+</form>
+
+{{else}}
+<form method="post" action="/stations/{{$station.ID}}/deploy/review" class="max-w-3xl space-y-8">
 
   {{/* The station's own questions, and nothing else. Everything the
        new-application form would have asked has already been answered by the
@@ -81,38 +174,46 @@
   </section>
 
   {{/* Everything the general form would have asked. Empty means "use what the
-       station worked out", which is the answer almost every time. */}}
-  <details class="card p-4">
+       station worked out", which is the answer almost every time. It opens by
+       itself for somebody who has come back from the recap having filled one
+       in: a fold that hid the value they had just typed would, as far as they
+       could tell, have lost it. */}}
+  <details class="card p-4"{{if .Advanced.Any}} open{{end}}>
     <summary class="cursor-pointer select-none text-sm font-medium">Advanced options</summary>
     <p class="help mt-2">
       Left blank, each of these is worked out from your answers above. Fill one in to run a
       second copy under another name, or to put it on an address of your choosing.
     </p>
+    {{$adv := .Advanced}}
     {{with .Proposed}}
     <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div>
         <label class="label" for="adv-name">Name</label>
-        <input id="adv-name" name="name" type="text" class="input" placeholder="{{.Name}}">
+        <input id="adv-name" name="name" type="text" class="input"
+               value="{{$adv.Name}}" placeholder="{{.Name}}">
       </div>
       <div>
         <label class="label" for="adv-subdomain">Address</label>
         <div class="flex items-center gap-2">
-          <input id="adv-subdomain" name="subdomain" type="text" class="input mono" placeholder="{{.Subdomain}}">
+          <input id="adv-subdomain" name="subdomain" type="text" class="input mono"
+                 value="{{$adv.Subdomain}}" placeholder="{{.Subdomain}}">
           <span class="faint mono text-sm">.{{$.Domain}}</span>
         </div>
       </div>
       <div class="sm:col-span-2">
         <label class="label" for="adv-domains">Custom domains</label>
         <input id="adv-domains" name="custom_domains" type="text" class="input mono"
-               placeholder="comma-separated, optional">
+               value="{{$adv.CustomDomains}}" placeholder="comma-separated, optional">
       </div>
       <div>
         <label class="label" for="adv-cpu">CPU limit</label>
-        <input id="adv-cpu" name="cpu_limit" type="number" step="0.1" min="0" class="input" placeholder="unlimited">
+        <input id="adv-cpu" name="cpu_limit" type="number" step="0.1" min="0" class="input"
+               value="{{$adv.CPULimit}}" placeholder="unlimited">
       </div>
       <div>
         <label class="label" for="adv-mem">Memory limit (MB)</label>
-        <input id="adv-mem" name="mem_limit_mb" type="number" min="0" class="input" placeholder="unlimited">
+        <input id="adv-mem" name="mem_limit_mb" type="number" min="0" class="input"
+               value="{{$adv.MemLimitMB}}" placeholder="unlimited">
       </div>
     </div>
 
@@ -139,9 +240,10 @@
   </details>
 
   <div class="flex flex-wrap items-center gap-3">
-    <button type="submit" class="btn-primary px-4 py-2">{{template "icon_deploy"}}Install and deploy</button>
+    <button type="submit" class="btn-primary px-4 py-2">Review and install</button>
     <a href="/stations" class="btn px-4 py-2">Cancel</a>
   </div>
 </form>
+{{end}}
 {{end}}
 {{end}}

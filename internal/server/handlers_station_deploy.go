@@ -35,13 +35,64 @@ type StationDeploy struct {
 	// comes back with what was typed in it.
 	Values catalog.Values
 
+	// Advanced is whatever was typed into the general form's fields, which is
+	// nothing almost every time. Kept separately from Proposed because the two
+	// mean opposite things: this is what somebody insisted on, that is what the
+	// document worked out.
+	Advanced StationAdvanced
+
 	// Proposed is what the advanced fields would be left to work out, shown as
 	// placeholders rather than filled in: they depend on the answers above,
 	// and a value that goes stale the moment somebody changes a dropdown is
 	// worse than no value.
 	Proposed *db.App
 
+	// Recap draws the page as the summary before the last button rather than
+	// as the form.
+	//
+	// It exists because "Install and deploy" is not a small button. It creates
+	// an application, takes an address on the operator's domain, writes an
+	// environment and starts pulling an image, and the person pressing it is
+	// often the one who has least idea what any of that means. A page that
+	// says, in a dozen words, what is about to exist and where — with a way
+	// back to the answers that decided it — is the difference between a
+	// decision and a click.
+	Recap bool
+
 	Error string
+}
+
+// StationAdvanced is what the general form's fields were filled in with, empty
+// almost every time. It is a type rather than five strings threaded through
+// three functions because all five travel together everywhere they go: onto
+// the recap as hidden fields, back onto the form as values, and into the
+// application at the end.
+type StationAdvanced struct {
+	Name          string
+	Subdomain     string
+	CustomDomains string
+	CPULimit      string
+	MemLimitMB    string
+}
+
+// Any reports whether anything was entered, which is what decides whether the
+// disclosure holding these opens by itself when somebody comes back to change
+// something. A fold that hid the value somebody had just typed would be a fold
+// that lost it, as far as they could tell.
+func (a StationAdvanced) Any() bool {
+	return a != StationAdvanced{}
+}
+
+// readStationAdvanced reads the general form's answers off a submission.
+func readStationAdvanced(r *http.Request) StationAdvanced {
+	form := func(k string) string { return strings.TrimSpace(r.FormValue(k)) }
+	return StationAdvanced{
+		Name:          form("name"),
+		Subdomain:     form("subdomain"),
+		CustomDomains: form("custom_domains"),
+		CPULimit:      form("cpu_limit"),
+		MemLimitMB:    form("mem_limit_mb"),
+	}
 }
 
 // Params are the questions the station asks, which is the whole of what this
@@ -56,6 +107,34 @@ func (d StationDeploy) Value(p catalog.Param) string {
 	return p.Default
 }
 
+// RecapName and RecapSubdomain are what the application will actually be
+// called and where it will actually live: whatever was typed into the advanced
+// fields, or what the document worked out when they were left alone.
+//
+// The recap resolves them rather than showing both, because a summary that
+// listed a proposed name and an override beside it would be asking the reader
+// to work out which one wins — which is the question the summary exists to
+// answer.
+func (d StationDeploy) RecapName() string {
+	if d.Advanced.Name != "" {
+		return d.Advanced.Name
+	}
+	if d.Proposed != nil {
+		return d.Proposed.Name
+	}
+	return d.Station.Name
+}
+
+func (d StationDeploy) RecapSubdomain() string {
+	if d.Advanced.Subdomain != "" {
+		return strings.ToLower(d.Advanced.Subdomain)
+	}
+	if d.Proposed != nil {
+		return d.Proposed.Subdomain
+	}
+	return ""
+}
+
 // handleStationDeployForm draws the install page.
 func (s *Server) handleStationDeployForm(w http.ResponseWriter, r *http.Request) {
 	st, ok := s.station(r.PathValue("id"))
@@ -63,12 +142,48 @@ func (s *Server) handleStationDeployForm(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "no such station", http.StatusNotFound)
 		return
 	}
-	s.renderStationDeploy(w, r, st, pickedParams(r.URL.Query()), "")
+	s.renderStationDeploy(w, r, st, pickedParams(r.URL.Query()), StationAdvanced{}, false, "")
 }
 
-// renderStationDeploy draws the page for one set of answers.
+// handleStationDeployReview draws the recap: what is about to be created, where
+// it will live, and the answers that decided both — with the way back to them.
+//
+// Nothing has happened at this point. That is the whole value of the screen:
+// the next button creates an application, takes an address on the operator's
+// domain and starts pulling an image, and reading a dozen words first is what
+// makes pressing it a decision rather than the end of a form.
+func (s *Server) handleStationDeployReview(w http.ResponseWriter, r *http.Request) {
+	st, ok := s.station(r.PathValue("id"))
+	if !ok {
+		http.Error(w, "no such station", http.StatusNotFound)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "that form could not be read", http.StatusBadRequest)
+		return
+	}
+	s.renderStationDeploy(w, r, st, pickedParams(r.Form), readStationAdvanced(r), true, "")
+}
+
+// handleStationDeployEdit is the way back from the recap, with everything that
+// was answered still answered.
+func (s *Server) handleStationDeployEdit(w http.ResponseWriter, r *http.Request) {
+	st, ok := s.station(r.PathValue("id"))
+	if !ok {
+		http.Error(w, "no such station", http.StatusNotFound)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "that form could not be read", http.StatusBadRequest)
+		return
+	}
+	s.renderStationDeploy(w, r, st, pickedParams(r.Form), readStationAdvanced(r), false, "")
+}
+
+// renderStationDeploy draws the page for one set of answers, as the form or as
+// the recap of it.
 func (s *Server) renderStationDeploy(w http.ResponseWriter, r *http.Request,
-	st station.Station, picked catalog.Values, problem string) {
+	st station.Station, picked catalog.Values, advanced StationAdvanced, recap bool, problem string) {
 
 	t := st.Template()
 	values := t.Resolve(picked)
@@ -79,7 +194,8 @@ func (s *Server) renderStationDeploy(w http.ResponseWriter, r *http.Request,
 		"Domain": s.cfg.Domain,
 		"Deploy": StationDeploy{
 			Station: st, Grants: st.Permissions.Summary(),
-			Values: values, Proposed: proposed, Error: problem,
+			Values: values, Advanced: advanced, Proposed: proposed,
+			Recap: recap, Error: problem,
 		},
 	})
 }
@@ -142,29 +258,31 @@ func (s *Server) handleStationDeploy(w http.ResponseWriter, r *http.Request) {
 	// Everything the general form would have asked, for the one case where
 	// somebody wants a different address or a second copy under another name.
 	// Left empty, each of these keeps what the document worked out.
-	form := func(k string) string { return strings.TrimSpace(r.FormValue(k)) }
-	if v := form("name"); v != "" {
-		app.Name = v
+	advanced := readStationAdvanced(r)
+	if advanced.Name != "" {
+		app.Name = advanced.Name
 	}
-	if v := form("subdomain"); v != "" {
-		app.Subdomain = strings.ToLower(v)
+	if advanced.Subdomain != "" {
+		app.Subdomain = strings.ToLower(advanced.Subdomain)
 	}
-	if v := form("custom_domains"); v != "" {
-		app.CustomDomains = normalizeDomains(v)
+	if advanced.CustomDomains != "" {
+		app.CustomDomains = normalizeDomains(advanced.CustomDomains)
 	}
-	if v := form("cpu_limit"); v != "" {
+	if v := advanced.CPULimit; v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 {
 			app.CPULimit = f
 		}
 	}
-	if v := form("mem_limit_mb"); v != "" {
+	if v := advanced.MemLimitMB; v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
 			app.MemLimitMB = n
 		}
 	}
 
+	// A failure lands back on the recap rather than on the form: the answers
+	// were right a moment ago, and what has to be read is what went wrong.
 	if problem := s.createApp(w, r, app); problem != "" {
-		s.renderStationDeploy(w, r, st, values, problem)
+		s.renderStationDeploy(w, r, st, values, advanced, true, problem)
 		return
 	}
 	s.audit(r, "station.deploy", st.ID, app.Name+" ("+app.Subdomain+")")
