@@ -1,0 +1,50 @@
+# The lint gate. What CI enforces is what this file says, so an IDE that
+# disagrees is the IDE's problem, not a reason to loosen the rules here.
+version: "2"
+
+linters:
+  enable:
+    - bodyclose    # an HTTP response body left open leaks a connection
+    - errcheck     # a dropped error is a failure nobody hears about
+    - errorlint    # comparing errors with == breaks the moment one is wrapped
+    - ineffassign  # a value assigned and never read is a thought left unfinished
+    - misspell
+    - nilerr       # returning nil after checking err != nil is always a mistake
+    - unconvert
+    - unused
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+    staticcheck:
+      checks:
+        - all
+        # ST1000: package comments are not required on every internal package.
+        - -ST1000
+
+  exclusions:
+    rules:
+      # Deferred cleanup: the call runs while unwinding, so there is no longer
+      # anywhere useful to report a failure to. A Close that must flush before
+      # the work counts as done is checked explicitly instead of deferred.
+      - source: '^\s*defer '
+        linters: [errcheck]
+
+      # Tests fail loudly on their own; an unchecked helper there costs nothing.
+      - path: _test\.go
+        linters: [errcheck]
+
+      # A test may deliberately spin, allocate or compare a call with itself —
+      # that is the behaviour under test, not a defect in the test.
+      - path: _test\.go
+        linters: [staticcheck]
+        text: 'SA(4000|4010|5002)'
+
+      # `VERISON` and `permisions` are spelled wrong on purpose: they are the
+      # worked examples of the typo the surrounding code exists to catch.
+      - linters: [misspell]
+        text: '(VERISON|permisions)'
+
+formatters:
+  enable:
+    - gofmt

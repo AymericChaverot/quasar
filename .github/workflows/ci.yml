@@ -15,8 +15,12 @@ jobs:
           go-version-file: go.mod
       - name: Build
         run: go build ./...
-      - name: Vet
-        run: go vet ./...
+      # Runs go vet among the rest; .golangci.yml is the single description of
+      # what counts as a problem, shared with whatever editor the author uses.
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12
       - name: Test
         run: go test ./...
       - name: Docker build
