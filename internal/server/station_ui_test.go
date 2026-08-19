@@ -220,6 +220,48 @@ func TestAMessageFloatsAndCanBeDismissed(t *testing.T) {
 	}
 }
 
+// A panel that has nothing to draw yet is not a panel that failed, and drawing
+// it as one tells whoever pressed Deploy a moment ago that they broke it. It
+// spins, and it asks again, so it connects itself when the container arrives.
+func TestAWaitingPanelSpinsAndAsksAgain(t *testing.T) {
+	panel := ui.Panel{ID: "output", Type: "log", Title: "Live output", Service: "minecraft"}
+	page := renderPanelPartial(t, ui.Waiting("abcd1234", panel, "Waiting for Server to start"))
+
+	if strings.Contains(page, "alert-err") {
+		t.Errorf("waiting for a container is drawn as a failure:\n%s", page)
+	}
+	for _, want := range []string{
+		"Waiting for Server to start",
+		"spinner",
+		"/apps/abcd1234/station/panel/output", // it asks again on its own
+		"delay:2s",
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("a waiting panel does not draw %q:\n%s", want, page)
+		}
+	}
+
+	// A panel that really did fail still says so, and does not poll: an
+	// author's bug hidden behind a spinner that never stops is worse than the
+	// red card it replaced.
+	failed := renderPanelPartial(t, ui.Failed("abcd1234", panel, "no such service"))
+	if !strings.Contains(failed, "no such service") || strings.Contains(failed, "delay:2s") {
+		t.Errorf("a real failure is hidden behind a spinner:\n%s", failed)
+	}
+}
+
+// A script is the only thing that knows its server's process is up and its port
+// is not answering yet, so it has a way to say exactly that.
+func TestAScriptCanSayItIsNotReadyYet(t *testing.T) {
+	r := ui.ParseResult(json.RawMessage(`{"waiting":"Waiting for the server to finish starting"}`))
+	if r.Waiting != "Waiting for the server to finish starting" {
+		t.Errorf("a script saying it is not ready is read as %+v", r)
+	}
+	if r.Error != "" {
+		t.Error("not ready yet counts as an error")
+	}
+}
+
 // Several actions are several things worth knowing. A message that overwrote
 // the one before it would make both pointless, so every button appends and the
 // block gives each arrival its lifetime as it lands.

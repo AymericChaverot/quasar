@@ -39,6 +39,12 @@ type Result struct {
 	Warn  string `json:"warn,omitempty"`
 	Error string `json:"error,omitempty"`
 
+	// Waiting is a source action saying it has nothing yet and expects to.
+	// A script is the only thing that knows a game server has started its
+	// process but does not answer on its port for another half a minute, and
+	// without a way to say so its only options were a lie or a red card.
+	Waiting string `json:"waiting,omitempty"`
+
 	// Refresh names panels to re-fetch, Navigate a tab to switch to.
 	Refresh  []string `json:"refresh,omitempty"`
 	Navigate string   `json:"navigate,omitempty"`
@@ -54,7 +60,8 @@ func ParseResult(raw json.RawMessage) Result {
 	}
 	var r Result
 	if err := json.Unmarshal(raw, &r); err == nil {
-		if r.Data != nil || r.Toast != "" || r.Warn != "" || r.Error != "" || r.Refresh != nil || r.Navigate != "" {
+		if r.Data != nil || r.Toast != "" || r.Warn != "" || r.Error != "" ||
+			r.Waiting != "" || r.Refresh != nil || r.Navigate != "" {
 			return r
 		}
 	}
@@ -71,6 +78,18 @@ type PanelView struct {
 	// Problem is why there is nothing to draw, in words the author can act on.
 	// A panel with one renders as the problem rather than as an empty card.
 	Problem string
+
+	// Waiting is why there is nothing to draw yet, for the case that is not a
+	// failure at all: the application is still starting, and the panel that
+	// reads it cannot read it until it has.
+	//
+	// It matters that this is a separate field from Problem rather than a
+	// nicer wording of one. A red card three seconds after a deploy reads as
+	// "you have broken something" to the person who just pressed the button,
+	// and the honest answer — nothing is wrong, wait — is a different thing to
+	// draw. A panel with one shows a spinner and asks again shortly, so it
+	// comes alive on its own instead of waiting for somebody to reload.
+	Waiting string
 
 	// One of these, according to the panel's type.
 	Rows   []Row
@@ -163,6 +182,12 @@ func Render(appID string, p Panel, data json.RawMessage) PanelView {
 // Failed is a panel whose action did not come back at all.
 func Failed(appID string, p Panel, problem string) PanelView {
 	return PanelView{Panel: p, AppID: appID, Problem: problem}
+}
+
+// Waiting is a panel that has nothing to show yet and expects to, because
+// whatever it reads is still coming up.
+func Waiting(appID string, p Panel, why string) PanelView {
+	return PanelView{Panel: p, AppID: appID, Waiting: why}
 }
 
 // Streaming is a log pane, pointed at the container the parent resolved.

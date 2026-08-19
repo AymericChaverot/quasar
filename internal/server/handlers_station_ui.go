@@ -116,7 +116,7 @@ func (s *Server) handleStationPanelPartial(w http.ResponseWriter, r *http.Reques
 		s.renderPartial(w, "station_panel", s.logPanel(r, a, doc, panel))
 		return
 	case "iframe":
-		s.renderPartial(w, "station_panel", embedPanel(a, panel))
+		s.renderPartial(w, "station_panel", s.embedPanel(r, a, panel))
 		return
 	}
 
@@ -133,15 +133,61 @@ func (s *Server) handleStationPanelPartial(w http.ResponseWriter, r *http.Reques
 
 	out, err := s.runStation(r.Context(), r, a, doc, CallSource, panel.Source.Action, map[string]any{})
 	if err != nil {
-		s.renderPartial(w, "station_panel", ui.Failed(a.ID, panel, stationProblem(panel.Source.Action, err)))
+		s.renderPartial(w, "station_panel", s.panelFailed(r, a, panel, stationProblem(panel.Source.Action, err)))
 		return
 	}
 	result := ui.ParseResult(out.Value)
+	// A script saying it has nothing yet is not a script that failed. Only it
+	// knows that the process is up and the port is not answering, and the
+	// panel it wrote should be a spinner rather than a red card while that is
+	// true.
+	if result.Waiting != "" {
+		s.renderPartial(w, "station_panel", ui.Waiting(a.ID, panel, result.Waiting))
+		return
+	}
 	if result.Error != "" {
-		s.renderPartial(w, "station_panel", ui.Failed(a.ID, panel, result.Error))
+		s.renderPartial(w, "station_panel", s.panelFailed(r, a, panel, result.Error))
 		return
 	}
 	s.renderPartial(w, "station_panel", ui.Render(a.ID, panel, result.Data))
+}
+
+// panelFailed decides which of the two failures this is.
+//
+// A panel that could not be drawn because the application is not up yet is not
+// a broken panel, and drawing it as one is actively misleading: somebody who
+// pressed Deploy forty seconds ago and is met with a red card concludes they
+// broke it, and the true answer — nothing is wrong, this needs the container —
+// is the one thing the card does not say. So the state of the application is
+// consulted before the failure is believed, and while it is anything other
+// than running the panel says it is waiting and asks again shortly.
+func (s *Server) panelFailed(r *http.Request, a *db.App, panel ui.Panel, problem string) ui.PanelView {
+	if why := s.stationWaitReason(r, a); why != "" {
+		return ui.Waiting(a.ID, panel, why)
+	}
+	return ui.Failed(a.ID, panel, problem)
+}
+
+// stationWaitReason is why a panel has nothing to show yet, or nothing at all
+// for an application that is up — where a failure is a real failure and saying
+// otherwise would hide the author's bug behind a spinner that never stops.
+//
+// A stopped application counts as waiting rather than as an error on purpose.
+// It is a spinner that will still be spinning in an hour, which sounds wrong
+// until you notice what it buys: pressing Start in the status bar directly
+// above brings every panel on the page to life on its own, which is exactly
+// what somebody who pressed Start expects to happen.
+func (s *Server) stationWaitReason(r *http.Request, a *db.App) string {
+	if s.dock == nil {
+		return ""
+	}
+	switch s.dock.Status(r.Context(), a).State {
+	case "deploying":
+		return "Waiting for " + a.Name + " to finish deploying"
+	case "stopped", "not deployed":
+		return "Waiting for " + a.Name + " to start"
+	}
+	return ""
 }
 
 // logPanel points Quasar's own log pane at the container behind a named
@@ -156,7 +202,9 @@ func (s *Server) logPanel(r *http.Request, a *db.App, doc station.Station, panel
 	}
 	name, err := s.dock.ServiceHost(r.Context(), a, panel.Service)
 	if err != nil {
-		return ui.Failed(a.ID, panel, err.Error())
+		// The commonest reason a service has no container is that it does not
+		// have one yet, which is what the whole page is waiting for.
+		return s.panelFailed(r, a, panel, err.Error())
 	}
 	return ui.Streaming(a.ID, panel, fmt.Sprintf("/apps/%s/containers/%s/logs", a.ID, name))
 }
@@ -165,13 +213,23 @@ func (s *Server) logPanel(r *http.Request, a *db.App, doc station.Station, panel
 // Quasar. A container's address is routable from this server and from nowhere
 // else, so the page cannot load it directly — and going through here is also
 // where the permission gets checked.
-func embedPanel(a *db.App, panel ui.Panel) ui.PanelView {
-	if _, ok := ui.ParseServiceSrc(panel.Src); ok {
-		return ui.Embedded(a.ID, panel, fmt.Sprintf("/apps/%s/station/embed/%s/", a.ID, panel.ID))
+//
+// The service is resolved here rather than left to the frame, so that a page
+// which is not up yet is a spinner on Quasar's own card instead of whatever a
+// browser draws for a bad gateway inside an iframe.
+func (s *Server) embedPanel(r *http.Request, a *db.App, panel ui.Panel) ui.PanelView {
+	ref, ok := ui.ParseServiceSrc(panel.Src)
+	if !ok {
+		// An ordinary address, which the browser can fetch for itself.
+		// Validation has already held it to https.
+		return ui.Embedded(a.ID, panel, panel.Src)
 	}
-	// An ordinary address, which the browser can fetch for itself. Validation
-	// has already held it to https.
-	return ui.Embedded(a.ID, panel, panel.Src)
+	if s.dock != nil {
+		if _, err := s.dock.ServiceHost(r.Context(), a, ref.Service); err != nil {
+			return s.panelFailed(r, a, panel, err.Error())
+		}
+	}
+	return ui.Embedded(a.ID, panel, fmt.Sprintf("/apps/%s/station/embed/%s/", a.ID, panel.ID))
 }
 
 // handleStationEmbed proxies one of the application's own services onto the

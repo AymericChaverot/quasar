@@ -170,7 +170,18 @@ script: |
   }
 
   export function player_count() {
-    const m = rconExec('list').match(/There are (\d+) of a max of (\d+)/)
+    // A Minecraft server is a running container for the best part of a minute
+    // before it answers on RCON, and only this script knows that. Reported as
+    // an error it reads, to whoever pressed Deploy a moment ago, as something
+    // they broke; reported as waiting it is a spinner that asks again until the
+    // server is there.
+    let out
+    try {
+      out = rconExec('list')
+    } catch (e) {
+      return { waiting: 'Waiting for the server to finish starting' }
+    }
+    const m = out.match(/There are (\d+) of a max of (\d+)/)
     return { data: { value: m ? m[1] : '—', suffix: m ? '/ ' + m[2] : '' } }
   }
 

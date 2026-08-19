@@ -2480,10 +2480,40 @@ button[disabled] { cursor: progress; opacity: 0.65; }
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.75rem;
 }
-.station-cell { grid-column: span 6; }
 @media (min-width: 48rem) {
   .station-half { grid-column: span 3; }
   .station-third { grid-column: span 2; }
+}
+
+/* Cards on one row are as tall as the tallest of them, and their contents sit
+   at the bottom.
+
+   Left alone, a grid row is as tall as its tallest cell and every shorter card
+   keeps its own height, so a row of three ends up two short cards floating
+   beside a long one with a hole under each. Stretching them is half the fix;
+   the other half is where the extra room goes. It goes above the content and
+   below the heading — the headings stay in a line across the row, which is what
+   makes it read as a row, and the numbers sit on a line of their own. */
+.station-cell {
+  grid-column: span 6;
+  display: flex;
+}
+.station-cell > .card {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.station-body { margin-top: auto; }
+
+/* A panel with nothing to draw yet, which is not a panel that failed. */
+.station-waiting {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
 }
 
 /* One number, at the size a number worth looking at is read at. */

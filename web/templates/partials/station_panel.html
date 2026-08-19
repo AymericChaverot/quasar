@@ -7,11 +7,25 @@
 {{define "station_panel"}}
 {{$app := .AppID}}
 {{$panel := .Panel}}
-<div class="card p-4 {{with $panel.Tone}}station-tone-{{.}}{{end}}">
+{{/* A panel that is waiting asks again shortly, and keeps asking until there is
+     something to draw. It is the card itself that polls, so the loop ends the
+     moment the answer stops being "not yet" — and so a station's live output
+     connects itself when the container comes up, instead of sitting on an error
+     until somebody thinks to reload the page. */}}
+<div class="card p-4 {{with $panel.Tone}}station-tone-{{.}}{{end}}"
+     {{if .Waiting}}hx-get="/apps/{{$app}}/station/panel/{{$panel.ID}}"
+     hx-trigger="load delay:2s" hx-swap="outerHTML"{{end}}>
   {{with $panel.Title}}<p class="h-label mb-2">{{.}}</p>{{end}}
   {{with $panel.Help}}<p class="help mt-0! mb-3">{{.}}</p>{{end}}
 
-  {{if .Problem}}
+  <div class="station-body">
+  {{if .Waiting}}
+  <p class="station-waiting">
+    <span class="spinner" aria-hidden="true"></span>
+    <span>{{.Waiting}}…</span>
+  </p>
+
+  {{else if .Problem}}
   <div class="alert-err">
     <p class="text-sm font-medium">This panel has nothing to show</p>
     <p class="mono mt-1 text-xs">{{.Problem}}</p>
@@ -199,6 +213,7 @@
   {{else}}
   <p class="faint text-xs">This build of Quasar cannot draw a {{$panel.Type}} yet.</p>
   {{end}}
+  </div>
 </div>
 {{end}}
 

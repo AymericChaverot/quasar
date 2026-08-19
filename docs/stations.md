@@ -333,10 +333,20 @@ export function add_mod({ url }) {
 | `data` | Renders the panel that asked for it |
 | `toast` | A transient message: green, with a tick |
 | `warn` | A transient message for what went less well than it might have: orange, with a warning sign |
+| `waiting` | Nothing yet, and there will be: the panel draws a spinner and asks again shortly |
 | `error` | Rendered like any Quasar error, and the action counts as failed: red, with a crossed circle |
 | `refresh` | Panel ids to re-fetch |
 | `navigate` | Switch to a tab |
 | `progress` | Run as a background job, see below |
+
+**Waiting is not failing.** A panel that reads a service cannot read it while
+the service is still coming up, and there are two ways to say so. Quasar says it
+for you: when a panel's action fails and the application is not running, the
+panel draws a spinner and asks again every couple of seconds rather than a red
+card, so it connects itself when the container arrives instead of waiting for
+somebody to reload. A script says it for the cases only the script can know —
+a game server whose container is up and whose port will not answer for another
+half a minute — by returning `{waiting: '...'}` instead of throwing.
 
 Messages stack. Each one is appended to the corner of the page rather than
 replacing the one before it, because three actions in a row are three things
