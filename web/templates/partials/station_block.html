@@ -22,6 +22,14 @@
       <p class="faint text-xs">{{.Doc.Description}}</p>
     </div>
     <span class="chip shrink-0">{{.Doc.Version}}</span>
+    {{/* The station only. Reloading the page to see whether a mod finished
+         installing throws away the tab somebody was on, the position they had
+         scrolled to and any progress pane still running; this asks every panel
+         to fetch itself again and moves nothing else. */}}
+    <button type="button" class="station-refresh shrink-0"
+            title="Refresh this station" aria-label="Refresh this station">
+      {{template "icon_restart"}}
+    </button>
   </div>
 
   <div class="station-tabs" role="tablist">
@@ -44,14 +52,19 @@
       <div class="station-cell station-{{if .Width}}{{.Width}}{{else}}full{{end}}"
            id="station-panel-{{.ID}}"
            hx-get="/apps/{{$app}}/station/panel/{{.ID}}"
-           hx-trigger="load, {{stationRefresh .ID}} from:body{{if .Refresh.Seconds}}, every {{.Refresh.Seconds}}s{{end}}"
+           hx-trigger="load, {{stationRefreshAll}} from:body, {{stationRefresh .ID}} from:body{{if .Refresh.Seconds}}, every {{.Refresh.Seconds}}s{{end}}"
            hx-swap="innerHTML">
-        <div class="card p-4"><p class="faint text-xs">Loading…</p></div>
+        <div class="card p-4"><p class="station-waiting"><span class="spinner" aria-hidden="true"></span><span>Loading…</span></p></div>
       </div>
       {{end}}
     </div>
   </div>
   {{end}}
+
+  {{/* Whose work this is, at the end of it rather than in the heading: the
+       station's own name and version are what somebody reads on the way in,
+       and the credit is what they look for on the way out. */}}
+  {{with .Doc.Author}}<p class="station-foot">Station Author: {{.}}</p>{{end}}
 </section>
 
 {{/* Where a toast or a refused action lands, wherever on the page it came
@@ -87,6 +100,18 @@
     for (const pane of block.querySelectorAll(".station-pane")) {
       const id = pane.dataset.stationPane;
       document.body.addEventListener("quasar:station-tab-" + id, () => show(id));
+    }
+
+    // The refresh button asks every panel to fetch itself again, by name of an
+    // event rather than by a list: panels come and go as tabs and grids draw,
+    // and a button holding a list of them would be wrong within a version.
+    const refresh = block.querySelector(".station-refresh");
+    if (refresh) {
+      refresh.addEventListener("click", () => {
+        refresh.classList.add("is-turning");
+        setTimeout(() => refresh.classList.remove("is-turning"), 620);
+        document.body.dispatchEvent(new CustomEvent("quasar:station-refresh"));
+      });
     }
 
     // Each message that lands is given its lifetime once. Arming happens here

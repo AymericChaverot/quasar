@@ -400,6 +400,15 @@ func refreshEvents(result ui.Result) string {
 // so the header and the template cannot disagree about it.
 func stationRefreshEvent(panelID string) string { return "quasar:station-refresh-" + panelID }
 
+// stationRefreshAllEvent re-fetches every panel of a station at once, and is
+// what the button at the top of the block dispatches.
+//
+// It is a second event every panel also listens for rather than a loop firing
+// each panel's own: the button has no list of panels and should not need one,
+// since panels appear and disappear as tabs and grids are drawn. A station
+// refreshes itself; the page around it does not move.
+func stationRefreshAllEvent() string { return "quasar:station-refresh" }
+
 // stationProblem turns a failed call into what the panel says.
 //
 // The three cases read differently on purpose. A script that threw is the

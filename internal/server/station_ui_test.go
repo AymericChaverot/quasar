@@ -220,6 +220,35 @@ func TestAMessageFloatsAndCanBeDismissed(t *testing.T) {
 	}
 }
 
+// The block refreshes itself. Reloading the page throws away the tab somebody
+// was on and the place they had scrolled to, which is a lot to pay for one
+// number — and the author's name belongs at the foot of their own work.
+func TestTheBlockRefreshesItselfAndCreditsItsAuthor(t *testing.T) {
+	s := testServer(t)
+	block := &StationBlock{
+		App: &db.App{ID: "abcd1234"},
+		Doc: station.Station{Name: "Demo", Author: "Jean Dupont", UI: ui.UI{Tabs: []ui.Tab{
+			{ID: "t", Name: "T", Panels: []ui.Panel{{ID: "p", Type: "stat"}}},
+		}}},
+	}
+	var buf bytes.Buffer
+	if err := s.pages["app_detail"].ExecuteTemplate(&buf, "station_block", block); err != nil {
+		t.Fatal(err)
+	}
+	page := html.UnescapeString(buf.String())
+
+	if !strings.Contains(page, "station-refresh") {
+		t.Error("the only way to refresh a station is to reload the whole page")
+	}
+	// Every panel hears the one event, so the button needs no list of them.
+	if !strings.Contains(page, stationRefreshAllEvent()+" from:body") {
+		t.Errorf("panels do not listen for the station's own refresh:\n%s", page)
+	}
+	if !strings.Contains(page, "Station Author: Jean Dupont") {
+		t.Errorf("the station does not credit whoever wrote it:\n%s", page)
+	}
+}
+
 // A panel that has nothing to draw yet is not a panel that failed, and drawing
 // it as one tells whoever pressed Deploy a moment ago that they broke it. It
 // spins, and it asks again, so it connects itself when the container arrives.

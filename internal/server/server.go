@@ -132,8 +132,9 @@ var templateFuncs = template.FuncMap{
 	// The event a station's panel is re-fetched by. Kept as a function so the
 	// name the template listens for and the name the action's response sends
 	// cannot drift apart.
-	"stationRefresh": stationRefreshEvent,
-	"stationConfirm": ui.Interpolate,
+	"stationRefresh":    stationRefreshEvent,
+	"stationRefreshAll": stationRefreshAllEvent,
+	"stationConfirm":    ui.Interpolate,
 	// The sort of thing a filename suggests, which the listing turns into an
 	// icon so one row can be told from the next at a glance.
 	"fileKind": files.Kind,

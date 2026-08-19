@@ -205,7 +205,7 @@
     <div class="station-cell station-{{if .Width}}{{.Width}}{{else}}full{{end}}"
          id="station-panel-{{.ID}}"
          hx-get="/apps/{{$app}}/station/panel/{{.ID}}"
-         hx-trigger="load, {{stationRefresh .ID}} from:body{{if .Refresh.Seconds}}, every {{.Refresh.Seconds}}s{{end}}"
+         hx-trigger="load, {{stationRefreshAll}} from:body, {{stationRefresh .ID}} from:body{{if .Refresh.Seconds}}, every {{.Refresh.Seconds}}s{{end}}"
          hx-swap="innerHTML"></div>
     {{end}}
   </div>

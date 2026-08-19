@@ -2506,6 +2506,37 @@ button[disabled] { cursor: progress; opacity: 0.65; }
 }
 .station-body { margin-top: auto; }
 
+/* Refresh the station and nothing else. Reloading the page to see whether a
+   mod finished installing throws away the tab somebody was on and the place
+   they had scrolled to, which is a lot to pay for one number. */
+.station-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: var(--border-w) solid transparent;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.station-refresh:hover {
+  color: var(--accent);
+  border-color: var(--border);
+  background: var(--surface);
+}
+.station-refresh svg { width: 0.875rem; height: 0.875rem; }
+.station-refresh.is-turning svg { animation: spin 620ms ease-in-out; }
+
+/* Whose work this is, at the foot of it. */
+.station-foot {
+  padding: 0.5rem 1rem 0.75rem;
+  text-align: right;
+  font-size: 0.6875rem;
+  color: var(--text-faint);
+}
+
 /* A panel with nothing to draw yet, which is not a panel that failed. */
 .station-waiting {
   display: flex;
