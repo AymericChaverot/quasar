@@ -19,9 +19,11 @@
 {{/* A station: a ring habitat seen from above, spinning about its axis for the
      gravity it does not otherwise have. Top view rather than perspective,
      because this mark is read at fourteen pixels in a table row, where a wheel
-     is still a wheel and a tilted torus is a smudge. A hub, four spokes and the
-     ring are the whole of it. */}}
-{{define "icon_station"}}<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.25"/><circle cx="12" cy="12" r="6.25"/><circle cx="12" cy="12" r="2"/><path d="M13.4 10.6 16.4 7.6M10.6 10.6 7.6 7.6M10.6 13.4 7.6 16.4M13.4 13.4 16.4 16.4"/></svg>{{end}}
+     is still a wheel and a tilted torus is a smudge. The ring, a hub and four
+     spokes are the whole of it — the spokes on the diagonals rather than the
+     cardinals, which at that size is the difference between a station and a
+     rifle sight. */}}
+{{define "icon_station"}}<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="5"/><path d="M18.7 5.3 15.9 8.1M5.3 5.3 8.1 8.1M5.3 18.7 8.1 15.9M18.7 18.7 15.9 15.9"/></svg>{{end}}
 
 {{define "icon_layers"}}<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>{{end}}
 
