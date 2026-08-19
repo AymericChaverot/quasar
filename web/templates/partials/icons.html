@@ -16,14 +16,15 @@
 
 {{define "icon_disk"}}<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg>{{end}}
 
-{{/* A station: a ring habitat seen from above, spinning about its axis for the
-     gravity it does not otherwise have. Top view rather than perspective,
-     because this mark is read at fourteen pixels in a table row, where a wheel
-     is still a wheel and a tilted torus is a smudge. The ring, a hub and four
-     spokes are the whole of it — the spokes on the diagonals rather than the
-     cardinals, which at that size is the difference between a station and a
-     rifle sight. */}}
-{{define "icon_station"}}<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="5"/><path d="M18.7 5.3 15.9 8.1M5.3 5.3 8.1 8.1M5.3 18.7 8.1 15.9M18.7 18.7 15.9 15.9"/></svg>{{end}}
+{{/* A station: the silhouette everybody already has for one — a pressurised
+     module in the middle, a truss out to either side, and a solar wing on each
+     end.
+
+     One wing per side rather than the four panels the real thing carries. This
+     mark is read at fourteen pixels in a table row, and at that size four
+     rectangles are a smudge while two are still two wings; the outline is the
+     part that says "space station", and the panel count is not. */}}
+{{define "icon_station"}}<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="5" width="6" height="14" rx="1.5"/><rect x="16.5" y="5" width="6" height="14" rx="1.5"/><rect x="9.5" y="8.5" width="5" height="7" rx="2"/><path d="M7.5 12h2M14.5 12h2"/></svg>{{end}}
 
 {{define "icon_layers"}}<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>{{end}}
 
