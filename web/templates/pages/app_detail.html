@@ -42,6 +42,27 @@
      machinery Quasar provides for every service. */}}
 {{with $.Station}}<div class="mt-8">{{template "station_block" .}}</div>{{end}}
 
+{{/* Everything below here is the machinery Quasar provides for every
+     application: how it is built, where it is routed, what it keeps, what is in
+     its environment. On an ordinary application that is the page. On one
+     deployed from a station it is not what the page is for — somebody installed
+     a station because they wanted its controls and its status, and the rest is
+     exactly the sort of thing that persuades them they are not qualified to run
+     their own server. So it folds away.
+
+     It folds rather than disappears: all of it is still true, an admin still
+     needs it, and moving it to a page somewhere else would be worse than
+     leaving it open. One click and the application reads like every other. */}}
+{{if $.Station}}
+<details class="advanced-block mt-8">
+  <summary>
+    {{template "icon_cog"}}
+    <span>Advanced options</span>
+    <span class="advanced-note">Everything Quasar gives every application: build, routing, storage, environment, logs.</span>
+  </summary>
+  <div class="advanced-body">
+{{end}}
+
 {{if eq .DeployType "git"}}
 <section class="mt-8">
   <h2 class="h-label mb-3">Build</h2>
@@ -249,6 +270,11 @@
     {{template "icon_trash"}}Delete application
   </button>
 </section>
+{{end}}
+
+{{if $.Station}}
+  </div>
+</details>
 {{end}}
 
 <script>

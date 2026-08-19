@@ -220,6 +220,51 @@ func TestAMessageFloatsAndCanBeDismissed(t *testing.T) {
 	}
 }
 
+// An application deployed from a station is not the page an ordinary
+// application is. What somebody installed a station for is its own controls and
+// its own status; build, routing, storage and the rest are still true and still
+// needed, and they fold away rather than sitting between the station and the
+// bottom of the page.
+func TestAStationsApplicationFoldsAwayTheMachinery(t *testing.T) {
+	s := testServer(t)
+	app := AppView{App: &db.App{ID: "abcd1234", Name: "Server", Subdomain: "server", StationID: "demo"}}
+	block := &StationBlock{
+		App: app.App,
+		Doc: station.Station{Name: "Demo", UI: ui.UI{Tabs: []ui.Tab{
+			{ID: "t", Name: "T", Panels: []ui.Panel{{ID: "p", Type: "stat"}}},
+		}}},
+	}
+
+	draw := func(data map[string]any) string {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := s.pages["app_detail"].ExecuteTemplate(&buf, "layout", data); err != nil {
+			t.Fatal(err)
+		}
+		return html.UnescapeString(buf.String())
+	}
+
+	page := draw(map[string]any{"Title": "Server", "App": app, "IsAdmin": true, "Station": block})
+	if !strings.Contains(page, "Advanced options") || !strings.Contains(page, "advanced-body") {
+		t.Errorf("a station's application still leads with the machinery:\n%s", page)
+	}
+	// Folded, not removed: an admin who needs the environment still has it.
+	if !strings.Contains(page, "Deploy webhook") {
+		t.Error("folding the machinery away threw it away")
+	}
+	// The status bar and the station itself stay where they are.
+	if !strings.Contains(page, `id="status-panel"`) || !strings.Contains(page, `id="station"`) {
+		t.Error("the two things the page is for are inside the fold")
+	}
+
+	// An ordinary application is untouched: there is nothing to fold, because
+	// the machinery is the whole page.
+	plain := draw(map[string]any{"Title": "Blog", "App": AppView{App: &db.App{ID: "b", Name: "Blog"}}, "IsAdmin": true})
+	if strings.Contains(plain, "Advanced options") {
+		t.Error("an ordinary application hides its own page behind a disclosure")
+	}
+}
+
 // The block refreshes itself. Reloading the page throws away the tab somebody
 // was on and the place they had scrolled to, which is a lot to pay for one
 // number — and the author's name belongs at the foot of their own work.

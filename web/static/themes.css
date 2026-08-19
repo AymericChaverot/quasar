@@ -2506,6 +2506,43 @@ button[disabled] { cursor: progress; opacity: 0.65; }
 }
 .station-body { margin-top: auto; }
 
+/* On an application deployed from a station, everything Quasar provides for
+   every application folds into this. The summary is a bar rather than a line of
+   text: it is the only thing between the station and the bottom of the page,
+   and it has to read as a lid on something rather than as a stray link. */
+.advanced-block > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  transition: color 0.12s, border-color 0.12s;
+}
+.advanced-block > summary::-webkit-details-marker { display: none; }
+.advanced-block > summary:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.advanced-block[open] > summary { color: var(--text); }
+.advanced-block > summary .ico { flex-shrink: 0; }
+
+/* Says what is under the lid, so opening it is a decision rather than a poke. */
+.advanced-note {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+@media (max-width: 48rem) {
+  .advanced-note { display: none; }
+}
+
 /* Refresh the station and nothing else. Reloading the page to see whether a
    mod finished installing throws away the tab somebody was on and the place
    they had scrolled to, which is a lot to pay for one number. */
