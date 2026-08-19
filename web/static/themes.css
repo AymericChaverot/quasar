@@ -716,12 +716,20 @@ summary:focus-visible,
    used to be, centring a 6px dot leaves 4.5px on each side, so the dot lands
    half a pixel off the device grid and the browser smears it across two
    columns — geometrically centred, visibly not. An even box keeps the dot,
-   the tick and the ring on whole pixels at both border widths. */
+   the tick and the ring on whole pixels at both border widths.
+
+   The explicit vertical-align is the fix for a box that jumped as it was
+   ticked. An inline-grid with nothing in it takes its baseline from its bottom
+   margin edge; one with a child — the tick, which only exists while checked —
+   takes it from the child instead. So an unchecked box sat a pixel or two above
+   a checked one, and the control moved under the pointer at the moment somebody
+   clicked it. Aligning to the middle takes the baseline out of it entirely. */
 input[type="radio"],
 input[type="checkbox"] {
   appearance: none;
   display: inline-grid;
   place-content: center;
+  vertical-align: middle;
   width: 1rem;
   height: 1rem;
   flex-shrink: 0;
@@ -2514,8 +2522,16 @@ button[disabled] { cursor: progress; opacity: 0.65; }
   background: var(--accent);
 }
 
-/* A list of things that happened, in the order they happened. */
+/* A list of things that happened, in the order they happened.
+
+   The dot is placed off the line's own geometry rather than off a number that
+   happened to look close: the border's centre is the padding away from the
+   item, plus half the border, and the dot is pulled back half its own width
+   from there. Written as a constant it was a pixel to the left of the line at
+   one border width and further at the other, which reads as a mistake because
+   it is one. */
 .station-timeline {
+  --timeline-dot: 0.4375rem;
   list-style: none;
   padding-left: 1rem;
   border-left: var(--border-w) solid var(--border);
@@ -2527,10 +2543,10 @@ button[disabled] { cursor: progress; opacity: 0.65; }
 .station-timeline > li::before {
   content: "";
   position: absolute;
-  left: -1.3125rem;
+  left: calc(-1rem - var(--border-w) / 2 - var(--timeline-dot) / 2);
   top: 0.45rem;
-  width: 0.4375rem;
-  height: 0.4375rem;
+  width: var(--timeline-dot);
+  height: var(--timeline-dot);
   border-radius: 999px;
   background: var(--accent);
 }
