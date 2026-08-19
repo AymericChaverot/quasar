@@ -87,8 +87,56 @@
   </section>
   {{end}}
 
+  {{/* Adding one comes first, and the list of what is already installed comes
+       after it.
+
+       This page is reached for one of two reasons, and only one of them is
+       common: somebody has been sent a station and wants it on their server.
+       The other — going back to a station already installed, to re-fetch it or
+       take it off — is the rarer errand, and it was the one the page opened
+       with. Scrolling past four cards to reach a text field is a small thing
+       every time and the whole of the page's job once.
+
+       Of the two ways in, a URL is a line and a document is a screenful. The
+       screenful folds: it was pushing everything else below the fold to serve
+       the case where somebody is writing a station rather than installing
+       one. */}}
   <section class="space-y-4">
-    <h2 class="h-label">Installed</h2>
+    <h2 class="h-label">Add a station</h2>
+    <form method="post" action="/settings/stations/fetch" class="card space-y-4 p-4">
+      <div>
+        <label class="label" for="import-url">Address of the document</label>
+        <input id="import-url" name="source_url" type="url" required class="input mono"
+               placeholder="https://raw.githubusercontent.com/you/station/main/station.yaml">
+        <p class="help">
+          Fetched once, now, and shown to you before anything is stored. Nothing re-fetches on its
+          own: a station is a program this server will run.
+        </p>
+      </div>
+      <button type="submit" class="btn px-4 py-2">{{template "icon_download"}}Fetch and read</button>
+    </form>
+
+    {{$draft := .Draft}}
+    <details class="doc-edit card p-4 text-sm"{{if $draft}} open{{end}}>
+      <summary>{{template "icon_pencil"}}Write or paste one instead</summary>
+      <form method="post" action="/settings/stations/review" class="mt-4 space-y-4">
+        <div>
+          <label class="label" for="new-yaml">Document</label>
+          <textarea id="new-yaml" name="yaml" rows="24" spellcheck="false" required
+                    class="input mono text-xs"
+                    placeholder="Paste a station.">{{with $draft}}{{.YAML}}{{end}}</textarea>
+          <p class="help">
+            Read and checked before it is stored. You will be shown what it asks to be allowed to do,
+            and nothing is installed until you accept it.
+          </p>
+        </div>
+        <button type="submit" class="btn-primary px-4 py-2">Read it</button>
+      </form>
+    </details>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Installed ({{len .Stations}})</h2>
     {{if .Stations}}
     {{range .Stations}}
     <div class="card p-4 space-y-4">
@@ -191,43 +239,10 @@
     {{else}}
     <div class="empty p-6 text-center">
       <p class="text-sm">No station installed.</p>
-      <p class="help mt-1!">Paste one below, or fetch one from a URL.</p>
+      <p class="help mt-1!">Fetch one from a URL above, or write one out.</p>
     </div>
     {{end}}
   </section>
 
-  <section class="space-y-4">
-    <h2 class="h-label">Import from a URL</h2>
-    <form method="post" action="/settings/stations/fetch" class="card space-y-4 p-4">
-      <div>
-        <label class="label" for="import-url">Address of the document</label>
-        <input id="import-url" name="source_url" type="url" required class="input mono"
-               placeholder="https://raw.githubusercontent.com/you/station/main/station.yaml">
-        <p class="help">
-          Fetched once, now, and shown to you before anything is stored. Nothing re-fetches on its
-          own: a station is a program this server will run.
-        </p>
-      </div>
-      <button type="submit" class="btn px-4 py-2">Fetch and read</button>
-    </form>
-  </section>
-
-  <section class="space-y-4">
-    <h2 class="h-label">Paste a document</h2>
-    {{$draft := .Draft}}
-    <form method="post" action="/settings/stations/review" class="card space-y-4 p-4">
-      <div>
-        <label class="label" for="new-yaml">Document</label>
-        <textarea id="new-yaml" name="yaml" rows="24" spellcheck="false" required
-                  class="input mono text-xs"
-                  placeholder="Paste a station.">{{with $draft}}{{.YAML}}{{end}}</textarea>
-        <p class="help">
-          Read and checked before it is stored. You will be shown what it asks to be allowed to do,
-          and nothing is installed until you accept it.
-        </p>
-      </div>
-      <button type="submit" class="btn-primary px-4 py-2">Read it</button>
-    </form>
-  </section>
 </div>
 {{end}}

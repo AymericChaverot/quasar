@@ -249,6 +249,38 @@ func TestDeleteRemovesAStation(t *testing.T) {
 	}
 }
 
+// The settings page is reached to add a station far more often than to go back
+// to one already installed, and it used to open with the list. Adding comes
+// first now, with the screenful of a pasted document folded away behind the
+// one-line way in.
+func TestTheSettingsPageLeadsWithAddingAStation(t *testing.T) {
+	s, _ := catalogTestServer(t)
+	install(t, s, testStationWithParams, "")
+
+	r := httptest.NewRequest("GET", "/settings/stations", nil)
+	w := httptest.NewRecorder()
+	s.handleStations(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d, want the settings page:\n%s", w.Code, w.Body)
+	}
+
+	body := bodyText(w)
+	add, installed := strings.Index(body, "Add a station"), strings.Index(body, "Installed (")
+	if add < 0 || installed < 0 {
+		t.Fatalf("the page has no add section or no count:\n%s", body)
+	}
+	if add > installed {
+		t.Error("the page still opens with the stations already installed")
+	}
+	if !strings.Contains(body, "Installed (1)") {
+		t.Error("the heading does not say how many are installed")
+	}
+	// The textarea is a screenful, and it is the rarer of the two ways in.
+	if i := strings.Index(body, "Write or paste one instead"); i < 0 || i > installed {
+		t.Error("pasting a document is not the secondary way in")
+	}
+}
+
 // Installing a station asks the station's own questions and nothing else.
 // Everything the new-application form would have asked has already been
 // answered by the document, and is behind Advanced options for the rare case
