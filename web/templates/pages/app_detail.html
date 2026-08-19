@@ -67,7 +67,12 @@
     <span class="advanced-note">Everything Quasar gives every application: build, routing, storage, environment, logs.</span>
     <span class="advanced-caret" aria-hidden="true">{{template "icon_chevron_down"}}</span>
   </summary>
-  <div class="advanced-body">
+  {{/* The first section's own top margin is spacing from whatever was above it
+       on the page; in here the summary is above it, and the box's padding is
+       that spacing. It has to be taken off as a utility rather than in
+       themes.css: that sheet is imported into `layer(components)`, and a
+       utility in a later layer beats it however specific the selector. */}}
+  <div class="advanced-body [&>*:first-child]:mt-0!">
 {{end}}
 
 {{if eq .DeployType "git"}}

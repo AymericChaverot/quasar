@@ -2711,10 +2711,7 @@ button[disabled] { cursor: progress; opacity: 0.65; }
      of knowing the click did something. */
   animation: advanced-open 200ms ease-out;
 }
-/* The sections inside space themselves from whatever was above them on the
-   page. The first one has the summary above it instead, and the box's own
-   padding is that spacing. */
-.advanced-body > :first-child { margin-top: 0; }
+
 
 /* The reveal clips rather than slides. A box that arrives by moving is a box
    whose top edge is detached from the summary for the length of the animation
