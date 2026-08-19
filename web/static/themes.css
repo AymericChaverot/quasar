@@ -2480,11 +2480,6 @@ button[disabled] { cursor: progress; opacity: 0.65; }
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.75rem;
 }
-@media (min-width: 48rem) {
-  .station-half { grid-column: span 3; }
-  .station-third { grid-column: span 2; }
-}
-
 /* Cards on one row are as tall as the tallest of them, and their contents sit
    at the bottom.
 
@@ -2505,6 +2500,13 @@ button[disabled] { cursor: progress; opacity: 0.65; }
   min-width: 0;
 }
 .station-body { margin-top: auto; }
+
+/* After .station-cell, not before it: these carry the same weight as the span
+   it sets, so the one that wins is the one written last. */
+@media (min-width: 48rem) {
+  .station-half { grid-column: span 3; }
+  .station-third { grid-column: span 2; }
+}
 
 /* The recap before a station is installed: a handful of labelled facts, on
    tracks rather than justified apart. Two columns keep the values in a line
@@ -2710,8 +2712,6 @@ button[disabled] { cursor: progress; opacity: 0.65; }
 
 .station-row + .station-row td { border-top: 1px solid var(--border); }
 
-.station-toast { color: var(--ok); }
-
 /* The four tones mean the same thing inside a station as everywhere else: a red
    that means "stopped" on the dashboard must not mean something else here. */
 .station-tone-accent { border-color: var(--accent); }
@@ -2849,6 +2849,10 @@ button[disabled] { cursor: progress; opacity: 0.65; }
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
   pointer-events: auto;
   animation: station-toast-in 140ms ease-out;
+  /* The words are the page's own colour. Green text on a green stripe is a
+     message that has been shouted rather than said, and it is the icon and the
+     stripe that carry which of the three this is. */
+  color: var(--text);
 }
 .station-toast.is-going {
   opacity: 0;
