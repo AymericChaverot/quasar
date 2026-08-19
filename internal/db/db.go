@@ -268,13 +268,21 @@ func Open(path string) (*sql.DB, error) {
 		return nil, err
 	}
 	for _, m := range migrations {
-		// A migration that has already run reports a duplicate column, which
-		// is the expected answer on every database but a brand new one.
-		// Anything else is logged rather than fatal: refusing to start would
-		// lock an operator out of the dashboard they need in order to fix it.
-		if _, err := db.Exec(m); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		// A migration that has already run is the expected answer on every
+		// database but a brand new one. Anything else is logged rather than
+		// fatal: refusing to start would lock an operator out of the dashboard
+		// they need in order to fix it.
+		if _, err := db.Exec(m); err != nil && !alreadyApplied(err) {
 			log.Printf("db: migration %q: %v", m, err)
 		}
 	}
 	return db, nil
+}
+
+// alreadyApplied reports the two ways SQLite says a migration has already run.
+// An ADD COLUMN whose column is there answers "duplicate column name"; a RENAME
+// COLUMN that already happened cannot find the name it was told to rename.
+func alreadyApplied(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "duplicate column") || strings.Contains(msg, "no such column")
 }

@@ -10,6 +10,7 @@ import (
 	"quasar/internal/db"
 	"quasar/internal/station"
 	"quasar/internal/station/ui"
+	"quasar/web"
 )
 
 // renderPanelPartial draws one panel the way the page does, so a test can
@@ -407,8 +408,18 @@ func TestMessagesStackRatherThanOverwrite(t *testing.T) {
 	if err := s.pages["app_detail"].ExecuteTemplate(&buf, "station_block", block); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(buf.String(), "toastLife") {
-		t.Error("nothing arms the messages that land, so none of them ever go")
+	// The wiring moved out of the template into a file of its own, so the
+	// block is checked for pulling it in and the file for what it does. Either
+	// half missing means a message that lands never leaves again.
+	if !strings.Contains(buf.String(), "/static/js/station-block.js") {
+		t.Error("the block ships no wiring, so nothing arms the messages that land")
+	}
+	wiring, err := web.Files.ReadFile("static/js/station-block.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(wiring), "toastLife") {
+		t.Error("the wiring gives a message no lifetime, so none of them ever go")
 	}
 }
 
