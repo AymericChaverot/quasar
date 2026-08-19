@@ -21,15 +21,21 @@
       <p class="text-sm font-medium">{{.Doc.Name}}</p>
       <p class="faint text-xs">{{.Doc.Description}}</p>
     </div>
-    <span class="chip shrink-0">{{.Doc.Version}}</span>
-    {{/* The station only. Reloading the page to see whether a mod finished
-         installing throws away the tab somebody was on, the position they had
-         scrolled to and any progress pane still running; this asks every panel
-         to fetch itself again and moves nothing else. */}}
-    <button type="button" class="station-refresh shrink-0"
-            title="Refresh this station" aria-label="Refresh this station">
-      {{template "icon_restart"}}
-    </button>
+    {{/* Version and refresh travel together on their own line, centred against
+         each other rather than each hanging off the top of the header — the
+         head aligns its contents to the top so that a long description pushes
+         the title up, not these two. */}}
+    <div class="station-head-end">
+      <span class="chip">{{.Doc.Version}}</span>
+      {{/* The station only. Reloading the page to see whether a mod finished
+           installing throws away the tab somebody was on, the position they had
+           scrolled to and any progress pane still running; this asks every panel
+           to fetch itself again and moves nothing else. */}}
+      <button type="button" class="station-refresh"
+              title="Refresh this station" aria-label="Refresh this station">
+        {{template "icon_restart"}}
+      </button>
+    </div>
   </div>
 
   <div class="station-tabs" role="tablist">
