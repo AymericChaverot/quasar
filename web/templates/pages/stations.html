@@ -14,7 +14,8 @@
   <a href="/stations/{{.ID}}/deploy"
      class="station-card card block p-4 transition-colors hover:border-[var(--border-strong)]">
     <div class="flex items-start gap-2.5">
-      {{with .UI.Theme.Icon}}<img src="{{.}}" alt="" class="station-icon" aria-hidden="true">{{end}}
+      {{if .UI.Theme.Icon}}<img src="{{.UI.Theme.Icon}}" alt="" class="station-icon" aria-hidden="true">
+      {{else}}<span class="station-icon-fallback" aria-hidden="true">{{template "icon_station"}}</span>{{end}}
       <div class="min-w-0">
         <p class="text-sm font-medium">{{.Name}}</p>
         <p class="faint mt-0.5 text-xs">{{.Description}}</p>
