@@ -52,11 +52,11 @@ func (c *Client) checkComposePorts(ctx context.Context, a *db.App) error {
 	if err != nil {
 		// A compose file that cannot even be resolved is not this check's to
 		// report: `up` fails on it immediately, and says why in its own words.
-		return nil
+		return nil //nolint:nilerr // `up` reports an unresolvable file, in compose's own words
 	}
 	var model composeModel
 	if err := json.Unmarshal(out, &model); err != nil {
-		return nil // an unexpected shape must not block a deploy that would work
+		return nil //nolint:nilerr // an unexpected shape must not block a deploy that would work
 	}
 	if conflict := findPortConflict(model); conflict.Service != "" {
 		return c.portConflictError(conflict, c.ComposeAdaptationFor(a))

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/build"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
@@ -383,7 +383,7 @@ func (c *Client) waitServing(ctx context.Context, a *db.App, name, id string, po
 
 		if time.Now().After(deadline) {
 			if lastErr != nil {
-				return fmt.Errorf("new container never served %s within %s (%v), previous version kept",
+				return fmt.Errorf("new container never served %s within %s (%w), previous version kept",
 					a.HealthPath, readyTimeout, lastErr)
 			}
 			return fmt.Errorf("new container did not stay up for %s, previous version kept", settleDelay)
@@ -568,7 +568,7 @@ func (c *Client) buildImage(ctx context.Context, a *db.App, src string) (string,
 	c.stage(a.ID, phaseBuild)
 	tag := fmt.Sprintf("%s:%d", buildTagPrefix(a.ID), time.Now().Unix())
 	c.note(a.ID, "building %s from the Dockerfile", tag)
-	resp, err := c.api.ImageBuild(ctx, buildCtx, types.ImageBuildOptions{
+	resp, err := c.api.ImageBuild(ctx, buildCtx, build.ImageBuildOptions{
 		Tags:       []string{tag},
 		Dockerfile: "Dockerfile",
 		Remove:     true,
@@ -576,7 +576,7 @@ func (c *Client) buildImage(ctx context.Context, a *db.App, src string) (string,
 		// output readable: the classic builder narrates itself in "Step 3/12"
 		// lines, which is both what reaches the pane and what moves the bar.
 		// BuildKit answers the same request with a binary trace instead.
-		Version: types.BuilderV1,
+		Version: build.BuilderV1,
 	})
 	if err != nil {
 		return "", fmt.Errorf("build: %w", err)

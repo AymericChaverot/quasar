@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// An operator's own catalogue, stored as the YAML document it was written or
-// imported as rather than as parsed-out columns.
+// Catalog is an operator's own catalogue, stored as the YAML document it was
+// written or imported as rather than as parsed-out columns.
 //
 // The document is the unit on purpose. A catalogue is a thing people write
 // once, share, and re-import when it changes — so keeping the text lets it be

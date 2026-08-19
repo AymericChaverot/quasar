@@ -39,7 +39,7 @@ func TestTheLimitsStationBreaksInTheWaysItSaysItDoes(t *testing.T) {
 	script := loadLimitsScript(t)
 
 	t.Run("a call that works", func(t *testing.T) {
-		out, err, _ := call(t, script, "fine")
+		out, _, err := call(t, script, "fine")
 		if err != nil {
 			t.Fatalf("the one action that should work did not: %v", err)
 		}
@@ -49,7 +49,7 @@ func TestTheLimitsStationBreaksInTheWaysItSaysItDoes(t *testing.T) {
 	})
 
 	t.Run("a loop that never ends", func(t *testing.T) {
-		_, err, _ := call(t, script, "never_returns", func(_ *worker.Call, lim *worker.Limits, _ *asked) {
+		_, _, err := call(t, script, "never_returns", func(_ *worker.Call, lim *worker.Limits, _ *asked) {
 			lim.Wall, lim.Grace = 500*time.Millisecond, 5*time.Second
 		})
 		var se *worker.ScriptError
@@ -62,7 +62,7 @@ func TestTheLimitsStationBreaksInTheWaysItSaysItDoes(t *testing.T) {
 	})
 
 	t.Run("allocating without pause", func(t *testing.T) {
-		_, err, _ := call(t, script, "eats_memory", func(_ *worker.Call, lim *worker.Limits, _ *asked) {
+		_, _, err := call(t, script, "eats_memory", func(_ *worker.Call, lim *worker.Limits, _ *asked) {
 			lim.Wall, lim.Grace = 30*time.Second, time.Second
 			lim.MaxMemoryBytes = 160 << 20
 		})
@@ -73,7 +73,7 @@ func TestTheLimitsStationBreaksInTheWaysItSaysItDoes(t *testing.T) {
 	})
 
 	t.Run("returning far too much", func(t *testing.T) {
-		_, err, _ := call(t, script, "returns_too_much", func(_ *worker.Call, lim *worker.Limits, _ *asked) {
+		_, _, err := call(t, script, "returns_too_much", func(_ *worker.Call, lim *worker.Limits, _ *asked) {
 			lim.Wall = 20 * time.Second
 		})
 		if err == nil {
@@ -82,14 +82,14 @@ func TestTheLimitsStationBreaksInTheWaysItSaysItDoes(t *testing.T) {
 	})
 
 	t.Run("a script that throws", func(t *testing.T) {
-		_, err, _ := call(t, script, "explodes")
+		_, _, err := call(t, script, "explodes")
 		if err == nil || !strings.Contains(err.Error(), "allowed to be wrong") {
 			t.Errorf("error is %v, want the author's own words", err)
 		}
 	})
 
 	t.Run("recursion with no bottom", func(t *testing.T) {
-		_, err, _ := call(t, script, "bottomless", func(_ *worker.Call, lim *worker.Limits, _ *asked) {
+		_, _, err := call(t, script, "bottomless", func(_ *worker.Call, lim *worker.Limits, _ *asked) {
 			lim.Wall, lim.Grace = 10*time.Second, 2*time.Second
 		})
 		if err == nil {
@@ -99,7 +99,7 @@ func TestTheLimitsStationBreaksInTheWaysItSaysItDoes(t *testing.T) {
 
 	// And the dashboard is still here, which is the claim all six are making.
 	t.Run("and the next call still works", func(t *testing.T) {
-		if _, err, _ := call(t, script, "fine"); err != nil {
+		if _, _, err := call(t, script, "fine"); err != nil {
 			t.Errorf("after all that, an ordinary call failed: %v", err)
 		}
 	})
@@ -108,7 +108,7 @@ func TestTheLimitsStationBreaksInTheWaysItSaysItDoes(t *testing.T) {
 // The page says a script sees nothing but quasar. It is a list on a panel, so
 // it is a list that can be checked.
 func TestTheLimitsStationSeesNothingButQuasar(t *testing.T) {
-	out, err, _ := call(t, loadLimitsScript(t), "what_is_there")
+	out, _, err := call(t, loadLimitsScript(t), "what_is_there")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestTheLimitsStationSeesNothingButQuasar(t *testing.T) {
 // And that a station granted nothing is refused everything, with the refusal
 // naming what was missing rather than reading as an undefined.
 func TestTheLimitsStationIsAllowedNothing(t *testing.T) {
-	out, err, _ := call(t, loadLimitsScript(t), "what_is_allowed")
+	out, _, err := call(t, loadLimitsScript(t), "what_is_allowed")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func TestTheComponentsStationFillsEveryPanel(t *testing.T) {
 				continue
 			}
 			t.Run(panel.ID, func(t *testing.T) {
-				out, err, _ := callWith(t, s.Script, panel.Source.Action, broker)
+				out, _, err := callWith(t, s.Script, panel.Source.Action, broker)
 				if err != nil {
 					t.Fatalf("%s: %v", panel.Source.Action, err)
 				}
@@ -229,7 +229,7 @@ func TestTheComponentsStationFillsEveryPanel(t *testing.T) {
 	// And the two that are wrong are still wrong, because that is their job.
 	for _, id := range []string{"c_broken", "c_throws"} {
 		panel := findPanel(s, id)
-		out, err, _ := callWith(t, s.Script, panel.Source.Action, broker)
+		out, _, err := callWith(t, s.Script, panel.Source.Action, broker)
 		if err != nil {
 			continue // throwing is one of the two ways to be the example
 		}
@@ -264,7 +264,7 @@ func findPanel(s station.Station, id string) ui.Panel {
 func TestNothingSurvivesBetweenTwoCalls(t *testing.T) {
 	script := loadLimitsScript(t)
 	for i := 0; i < 3; i++ {
-		out, err, _ := call(t, script, "leftover")
+		out, _, err := call(t, script, "leftover")
 		if err != nil {
 			t.Fatal(err)
 		}

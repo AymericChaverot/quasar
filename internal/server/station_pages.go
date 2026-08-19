@@ -2,8 +2,6 @@ package server
 
 import (
 	"database/sql"
-	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -120,7 +118,7 @@ func readStationForm(r *http.Request) stationForm {
 // is the operator's problem at the moment they wanted it.
 func checkStation(doc string) (station.Station, []error) {
 	if strings.TrimSpace(doc) == "" {
-		return station.Station{}, []error{errors.New("There is nothing in the document.")}
+		return station.Station{}, []error{formError("There is nothing in the document.")}
 	}
 	st, err := station.Parse(doc)
 	if err != nil {
@@ -186,6 +184,6 @@ func idAvailable(database *sql.DB, id string) error {
 	if held == nil {
 		return nil
 	}
-	return fmt.Errorf("The id %q is already held by the station %q. Re-fetch that one to update it, "+
+	return formErrorf("The id %q is already held by the station %q. Re-fetch that one to update it, "+
 		"or remove it first if this is meant to take its place.", id, held.Name)
 }

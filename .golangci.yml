@@ -48,3 +48,8 @@ linters:
 formatters:
   enable:
     - gofmt
+
+issues:
+  # No cap: a gate that hides the tail of the list cannot be reasoned about.
+  max-issues-per-linter: 0
+  max-same-issues: 0

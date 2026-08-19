@@ -1,8 +1,6 @@
 package server
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -39,7 +37,7 @@ func (s *Server) handleStationInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	hash := st.Permissions.Hash()
 	if f.Accepted != hash {
-		s.renderStationsError(w, r, f, []error{errors.New(
+		s.renderStationsError(w, r, f, []error{formError(
 			"This document is not the one whose permissions were shown. Read it again before installing it.")})
 		return
 	}
@@ -95,7 +93,7 @@ func (s *Server) handleStationRefetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if st.ID != row.StationID {
-		s.renderStationsError(w, r, stationForm{ID: id, SourceURL: row.SourceURL, YAML: doc}, []error{fmt.Errorf(
+		s.renderStationsError(w, r, stationForm{ID: id, SourceURL: row.SourceURL, YAML: doc}, []error{formErrorf(
 			"That address now serves a station with the id %q, not %q. It is a different station, so nothing was changed.",
 			st.ID, row.StationID)})
 		return

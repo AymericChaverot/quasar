@@ -133,7 +133,7 @@ func (c *Client) ApplyLimits(ctx context.Context, a *db.App) (LimitsState, error
 	}
 	id, err := c.appContainer(ctx, a.ID)
 	if err != nil {
-		return LimitsState{}, nil
+		return LimitsState{}, nil //nolint:nilerr // no container yet: the limits are stored, a redeploy applies them
 	}
 	update := limitsUpdate(a)
 	if update.NanoCPUs != 0 || update.Memory != 0 {

@@ -202,7 +202,7 @@ func validateCompose(t Template) error {
 		Services map[string]yaml.Node `yaml:"services"`
 	}
 	if err := yaml.Unmarshal([]byte(t.Compose), &f); err != nil {
-		return fmt.Errorf("the compose file is not valid YAML: %v", err)
+		return fmt.Errorf("the compose file is not valid YAML: %w", err)
 	}
 	if len(f.Services) == 0 {
 		return errors.New("the compose file declares no services")

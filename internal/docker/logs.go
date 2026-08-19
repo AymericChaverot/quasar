@@ -32,7 +32,7 @@ func (c *Client) StreamLogs(ctx context.Context, a *db.App, send func(LogLine)) 
 	name, err := c.containerFor(ctx, a)
 	if err != nil {
 		send(LogLine{TS: time.Now(), Text: "(" + err.Error() + ")"})
-		return nil
+		return nil //nolint:nilerr // the reason went to the log pane; the stream itself did not fail
 	}
 	return c.StreamLogsByName(ctx, name, send)
 }

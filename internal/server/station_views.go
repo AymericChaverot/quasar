@@ -84,35 +84,6 @@ func (s *Server) stationViews() []StationView {
 	return out
 }
 
-// stations are the installed stations an operator can deploy from: enabled,
-// and still reading as a station.
-//
-// A broken one is skipped rather than allowed to fail the page. Nothing here
-// was not already validated when it was approved, so reaching the log line
-// means a document changed out from under the check — and the settings page is
-// where an operator would find that out, not the page they were trying to
-// deploy from.
-func (s *Server) stations() []station.Station {
-	rows, err := db.ListStations(s.db)
-	if err != nil {
-		log.Printf("station: reading installed stations: %v", err)
-		return nil
-	}
-	var out []station.Station
-	for _, row := range rows {
-		if !row.Enabled {
-			continue
-		}
-		st, errs := checkStation(row.YAML)
-		if len(errs) > 0 {
-			log.Printf("station: %q will not read, leaving it out: %v", row.StationID, errs[0])
-			continue
-		}
-		out = append(out, st)
-	}
-	return out
-}
-
 // station finds one installed station by its id.
 func (s *Server) station(id string) (station.Station, bool) {
 	row := db.GetStationByStationID(s.db, id)

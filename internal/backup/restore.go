@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -159,7 +160,7 @@ func extract(archivePath, dest string) error {
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {

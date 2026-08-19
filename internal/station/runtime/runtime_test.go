@@ -51,7 +51,7 @@ func (a *asked) Do(_ context.Context, capability string, args json.RawMessage) (
 }
 
 // call runs one action of a script and hands back everything about the result.
-func call(t *testing.T, script, action string, opts ...func(*worker.Call, *worker.Limits, *asked)) (worker.Outcome, error, *asked) {
+func call(t *testing.T, script, action string, opts ...func(*worker.Call, *worker.Limits, *asked)) (worker.Outcome, *asked, error) {
 	t.Helper()
 	c := worker.Call{Script: script, Action: action, Input: json.RawMessage(`{}`)}
 	lim := worker.DefaultLimits()
@@ -64,12 +64,12 @@ func call(t *testing.T, script, action string, opts ...func(*worker.Call, *worke
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	out, err := worker.Run(ctx, helper(), c, lim, broker)
-	return out, err, broker
+	return out, broker, err
 }
 
 // callWith is call for a broker the test built itself, which is what a station
 // exercising a capability needs.
-func callWith(t *testing.T, script, action string, broker *asked) (worker.Outcome, error, *asked) {
+func callWith(t *testing.T, script, action string, broker *asked) (worker.Outcome, *asked, error) {
 	t.Helper()
 	lim := worker.DefaultLimits()
 	lim.Wall, lim.Grace = 20*time.Second, time.Second
@@ -80,11 +80,11 @@ func callWith(t *testing.T, script, action string, broker *asked) (worker.Outcom
 		App: json.RawMessage(`{"id":"abcd1234","name":"Components demo","status":"running",` +
 			`"domain":"components.example.com","params":{"GREETING":"Hello from a station"}}`)}
 	out, err := worker.Run(ctx, helper(), c, lim, broker)
-	return out, err, broker
+	return out, broker, err
 }
 
 func TestAScriptReturnsAValue(t *testing.T) {
-	out, err, _ := call(t, `
+	out, _, err := call(t, `
 		export function player_count({ max }) {
 			return { data: { value: 3, suffix: '/ ' + (max || 20) } }
 		}
@@ -112,7 +112,7 @@ func TestAScriptReturnsAValue(t *testing.T) {
 // shot by the parent is the fallback, not the normal way this ends.
 func TestARunawayLoopReportsATimeout(t *testing.T) {
 	started := time.Now()
-	_, err, _ := call(t, `export function spin() { while (true) {} }`, "spin",
+	_, _, err := call(t, `export function spin() { while (true) {} }`, "spin",
 		func(_ *worker.Call, lim *worker.Limits, _ *asked) {
 			lim.Wall, lim.Grace = 400*time.Millisecond, 3*time.Second
 		})
@@ -134,7 +134,7 @@ func TestARunawayLoopReportsATimeout(t *testing.T) {
 // The value a call may answer with is bounded, and the bound is not a
 // suggestion: a panel is a page, not a file transfer.
 func TestAResultOverTheCapIsRefused(t *testing.T) {
-	_, err, _ := call(t, `
+	_, _, err := call(t, `
 		export function flood() { return { data: 'x'.repeat(10 * 1024 * 1024) } }
 	`, "flood")
 	if err == nil {
@@ -150,7 +150,7 @@ func TestAResultOverTheCapIsRefused(t *testing.T) {
 // from the side of the boundary that holds the privileges rather than from a
 // binding somebody remembered not to inject.
 func TestAnUngrantedCapabilityNamesThePermission(t *testing.T) {
-	_, err, broker := call(t, `
+	_, broker, err := call(t, `
 		export function peek() { return { data: quasar.files.read('data/server.properties') } }
 	`, "peek")
 
@@ -173,7 +173,7 @@ func TestAnUngrantedCapabilityNamesThePermission(t *testing.T) {
 // permission should read about the permission, not about a property of
 // undefined.
 func TestEveryDocumentedNamespaceIsThere(t *testing.T) {
-	out, err, _ := call(t, `
+	out, _, err := call(t, `
 		export function look() {
 			const names = [
 				'quasar.app', 'quasar.app.restart', 'quasar.log', 'quasar.progress',
@@ -203,7 +203,7 @@ func TestEveryDocumentedNamespaceIsThere(t *testing.T) {
 // The namespaces that need no permission are there, and the ones over the pipe
 // go over the pipe.
 func TestTheGrantedNamespacesWork(t *testing.T) {
-	out, err, broker := call(t, `
+	out, broker, err := call(t, `
 		export function report() {
 			quasar.log('checking', { mods: 2 })
 			const seen = quasar.store.get('seen')
@@ -249,7 +249,7 @@ func TestTheGrantedNamespacesWork(t *testing.T) {
 // A script that throws is the author's bug, and the panel says so in their own
 // words rather than in the interpreter's.
 func TestAThrownErrorKeepsItsMessage(t *testing.T) {
-	_, err, _ := call(t, `
+	_, _, err := call(t, `
 		export function install() { throw new Error('no build of sodium for 1.20.1') }
 	`, "install")
 	if err == nil || !strings.Contains(err.Error(), "no build of sodium") {
@@ -260,7 +260,7 @@ func TestAThrownErrorKeepsItsMessage(t *testing.T) {
 // An action a panel names and the script does not export would otherwise fail
 // as "undefined is not a function", which tells an author nothing.
 func TestAMissingActionIsNamed(t *testing.T) {
-	_, err, _ := call(t, `export function list_mods() { return { data: [] } }`, "list_mdos")
+	_, _, err := call(t, `export function list_mods() { return { data: [] } }`, "list_mdos")
 	if err == nil || !strings.Contains(err.Error(), "list_mdos") {
 		t.Errorf("error is %v, want it to name the action", err)
 	}
@@ -271,7 +271,7 @@ func TestAMissingActionIsNamed(t *testing.T) {
 // absent because it was never put there.
 func TestTheScriptGetsNothingItWasNotGiven(t *testing.T) {
 	for _, global := range []string{"fetch", "require", "process", "setTimeout", "XMLHttpRequest", "globalThis.Deno"} {
-		out, err, _ := call(t, `
+		out, _, err := call(t, `
 			export function look({ name }) { return { data: eval('typeof ' + name) } }
 		`, "look", func(c *worker.Call, _ *worker.Limits, _ *asked) {
 			c.Input = json.RawMessage(`{"name":"` + global + `"}`)

@@ -263,7 +263,7 @@ func addFile(tw *tar.Writer, path, name string) error {
 func addDir(tw *tar.Writer, dir, prefix string) error {
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil // missing data dir is fine
+			return nil //nolint:nilerr // a missing data dir is not a failed backup
 		}
 		if info.IsDir() {
 			return nil

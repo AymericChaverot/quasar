@@ -5,11 +5,12 @@ import (
 	"time"
 )
 
-// A station, stored as the YAML document it was pasted or fetched as, for the
-// reason a catalogue is: the document is the unit people write, share and
-// re-import, and keeping the text is what lets it be exported back out byte
-// for byte and diffed against what arrives next. Parsing happens in the
-// station package, which is where the format lives; this table holds text.
+// Station is a station as it was pasted or fetched, stored as its YAML
+// document for the reason a catalogue is: the document is the unit people
+// write, share and re-import, and keeping the text is what lets it be exported
+// back out byte for byte and diffed against what arrives next. Parsing happens
+// in the station package, which is where the format lives; this table holds
+// text.
 //
 // Three revision columns rather than a revisions table. Approved, previous and
 // pending is the whole state machine — what is running, what to fall back to,
