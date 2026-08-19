@@ -14,6 +14,7 @@
   border-radius: var(--radius);
   background: var(--surface);
   overflow: hidden;
+  --ground: color-mix(in srgb, var(--surface) var(--ground-veil), transparent);
 }
 
 .station-head {
@@ -134,6 +135,18 @@
 .grant.is-strong .grant-icon { color: var(--warn); }
 .grant.is-strong .grant-title { font-weight: 500; }
 
+/* The button that changes rank while it is being looked at: with an address in
+   the field it becomes the primary one, and the promotion is the page answering
+   what was just typed. The shared 100ms every control gets is the right length
+   for a hover nobody watches and too short for this — at that speed the fill
+   simply appears. Slower, and eased at both ends, so the colour arrives and
+   settles. The weight is in the list because the two buttons are cut from the
+   same face at different weights, and a variable font can walk between them. */
+.station-go {
+  transition: background-color 240ms ease-in-out, border-color 240ms ease-in-out,
+              color 240ms ease-in-out, font-weight 240ms ease-in-out;
+}
+
 /* Gold is gold on every theme. It is not a palette token because no theme gets
    to reinterpret it: a star that came out green on Nebula and blue on Nord
    would stop reading as a star. */
@@ -213,7 +226,13 @@
    left corner, which is legible as "this one is mine" long before the star at
    the other end of the card is. It fades in and out with the star rather than
    appearing, because a card that flashed gold on a click would read as an
-   alert. */
+   alert.
+
+   The arrival and the departure are keyframes rather than a transition, and
+   that is not a style choice. Starring answers with both lists rebuilt, so the
+   card is a new element by the time anything can be seen — and an element that
+   has just been inserted has no previous value to transition from. It has the
+   state the server gave it, and the animation is played over the top of it. */
 .station-card::before {
   content: "";
   position: absolute;
@@ -225,17 +244,183 @@
      so what lands on the card is a wash rather than a disc with an edge. */
   width: 10rem;
   height: 10rem;
-  transform: translate(-58%, -30%);
   border-radius: 999px;
   background: radial-gradient(circle,
     color-mix(in srgb, var(--star) 17%, transparent) 0%,
     color-mix(in srgb, var(--star) 9%, transparent) 38%,
     transparent 76%);
+  /* It swells into place rather than only fading: a wash that grows out of the
+     corner reads as a light coming on, where opacity alone reads as the card
+     being redrawn. */
+  transform: translate(-58%, -30%) scale(0.72);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 220ms ease-in-out;
 }
-.station-card.is-favorite::before { opacity: 1; }
+.station-card.is-favorite::before {
+  opacity: 1;
+  transform: translate(-58%, -30%) scale(1);
+}
+
+/* The two ends of the same movement: the star going on is not a flash, and the
+   star coming off is not a cut. Each is played on the card the swap has just
+   put there, which already holds the state it is animating towards — or, on the
+   way out, the state it is animating away from.
+
+   The arrival slows as it lands and runs the length of the glint crossing the
+   name, so the two read as one event rather than as two things happening beside
+   each other. Taking a star off is an undo, and gets the shorter, plainer
+   version. */
+.station-card.is-starring::before { animation: station-halo-in 560ms ease-out; }
+/* Held on its last frame, and that is the whole of it: the card this plays on
+   is the one still saying it is a favourite — the swap that takes the star off
+   it has not landed yet — so the moment the animation lets go, the halo it just
+   put out comes back on until it does. A blink at the end of a fade. */
+.station-card.is-unstarring::before {
+  animation: station-halo-out 320ms ease-in-out forwards;
+}
+
+@keyframes station-halo-in {
+  from { opacity: 0; transform: translate(-58%, -30%) scale(0.72); }
+  to   { opacity: 1; transform: translate(-58%, -30%) scale(1); }
+}
+@keyframes station-halo-out {
+  from { opacity: 1; transform: translate(-58%, -30%) scale(1); }
+  to   { opacity: 0; transform: translate(-58%, -30%) scale(0.72); }
+}
+
+/* And a glint travelling the length of the name at the moment it is starred.
+   Along the name and nothing else: the station is what has been kept, and its
+   name is what says which station that is — a band crossing the whole card
+   paints over the version, the author and the description on its way past, none
+   of which have anything to do with it.
+
+   Nothing about the word itself changes. What travels is light cast around the
+   letters and no colour laid on them: painting the glyphs gold, however
+   briefly, is the word being replaced by another word for a second, and on the
+   dark themes — where the text is all but white and gold is darker than it —
+   what that reads as is the name dimming.
+
+   So this is a second copy of the name laid exactly over the first, with
+   nothing but a shadow to it. Its own glyphs are transparent, and transparent
+   glyphs still cast one; the copy exists only to hold that shadow, so the real
+   text underneath is never touched by any of it. The mask is what makes the
+   glow a pass rather than a state: it is a band a fifth of the way across a
+   strip three names wide, moved from one end to the other, and only the letters
+   under it at that moment are lit. */
+.station-card.is-starring .station-card-name { position: relative; }
+.station-card.is-starring .station-card-name::after {
+  content: attr(data-glint);
+  position: absolute;
+  /* Pinned by two edges and not four, so the copy shrinks to the word instead
+     of filling the line. The name is a block and a block is as wide as the
+     column, which on a card is half again the width of most names — measured
+     against that box, the band spent the greater part of its travel in the
+     empty space past the last letter, and the pass was over before it looked
+     like it had started. The cap keeps a long name wrapping where the real one
+     wraps. */
+  top: 0;
+  left: 0;
+  max-width: 100%;
+  pointer-events: none;
+  /* Invisible unless the animation is saying otherwise. The class outlives the
+     pass by a little, and an overlay whose resting state is opaque would come
+     back the instant the animation let go of it — and would be there for the
+     first frame, before it had started. */
+  opacity: 0;
+  -webkit-text-fill-color: transparent;
+  color: transparent; /* the same, for anything not on WebKit */
+  /* Two shadows: a tight one that reads as the edge of the letter catching the
+     light, and a wide soft one for the halo around it. One alone is either a
+     hard outline or a smudge. */
+  text-shadow:
+    0 0 0.16em color-mix(in srgb, var(--star) 80%, white),
+    0 0 0.62em color-mix(in srgb, var(--star) 75%, transparent);
+  -webkit-mask-image: linear-gradient(100deg,
+    transparent 40%, black 46%, black 54%, transparent 60%);
+  mask-image: linear-gradient(100deg,
+    transparent 40%, black 46%, black 54%, transparent 60%);
+  -webkit-mask-size: 300% 100%;
+  mask-size: 300% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  /* Eased so that it arrives quickly and drifts to a stop: the end of a glint
+     is the part that is watched, and one travelling at a constant speed off the
+     edge of the word reads as something passing by rather than as something
+     settling. The length is the one thing here that was found rather than
+     reasoned — near twice this it stopped being a flourish and became something
+     to sit through, and much under it there was nothing to see. */
+  animation: station-name-glint 600ms ease-out;
+}
+
+/* The strip is three names wide, so the whole of the travel worth seeing
+   happens between these two positions: at 78% the band is just off the first
+   letter and at 22% just past the last. Running the position from end to end
+   instead wastes two thirds of the duration with the band parked outside the
+   word — and with an eased curve it wastes the two thirds at the end, which is
+   the part meant to be watched.
+
+   It fades up as it comes on and out as it stops, so neither end is a hard edge
+   appearing at the side of the word. */
+@keyframes station-name-glint {
+  from { -webkit-mask-position: 78% 0; mask-position: 78% 0; opacity: 0; }
+  12%  { opacity: 1; }
+  76%  { opacity: 1; }
+  to   { -webkit-mask-position: 22% 0; mask-position: 22% 0; opacity: 0; }
+}
+
+/* The favourites list holds its own formatting context, always, and that is a
+   measurement fix rather than a layout one.
+
+   Folding it open means measuring the height it will have and animating up to
+   it, and it is clipped while that runs — but clipping is what establishes a
+   context, and a context is what stops the margins inside from collapsing out
+   through the top and bottom edges. So the box is one height while it is being
+   animated and another once it is handed back, and the difference lands as a
+   snap on the last frame. Nine pixels, in the case that found this. Holding the
+   context at all times makes the two the same number, whichever side of the
+   animation it is read from. */
+#station-favorites { display: flow-root; }
+
+/* The copy of the card that has just joined the favourites arrives rather than
+   being there. It is the same station as the one still sitting in the list
+   below, and without this it is a card that was not on the page a frame ago and
+   is now, with nothing to connect it to the star that was pressed. Coming up
+   from slightly above and slightly small reads as it being put there.
+
+   And leaving is the same movement run backwards, held on its last frame: what
+   ends it is the swap, which arrives to find the card already gone. It is the
+   one half of this that has to be played before the answer rather than after —
+   the swap is what removes the card, and nothing can be shown leaving once it
+   has left. */
+.station-card.is-arriving { animation: station-card-in 420ms ease-out; }
+.station-card.is-leaving {
+  animation: station-card-out 320ms ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes station-card-in {
+  from { opacity: 0; transform: translateY(-0.375rem) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes station-card-out {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateY(-0.375rem) scale(0.97); }
+}
+
+/* And the star it was pressed on lands with it, which is the other half of
+   marking the moment: the glint says which station, this says what was done to
+   it. It overshoots slightly and settles — the one place in the interface where
+   that is right, because this is the only control that is a decision to keep
+   something rather than a step in a task. */
+.station-card.is-starring .station-star {
+  animation: station-star-pop 520ms cubic-bezier(0.24, 0.72, 0.24, 1);
+}
+
+@keyframes station-star-pop {
+  0%   { transform: scale(0.55); }
+  55%  { transform: scale(1.22); }
+  100% { transform: scale(1); }
+}
 
 /* On an application deployed from a station, everything Quasar provides for
    every application folds into this. The summary is a bar rather than a line of
@@ -451,6 +636,9 @@
 .station .card,
 .station-pane > .station-grid > .station-cell > .card {
   background: var(--station-surface, var(--surface));
+  /* And what is inside one is standing on the tint, not on the grey the rest
+     of the page's cards are drawn in. */
+  --ground: color-mix(in srgb, var(--station-surface, var(--surface)) var(--ground-veil), transparent);
 }
 .station-head {
   background: var(--station-surface-2, var(--surface-2));

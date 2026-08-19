@@ -39,14 +39,14 @@
   margin-top: 0.75rem;
   border: var(--border-w) solid color-mix(in srgb, var(--ok) 40%, transparent);
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--ok) 8%, transparent);
+  background: color-mix(in srgb, var(--ok) 8%, var(--ground));
   padding: 0.5rem 0.75rem;
   font-size: 0.8125rem;
   color: var(--ok);
 }
 .file-flash.is-err {
   border-color: color-mix(in srgb, var(--err) 40%, transparent);
-  background: color-mix(in srgb, var(--err) 8%, transparent);
+  background: color-mix(in srgb, var(--err) 8%, var(--ground));
   color: var(--err);
 }
 

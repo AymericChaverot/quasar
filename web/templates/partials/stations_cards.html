@@ -9,8 +9,12 @@
 <div id="stations-lists" class="max-w-5xl space-y-10">
   {{$admin := .IsAdmin}}
 
+  {{/* Named, and only present when there is something in it — which is what
+       lets the script tell a list that has just come into existence from one
+       that has simply gained a card, and give the first of those its height
+       rather than dropping it on the page. */}}
   {{with .Favorites}}
-  <section>
+  <section id="station-favorites">
     <h2 class="h-label mb-3">Favourites ({{len .}})</h2>
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {{range .}}{{template "station_card" dict "Card" . "IsAdmin" $admin}}{{end}}
@@ -32,7 +36,14 @@
      The whole card is the link, which a button inside it cannot be: an anchor
      may not contain one. So the anchor stretches itself over the card with a
      pseudo-element and the star sits above that — the card reads as one target
-     and the star still takes its own click. */}}
+     and the star still takes its own click.
+
+     Starring answers with both lists, which replaces the card that was clicked.
+     Nothing waits on that: the star is stored, the lists come back, and only
+     then is the flourish played over what arrived — a favourite that took half
+     a second to become one because something was being drawn would be an
+     animation holding up the thing it is about. The script that plays it is on
+     the page itself, since this partial is what gets replaced. */}}
 {{define "station_card"}}
 {{with .Card}}
 <div class="station-card card p-4{{if .Favorite}} is-favorite{{end}}">
@@ -56,7 +67,7 @@
          identity rather than repetition, and no two of them are alike. */}}
     {{with .UI.Theme.Icon}}<img src="{{.}}" alt="" class="station-icon" aria-hidden="true">{{end}}
     <span class="min-w-0">
-      <span class="block text-sm font-medium">{{.Name}}</span>
+      <span class="station-card-name block text-sm font-medium">{{.Name}}</span>
       <span class="faint mt-0.5 block text-xs">{{.Description}}</span>
     </span>
   </a>

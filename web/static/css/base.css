@@ -1,5 +1,14 @@
 /* --- Base ------------------------------------------------------------------ */
 
+/* The page keeps room for its scrollbar whether or not it has one. Half this
+   interface is htmx putting a different amount of content on the page than was
+   there a moment ago, and a page that crosses the height of the window in
+   either direction gains or loses a scrollbar, which changes the width
+   everything is laid out in — a card grid re-flows and the text inside it
+   re-wraps, over a swap nobody asked to be about that. Reserving the gutter is
+   what makes a list that grows only grow. */
+html { scrollbar-gutter: stable; }
+
 body {
   background: var(--bg);
   color: var(--text);

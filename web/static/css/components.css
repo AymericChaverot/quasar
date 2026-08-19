@@ -1,14 +1,48 @@
 /* --- Components ------------------------------------------------------------ */
 
+/* The colour of whatever the thing being drawn is standing on, as something to
+   fill with.
+
+   A box tinted into `transparent` is a box the page shows through, and what the
+   page has behind it is not fixed: on Nebula it is a gradient, inside a station
+   it is that station's own tint, and behind a modal it is the page at whatever
+   it had scrolled to. The tint meant to be a shade of red came out a shade of
+   whatever was underneath, which is the visibility problem this token exists to
+   end. So anything that wants a ground of its own fills with this rather than
+   with nothing, and every container that *is* a ground restates it for what it
+   holds. It inherits, so a box three levels inside a card is still standing on
+   the card.
+
+   It is a veil and not an aplat, which is the whole of --ground-veil. Painted
+   at full strength these boxes stopped reading as ground and started reading as
+   objects: an empty list or a table is the page carrying on, and one filled
+   with solid --bg over Nebula's wash is a darker rectangle sitting on it —
+   louder than the cards it was meant to sit quietly beside. At this strength it
+   still governs what is behind it, without becoming a thing in front of it. And
+   inside a card the fill is the card's own colour, so there it costs nothing at
+   all: 60% of a surface over that same surface is that surface. */
+:root {
+  --ground-veil: 60%;
+  --ground: color-mix(in srgb, var(--bg) var(--ground-veil), transparent);
+}
+
 .card {
   background: var(--surface);
   border: var(--border-w) solid var(--border);
   border-radius: var(--radius);
 }
+.card,
+.modal { --ground: color-mix(in srgb, var(--surface) var(--ground-veil), transparent); }
 
+/* A box with nothing in it is still a box, and it is filled. Left with no
+   ground of its own it showed whatever was behind the page, and a wash running
+   through a dashed outline reads as a rendering fault rather than as an empty
+   list. Filled, it looks exactly as empty as it did, with what is behind it
+   held down rather than showing as detail. */
 .empty {
   border: var(--border-w) dashed var(--border);
   border-radius: var(--radius);
+  background: var(--ground);
 }
 
 .chip {
@@ -319,7 +353,7 @@ input[type="checkbox"]:focus-visible {
 .alert-err {
   border: var(--border-w) solid color-mix(in srgb, var(--err) 50%, transparent);
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--err) 10%, transparent);
+  background: color-mix(in srgb, var(--err) 10%, var(--ground));
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
   color: var(--err);
@@ -330,7 +364,7 @@ input[type="checkbox"]:focus-visible {
 .alert-note {
   border: var(--border-w) solid color-mix(in srgb, var(--warn) 45%, transparent);
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  background: color-mix(in srgb, var(--warn) 10%, var(--ground));
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
   line-height: 1.25rem;
