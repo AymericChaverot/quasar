@@ -35,13 +35,16 @@
     @import url("/static/css/tables.css") layer(components);
     @import url("/static/css/storage.css") layer(components);
     @import url("/static/css/logs.css") layer(components);
+    {{/* The per-theme extras come after the components they repaint, and are
+         every one of them scoped to a [data-theme], so they only ever reach
+         their own theme. They sit here, and not at the end, because a few of
+         them tie on specificity with a rule below — a disabled button that
+         must not light up on hover is the one that bites — and on a tie it
+         is this order that decides. */}}
+    @import url("/static/css/theme-extras.css") layer(components);
     @import url("/static/css/progress.css") layer(components);
     @import url("/static/css/updating.css") layer(components);
     @import url("/static/css/motion.css") layer(components);
-    {{/* The per-theme extras come after the components they repaint, and are
-         every one of them scoped to a [data-theme], so they only ever reach
-         their own theme. */}}
-    @import url("/static/css/theme-extras.css") layer(components);
     {{/* Last, and deliberately so: a station's sheet is the one written by
          somebody else, and nothing in it may end up outranking the chrome. */}}
     @import url("/static/css/stations.css") layer(components);
