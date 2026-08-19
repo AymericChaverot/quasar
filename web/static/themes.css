@@ -2641,15 +2641,48 @@ button[disabled] { cursor: progress; opacity: 0.65; }
   cursor: pointer;
   user-select: none;
   list-style: none;
-  transition: color 0.12s, border-color 0.12s;
+  transition: color 0.12s, border-color 0.12s, background 0.12s, border-radius 0.12s;
 }
 .advanced-block > summary::-webkit-details-marker { display: none; }
 .advanced-block > summary:hover {
   color: var(--text);
   border-color: var(--border-strong);
 }
-.advanced-block[open] > summary { color: var(--text); }
 .advanced-block > summary .ico { flex-shrink: 0; }
+
+/* Open, the summary stops being a button and becomes the top edge of a box:
+   the corners it shares with the body square off, the seam between them goes,
+   and the border carries on down both sides of what was revealed.
+ 
+   This is the whole of the fix for a fold that read as doing nothing. What it
+   opened used to appear underneath it, unbounded, looking exactly like the page
+   simply carrying on — so the click seemed inert and the sections seemed
+   unrelated to it. Belonging is drawn, not asserted. */
+.advanced-block[open] > summary {
+  color: var(--text);
+  background: var(--surface-2);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.advanced-body {
+  padding: 0 1rem 1.25rem;
+  border: var(--border-w) solid var(--border);
+  border-top: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+  /* And it arrives rather than blinking into existence, which is the other half
+     of knowing the click did something. */
+  animation: advanced-open 200ms ease-out;
+}
+/* The sections inside space themselves from whatever was above them on the
+   page; the first one has the summary above it instead, and its own margin
+   would put it a long way down a box it is supposed to be at the top of. */
+.advanced-body > :first-child { margin-top: 1.25rem; }
+
+@keyframes advanced-open {
+  from { opacity: 0; transform: translateY(-0.375rem); }
+  to { opacity: 1; transform: none; }
+}
 
 /* Says what is under the lid, so opening it is a decision rather than a poke. */
 .advanced-note {
@@ -2658,7 +2691,24 @@ button[disabled] { cursor: progress; opacity: 0.65; }
   color: var(--text-faint);
 }
 @media (max-width: 48rem) {
+  /* Narrow, the note is more than the row can carry, and the chevron inherits
+     the job of holding the right-hand end. */
   .advanced-note { display: none; }
+  .advanced-caret { margin-left: auto; }
+}
+
+/* The one part of the control that moves, so the state is legible from the
+   control itself and not only from the height of the page. */
+.advanced-caret {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  transition: transform 200ms ease, color 0.12s;
+}
+.advanced-block > summary:hover .advanced-caret { color: var(--text); }
+.advanced-block[open] .advanced-caret {
+  transform: rotate(180deg);
+  color: var(--text);
 }
 
 /* Refresh the station and nothing else. Reloading the page to see whether a

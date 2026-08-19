@@ -55,10 +55,17 @@
      leaving it open. One click and the application reads like every other. */}}
 {{if $.Station}}
 <details class="advanced-block mt-8">
+  {{/* The summary is the lid of a box rather than a line of text, and what it
+       opens is inside that box: the border carries on down the sides, the
+       corners between the two square off so they read as one thing, and the
+       chevron turns over. Without that, the sections below simply appeared and
+       looked like the page continuing — the click seemed to do nothing, and
+       whatever arrived seemed unrelated to it. */}}
   <summary>
     {{template "icon_cog"}}
-    <span>Advanced options</span>
+    <span class="advanced-label">Advanced options</span>
     <span class="advanced-note">Everything Quasar gives every application: build, routing, storage, environment, logs.</span>
+    <span class="advanced-caret" aria-hidden="true">{{template "icon_chevron_down"}}</span>
   </summary>
   <div class="advanced-body">
 {{end}}
