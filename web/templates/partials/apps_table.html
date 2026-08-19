@@ -10,7 +10,11 @@
     <thead>
       <tr>
         <th class="pr-0! w-10"></th>
-        <th>Application</th>
+        {{/* The label starts where the names start, not where the station mark
+             does. It is built out of the same two boxes the cells are, with the
+             mark's slot left empty, so the two line up by construction rather
+             than by a padding somebody would have to keep in step. */}}
+        <th><span class="app-name"><span class="station-slot"></span>Application</span></th>
         <th>URL</th>
         <th>Type</th>
         <th>Status</th>
