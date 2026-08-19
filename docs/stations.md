@@ -331,11 +331,18 @@ export function add_mod({ url }) {
 | Key | Effect |
 |---|---|
 | `data` | Renders the panel that asked for it |
-| `toast` | A transient message |
-| `error` | Rendered like any Quasar error, and the action counts as failed |
+| `toast` | A transient message: green, with a tick |
+| `warn` | A transient message for what went less well than it might have: orange, with a warning sign |
+| `error` | Rendered like any Quasar error, and the action counts as failed: red, with a crossed circle |
 | `refresh` | Panel ids to re-fetch |
 | `navigate` | Switch to a tab |
 | `progress` | Run as a background job, see below |
+
+Messages stack. Each one is appended to the corner of the page rather than
+replacing the one before it, because three actions in a row are three things
+worth knowing and the third crushing the first two makes all of them pointless.
+A `toast` and a `warn` go on their own after a few seconds; an `error` waits to
+be dismissed, since why something failed is what the operator came to read.
 
 **Long actions.** Upgrading a server or downloading forty mods does not fit in
 an HTTP request. Declaring `long: true` on the action runs it as a background

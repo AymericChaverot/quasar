@@ -27,9 +27,16 @@ type Result struct {
 	// Data renders the panel that asked for it.
 	Data json.RawMessage `json:"data,omitempty"`
 
-	// Toast is a transient message; Error is rendered like any Quasar error
-	// and makes the action count as failed.
+	// Toast is a transient message and Warn is one that went less well than it
+	// might have; Error is rendered like any Quasar error and makes the action
+	// count as failed.
+	//
+	// Warn exists because the middle case is real and had nowhere to go: a mod
+	// installed against a server version its author never tested is neither a
+	// success worth a green tick nor a failure, and reporting it as either is a
+	// lie the operator acts on.
 	Toast string `json:"toast,omitempty"`
+	Warn  string `json:"warn,omitempty"`
 	Error string `json:"error,omitempty"`
 
 	// Refresh names panels to re-fetch, Navigate a tab to switch to.
@@ -47,7 +54,7 @@ func ParseResult(raw json.RawMessage) Result {
 	}
 	var r Result
 	if err := json.Unmarshal(raw, &r); err == nil {
-		if r.Data != nil || r.Toast != "" || r.Error != "" || r.Refresh != nil || r.Navigate != "" {
+		if r.Data != nil || r.Toast != "" || r.Warn != "" || r.Error != "" || r.Refresh != nil || r.Navigate != "" {
 			return r
 		}
 	}

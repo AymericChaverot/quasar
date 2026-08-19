@@ -180,9 +180,22 @@ func TestAMessageFloatsAndCanBeDismissed(t *testing.T) {
 	if !strings.Contains(toast, "station-toast") || !strings.Contains(toast, "Sodium installed") {
 		t.Errorf("a toast does not render:\n%s", toast)
 	}
-	// It goes on its own, because it is a transient message and says so.
-	if !strings.Contains(toast, "toast.remove()") {
+	// It goes on its own, because it is a transient message and carries the
+	// lifetime that says so. The block's script is what reads it: a fragment
+	// that is appended rather than swapped cannot carry a script of its own
+	// without leaving one behind per button anybody ever pressed.
+	if !strings.Contains(toast, "data-toast-life") {
 		t.Error("a toast stays on the page for ever")
+	}
+
+	// The middle case now has somewhere to go: neither a success worth a tick
+	// nor a failure, and reporting it as either is a lie the operator acts on.
+	warned := draw(ui.Result{Warn: "installed, but untested on this version"})
+	if !strings.Contains(warned, "station-toast-warn") || !strings.Contains(warned, "untested") {
+		t.Errorf("a warning does not render:\n%s", warned)
+	}
+	if !strings.Contains(warned, "data-toast-life") {
+		t.Error("a warning stays on the page for ever")
 	}
 
 	// An error does not: the reason something failed is what somebody came to
@@ -191,11 +204,45 @@ func TestAMessageFloatsAndCanBeDismissed(t *testing.T) {
 	if !strings.Contains(failed, "no build of sodium") {
 		t.Errorf("an error does not render:\n%s", failed)
 	}
-	if strings.Contains(failed, "setTimeout") {
+	if strings.Contains(failed, "data-toast-life") {
 		t.Error("an error takes itself off the page")
 	}
 	if !strings.Contains(failed, "Dismiss") {
 		t.Error("an error cannot be dismissed, so it is there for ever")
+	}
+
+	// Each says which of the three it is in a shape as well as a colour, for
+	// everybody who cannot tell this green from that red.
+	for _, c := range []string{toast, warned, failed} {
+		if !strings.Contains(c, "station-toast-icon") {
+			t.Errorf("this message says which it is in colour alone:\n%s", c)
+		}
+	}
+}
+
+// Several actions are several things worth knowing. A message that overwrote
+// the one before it would make both pointless, so every button appends and the
+// block gives each arrival its lifetime as it lands.
+func TestMessagesStackRatherThanOverwrite(t *testing.T) {
+	s := testServer(t)
+	v := ui.Render("abcd1234", ui.Panel{ID: "p", Type: "button", Label: "Go", Action: "go"}, nil)
+	page := html.UnescapeString(renderPanelPartial(t, v))
+	if !strings.Contains(page, `hx-swap="beforeend"`) {
+		t.Errorf("a button's message crushes whatever was already there:\n%s", page)
+	}
+
+	block := &StationBlock{
+		App: &db.App{ID: "abcd1234"},
+		Doc: station.Station{Name: "Demo", UI: ui.UI{Tabs: []ui.Tab{
+			{ID: "t", Name: "T", Panels: []ui.Panel{{ID: "p", Type: "stat"}}},
+		}}},
+	}
+	var buf bytes.Buffer
+	if err := s.pages["app_detail"].ExecuteTemplate(&buf, "station_block", block); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "toastLife") {
+		t.Error("nothing arms the messages that land, so none of them ever go")
 	}
 }
 

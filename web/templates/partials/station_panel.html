@@ -51,7 +51,7 @@
             <button type="button" class="{{if eq .Tone "err"}}btn-danger{{else}}btn{{end}} py-1! text-xs"
                     hx-post="/apps/{{$app}}/station/action/{{.Action}}"
                     hx-vals="{{$row.Input}}"
-                    hx-target="#station-message" hx-swap="innerHTML"
+                    hx-target="#station-message" hx-swap="beforeend"
                     {{with .Confirm}}hx-confirm="{{stationConfirm . $row.Values}}"{{end}}>{{.Label}}</button>
             {{end}}
           </td>
@@ -133,7 +133,7 @@
 
   {{else if eq $panel.Type "form"}}
   <form hx-post="/apps/{{$app}}/station/action/{{$panel.Submit.Action}}"
-        hx-target="#station-message" hx-swap="innerHTML"
+        hx-target="#station-message" hx-swap="beforeend"
         {{with $panel.Submit.Confirm}}hx-confirm="{{.}}"{{end}}
         class="space-y-3">
     {{range .Fields}}
@@ -166,12 +166,12 @@
   {{else if eq $panel.Type "button"}}
   <button type="button" class="{{if eq $panel.Tone "err"}}btn-danger{{else}}btn{{end}} px-4 py-2"
           hx-post="/apps/{{$app}}/station/action/{{$panel.Action}}"
-          hx-target="#station-message" hx-swap="innerHTML"
+          hx-target="#station-message" hx-swap="beforeend"
           {{with $panel.Confirm}}hx-confirm="{{.}}"{{end}}>{{$panel.Label}}</button>
 
   {{else if eq $panel.Type "search"}}
   <form hx-post="/apps/{{$app}}/station/action/{{$panel.Action}}"
-        hx-target="#station-message" hx-swap="innerHTML" class="flex gap-2">
+        hx-target="#station-message" hx-swap="beforeend" class="flex gap-2">
     <input name="q" type="search" class="input" autocomplete="off"
            placeholder="{{if $panel.Placeholder}}{{$panel.Placeholder}}{{else}}Search{{end}}">
     <button type="submit" class="btn px-4 py-2">{{if $panel.Label}}{{$panel.Label}}{{else}}Search{{end}}</button>
@@ -181,7 +181,7 @@
   {{/* A button whose whole point is the question in front of it. */}}
   <button type="button" class="{{if eq $panel.Tone "err"}}btn-danger{{else}}btn{{end}} px-4 py-2"
           hx-post="/apps/{{$app}}/station/action/{{$panel.Action}}"
-          hx-target="#station-message" hx-swap="innerHTML"
+          hx-target="#station-message" hx-swap="beforeend"
           hx-confirm="{{$panel.Confirm}}">{{$panel.Label}}</button>
 
   {{else if or (eq $panel.Type "section") (eq $panel.Type "grid")}}
@@ -245,32 +245,40 @@
 {{end}}
 
 {{/* What an action had to say, floating over the page near where it was
-     pressed. A toast goes on its own after a few seconds; an error stays until
-     it is dismissed, because the reason something failed is the thing somebody
-     came to read. */}}
+     pressed. It is appended rather than swapped in: pressing three buttons is
+     three things to know, and a message that overwrote the one before it was
+     not worth showing in the first place.
+
+     Each one says which of the three it is twice — the stripe down its side and
+     the icon in front of it — because the stripe is a colour, and somebody who
+     cannot tell this green from that red is told nothing by it. A toast and a
+     warning go on their own after a few seconds; an error stays until it is
+     dismissed, because the reason something failed is what somebody came to
+     read. The block's own script arms whichever of the three arrives. */}}
 {{define "station_message"}}
 {{if .Error}}
 <div class="station-toast station-toast-err" role="alert">
-  <div class="min-w-0">
+  <span class="station-toast-icon" aria-hidden="true">{{template "icon_x_circle"}}</span>
+  <div class="min-w-0 flex-1">
     <p class="text-sm font-medium">That did not work</p>
     <p class="mono mt-1 text-xs">{{.Error}}</p>
   </div>
   <button type="button" class="station-toast-close" aria-label="Dismiss"
           onclick="this.closest('.station-toast').remove()">&times;</button>
 </div>
-{{else if .Toast}}
-<div class="station-toast station-toast-ok" role="status">
-  <span class="min-w-0 text-sm">{{.Toast}}</span>
+{{else if .Warn}}
+<div class="station-toast station-toast-warn" role="status" data-toast-life="9000">
+  <span class="station-toast-icon" aria-hidden="true">{{template "icon_alert_triangle"}}</span>
+  <span class="min-w-0 flex-1 text-sm">{{.Warn}}</span>
   <button type="button" class="station-toast-close" aria-label="Dismiss"
           onclick="this.closest('.station-toast').remove()">&times;</button>
 </div>
-<script>
-  (function () {
-    var toast = document.querySelector("#station-message .station-toast-ok");
-    if (!toast) return;
-    setTimeout(function () { toast.classList.add("is-going"); }, 6000);
-    setTimeout(function () { toast.remove(); }, 6400);
-  })();
-</script>
+{{else if .Toast}}
+<div class="station-toast station-toast-ok" role="status" data-toast-life="6000">
+  <span class="station-toast-icon" aria-hidden="true">{{template "icon_check_circle"}}</span>
+  <span class="min-w-0 flex-1 text-sm">{{.Toast}}</span>
+  <button type="button" class="station-toast-close" aria-label="Dismiss"
+          onclick="this.closest('.station-toast').remove()">&times;</button>
+</div>
 {{end}}
 {{end}}

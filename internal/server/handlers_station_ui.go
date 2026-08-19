@@ -262,8 +262,12 @@ func (s *Server) handleStationAction(w http.ResponseWriter, r *http.Request) {
 	// that gives up waiting has not cancelled a mod download.
 	if slices.Contains(doc.UI.LongActions(), name) {
 		// A progress pane is not a toast: it belongs on the page, where it can
-		// be watched and where a reload finds it again.
+		// be watched and where a reload finds it again. The swap is restated
+		// because the button that got here appends — toasts stack — and a pane
+		// that appended would leave the last three runs of the same action
+		// stacked up the page.
 		w.Header().Set("HX-Retarget", "#station-jobs")
+		w.Header().Set("HX-Reswap", "innerHTML")
 		job, fresh := s.startLongAction(a, doc, name, input)
 		if !fresh {
 			s.audit(r, "station.action", doc.ID+" on "+a.Name, name+" was already running")

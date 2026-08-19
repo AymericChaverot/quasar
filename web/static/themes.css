@@ -2603,11 +2603,16 @@ button[disabled] { cursor: progress; opacity: 0.65; }
   pointer-events: none;
 }
 
+/* A floor under the width as well as a ceiling over it. A toast sized purely
+   to "Saved" is a smudge in the corner of a 27-inch screen, and one nobody
+   notices is one that did not happen. */
 .station-toast {
   display: flex;
   align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.625rem 0.75rem 0.625rem 0.875rem;
+  gap: 0.625rem;
+  min-width: min(18rem, calc(100vw - 2.5rem));
+  min-height: 3rem;
+  padding: 0.75rem 0.875rem;
   border: var(--border-w) solid var(--border-strong);
   border-radius: var(--radius);
   background: var(--surface-2);
@@ -2620,11 +2625,25 @@ button[disabled] { cursor: progress; opacity: 0.65; }
   transform: translateY(0.375rem);
   transition: opacity 400ms ease, transform 400ms ease;
 }
+
+/* Said twice: the stripe down the side and the shape in front of the words. A
+   stripe on its own is a colour, and a colour on its own is not a message to
+   anybody who cannot tell this green from that red. */
 .station-toast-ok { border-left: 3px solid var(--ok); }
+.station-toast-warn { border-left: 3px solid var(--warn); }
 .station-toast-err { border-left: 3px solid var(--err); }
 
+.station-toast-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 0.0625rem;
+}
+.station-toast-icon svg { width: 1.125rem; height: 1.125rem; }
+.station-toast-ok .station-toast-icon { color: var(--ok); }
+.station-toast-warn .station-toast-icon { color: var(--warn); }
+.station-toast-err .station-toast-icon { color: var(--err); }
+
 .station-toast-close {
-  margin-left: auto;
   flex-shrink: 0;
   padding: 0 0.25rem;
   line-height: 1;

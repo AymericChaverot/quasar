@@ -57,7 +57,11 @@
 {{/* Where a toast or a refused action lands, wherever on the page it came
      from. It floats rather than sitting at the top of the block, because the
      button that caused it is often three screens down from there — a message
-     nobody scrolls back up to read is a message nobody reads. */}}
+     nobody scrolls back up to read is a message nobody reads.
+
+     Messages stack here rather than replacing one another: pressing three
+     buttons is three things worth knowing, and the third crushing the first two
+     would make all three pointless. */}}
 <div id="station-message" class="station-toasts" aria-live="polite"></div>
 
 <script>
@@ -84,6 +88,34 @@
       const id = pane.dataset.stationPane;
       document.body.addEventListener("quasar:station-tab-" + id, () => show(id));
     }
+
+    // Each message that lands is given its lifetime once. Arming happens here
+    // rather than in a script travelling with the message, because a fragment
+    // that is appended rather than swapped would leave one dead script tag in
+    // the container per button anybody ever pressed.
+    const toasts = document.getElementById("station-message");
+    const MAX = 5;
+    function arm() {
+      const all = toasts.querySelectorAll(".station-toast");
+      // A run of failures should not end up a column of cards down the whole
+      // screen; the oldest go, since the newest is what was just pressed.
+      for (let i = 0; i < all.length - MAX; i++) all[i].remove();
+
+      for (const toast of toasts.querySelectorAll(".station-toast:not([data-armed])")) {
+        toast.dataset.armed = "1";
+        // An error has no lifetime: why something failed is what somebody came
+        // to read, and it stays until they dismiss it.
+        const life = Number(toast.dataset.toastLife || 0);
+        if (!life) continue;
+        setTimeout(() => {
+          toast.classList.add("is-going");
+          setTimeout(() => toast.remove(), 400);
+        }, life);
+      }
+    }
+    document.body.addEventListener("htmx:afterSwap", (e) => {
+      if (e.target === toasts) arm();
+    });
   })();
 </script>
 {{end}}

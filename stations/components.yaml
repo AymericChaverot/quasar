@@ -98,6 +98,14 @@ ui:
           action: say_something
           help: Returns a toast, and refreshes the timeline beside it.
 
+        - id: c_warn
+          type: button
+          title: A button that half worked
+          width: half
+          label: Report a near miss
+          action: near_miss
+          help: Returns a warning rather than a toast. Press it beside the one above to watch messages stack.
+
         - id: c_confirm
           type: confirm
           title: A button that asks first
@@ -251,6 +259,13 @@ script: |
     return { toast: said, refresh: ['c_timeline'] }
   }
 
+  // Neither a success nor a failure. Reporting the middle case as either is a
+  // lie the operator goes on to act on, so it has a colour of its own.
+  export function near_miss() {
+    note('reported a near miss')
+    return { warn: 'That worked, but not the way it was meant to.', refresh: ['c_timeline'] }
+  }
+
   export function forget_everything() {
     quasar.store.delete('things')
     quasar.store.delete('events')
@@ -260,7 +275,8 @@ script: |
 
   export function search_for({ q }) {
     const hits = remembered().filter(t => (t.text || '').indexOf(q || '') >= 0)
-    return { toast: hits.length + ' of ' + remembered().length + ' match ' + JSON.stringify(q) }
+    const said = hits.length + ' of ' + remembered().length + ' match ' + JSON.stringify(q)
+    return hits.length ? { toast: said } : { warn: said }
   }
 
   // Long, so it runs as a background job with a pane of its own. Nothing here
