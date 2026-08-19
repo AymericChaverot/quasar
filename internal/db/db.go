@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS stations (
 	pending_yaml TEXT NOT NULL DEFAULT '',
 	pending_hash TEXT NOT NULL DEFAULT '',
 	enabled      INTEGER NOT NULL DEFAULT 1,
+	favorite     INTEGER NOT NULL DEFAULT 0,
 	position     INTEGER NOT NULL DEFAULT 0,
 	updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -245,6 +246,9 @@ var migrations = []string{
 	// The choices a station was deployed with, which quasar.app.params reads
 	// back. Empty for everything that was not deployed from a station.
 	"ALTER TABLE apps ADD COLUMN station_params TEXT NOT NULL DEFAULT ''",
+	// Nothing is starred until somebody stars it, which is the right answer
+	// for an install that already has its stations.
+	"ALTER TABLE stations ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0",
 }
 
 func Open(path string) (*sql.DB, error) {

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"quasar/internal/auth"
 	"quasar/internal/db"
 	"quasar/internal/station"
 )
@@ -143,6 +144,60 @@ func (s *Server) station(id string) (station.Station, bool) {
 	return st, true
 }
 
+// StationCard is one station on the Stations page: the document it reads as,
+// and whether somebody starred it.
+type StationCard struct {
+	station.Station
+	Favorite bool
+}
+
+// stationCards are the installed stations as the page lists them.
+//
+// A broken one is skipped for the same reason it is skipped everywhere else,
+// and the settings page is where an operator is told about it.
+func (s *Server) stationCards() []StationCard {
+	rows, err := db.ListStations(s.db)
+	if err != nil {
+		log.Printf("station: reading installed stations: %v", err)
+		return nil
+	}
+	var out []StationCard
+	for _, row := range rows {
+		if !row.Enabled {
+			continue
+		}
+		st, errs := checkStation(row.YAML)
+		if len(errs) > 0 {
+			log.Printf("station: %q will not read, leaving it out: %v", row.StationID, errs[0])
+			continue
+		}
+		out = append(out, StationCard{Station: st, Favorite: row.Favorite})
+	}
+	return out
+}
+
+// stationLists is what the Stations page draws: everything, and the starred
+// ones again at the top.
+//
+// The starred ones are repeated rather than moved. A list that quietly loses
+// entries as they are starred is a list somebody stops trusting to be the whole
+// of what is installed, and "All Stations" has to mean all of them.
+func (s *Server) stationLists(r *http.Request) map[string]any {
+	cards := s.stationCards()
+	favorites := make([]StationCard, 0, len(cards))
+	for _, c := range cards {
+		if c.Favorite {
+			favorites = append(favorites, c)
+		}
+	}
+	_, _, role, _ := s.currentUser(r)
+	return map[string]any{
+		"Stations":  cards,
+		"Favorites": favorites,
+		"IsAdmin":   role == auth.RoleAdmin,
+	}
+}
+
 // handleStationsPage is the Stations entry in the navigation: a card per
 // installed station, kept well away from the sixty-odd catalogue entries.
 //
@@ -151,11 +206,28 @@ func (s *Server) station(id string) (station.Station, bool) {
 // programs somebody wrote for them, and mixing the two would bury the second
 // in the first.
 func (s *Server) handleStationsPage(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "stations", map[string]any{
-		"Title":    "Stations",
-		"Stations": s.stations(),
-		"Domain":   s.cfg.Domain,
-	})
+	data := s.stationLists(r)
+	data["Title"] = "Stations"
+	data["Domain"] = s.cfg.Domain
+	s.render(w, r, "stations", data)
+}
+
+// handleStationFavorite stars a station, or takes the star off it. It answers
+// with both lists rather than with the one card, because starring one moves it
+// into a list that may not have existed a moment ago.
+func (s *Server) handleStationFavorite(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	on, err := db.ToggleStationFavorite(s.db, id)
+	if err != nil {
+		http.Error(w, "that station could not be starred", http.StatusInternalServerError)
+		return
+	}
+	if on {
+		s.audit(r, "station.favorite", id, "starred")
+	} else {
+		s.audit(r, "station.favorite", id, "unstarred")
+	}
+	s.renderPartial(w, "stations_lists", s.stationLists(r))
 }
 
 // stationReview is a document that has been read and is waiting to be

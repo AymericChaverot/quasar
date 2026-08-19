@@ -2506,6 +2506,78 @@ button[disabled] { cursor: progress; opacity: 0.65; }
 }
 .station-body { margin-top: auto; }
 
+/* Gold is gold on every theme. It is not a palette token because no theme gets
+   to reinterpret it: a star that came out green on Nebula and blue on Nord
+   would stop reading as a star. */
+:root { --star: #e0a92b; }
+
+/* A station on the Stations page. The whole card is the link — an anchor may
+   not contain a button, so the anchor stretches over the card with a
+   pseudo-element and the star sits above that. */
+.station-card {
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.12s;
+}
+.station-card:hover { border-color: var(--border-strong); }
+.station-card-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+/* Out of the way until it is wanted, and permanent once it has been used. A
+   control that is always visible on every card is a column of grey stars down
+   a page nobody asked to be about starring. */
+.station-star {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius);
+  color: var(--text-faint);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 180ms ease-in-out, color 180ms ease-in-out, transform 180ms ease-in-out;
+}
+.station-card:hover .station-star,
+.station-star:focus-visible { opacity: 1; }
+.station-star:hover { color: var(--star); transform: scale(1.1); }
+.station-star svg { width: 1rem; height: 1rem; }
+
+.station-card.is-favorite .station-star {
+  opacity: 1;
+  color: var(--star);
+}
+.station-card.is-favorite .station-star svg { fill: currentColor; }
+
+/* And the card says so from across the page: a soft gold wash out of the top
+   left corner, which is legible as "this one is mine" long before the star at
+   the other end of the card is. It fades in and out with the star rather than
+   appearing, because a card that flashed gold on a click would read as an
+   alert. */
+.station-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 7rem;
+  height: 7rem;
+  transform: translate(-30%, -30%);
+  border-radius: 999px;
+  background: radial-gradient(circle,
+    color-mix(in srgb, var(--star) 26%, transparent) 0%, transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease-in-out;
+}
+.station-card.is-favorite::before { opacity: 1; }
+
 /* On an application deployed from a station, everything Quasar provides for
    every application folds into this. The summary is a bar rather than a line of
    text: it is the only thing between the station and the bottom of the page,

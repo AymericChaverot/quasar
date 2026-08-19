@@ -8,29 +8,30 @@
   </p>
 </div>
 
+{{/* Installing one lives here as well as in Settings. Somebody who has just
+     been sent a link to a station is on this page, not three levels into
+     Settings, and telling them where to go instead is a step that buys nothing.
+     It is the same two steps either way: fetched once, read, and shown for
+     approval before a byte of it is stored. */}}
+{{if .IsAdmin}}
+<form method="post" action="/settings/stations/fetch" class="card mb-8 max-w-3xl space-y-3 p-4">
+  <label class="label mb-0!" for="station-url">Install another</label>
+  <div class="flex flex-wrap items-center gap-2">
+    <input id="station-url" name="source_url" type="url" required
+           class="input mono min-w-0 flex-1"
+           placeholder="https://raw.githubusercontent.com/you/station/main/station.yaml">
+    <button type="submit" class="btn px-4 py-2">{{template "icon_download"}}Fetch and read</button>
+    <a href="/settings/stations" class="btn px-4 py-2">{{template "icon_pencil"}}Write or paste one</a>
+  </div>
+  <p class="help mt-0!">
+    Fetched once, now, and shown to you before anything is stored: a station is a program this
+    server will run, and nothing re-fetches on its own.
+  </p>
+</form>
+{{end}}
+
 {{if .Stations}}
-<div class="grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-  {{range .Stations}}
-  <a href="/stations/{{.ID}}/deploy"
-     class="station-card card block p-4 transition-colors hover:border-[var(--border-strong)]">
-    <div class="flex items-start gap-2.5">
-      {{if .UI.Theme.Icon}}<img src="{{.UI.Theme.Icon}}" alt="" class="station-icon" aria-hidden="true">
-      {{else}}<span class="station-icon-fallback" aria-hidden="true">{{template "icon_station"}}</span>{{end}}
-      <div class="min-w-0">
-        <p class="text-sm font-medium">{{.Name}}</p>
-        <p class="faint mt-0.5 text-xs">{{.Description}}</p>
-      </div>
-    </div>
-    <p class="faint mt-3 flex items-center gap-2 text-xs">
-      <span class="chip">{{.Version}}</span>
-      {{with .Author}}by {{.}}{{end}}
-      {{if .Deploy.Params}}
-      <span class="ml-auto">{{len .Deploy.Params}} {{plural (len .Deploy.Params) "question" "questions"}}</span>
-      {{end}}
-    </p>
-  </a>
-  {{end}}
-</div>
+{{template "stations_lists" .}}
 {{else}}
 <div class="empty max-w-3xl p-8 text-center">
   <p class="text-sm">No station installed.</p>

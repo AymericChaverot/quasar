@@ -47,18 +47,26 @@ type Station struct {
 	PendingYAML string
 	PendingHash string
 
-	Enabled   bool
+	Enabled bool
+
+	// Favorite lifts a station to its own list at the top of the Stations
+	// page. It belongs to the install rather than to the account reading it:
+	// stations are installed by an admin for the people who use this server,
+	// and the two or three that get deployed weekly are the same two or three
+	// whoever is looking.
+	Favorite bool
+
 	Position  int
 	UpdatedAt time.Time
 }
 
 const stationColumns = `id, station_id, name, source_url, yaml, perms_hash,
-	prev_yaml, pending_yaml, pending_hash, enabled, position, updated_at`
+	prev_yaml, pending_yaml, pending_hash, enabled, favorite, position, updated_at`
 
 func scanStation(row interface{ Scan(...any) error }) (*Station, error) {
 	var s Station
 	err := row.Scan(&s.ID, &s.StationID, &s.Name, &s.SourceURL, &s.YAML, &s.PermsHash,
-		&s.PrevYAML, &s.PendingYAML, &s.PendingHash, &s.Enabled, &s.Position, &s.UpdatedAt)
+		&s.PrevYAML, &s.PendingYAML, &s.PendingHash, &s.Enabled, &s.Favorite, &s.Position, &s.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -108,10 +116,10 @@ func InsertStation(db *sql.DB, s *Station) (int64, error) {
 	var last int
 	db.QueryRow("SELECT COALESCE(MAX(position), 0) FROM stations").Scan(&last)
 	res, err := db.Exec(`INSERT INTO stations
-		(station_id, name, source_url, yaml, perms_hash, prev_yaml, pending_yaml, pending_hash, enabled, position, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(station_id, name, source_url, yaml, perms_hash, prev_yaml, pending_yaml, pending_hash, enabled, favorite, position, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		s.StationID, s.Name, s.SourceURL, s.YAML, s.PermsHash,
-		s.PrevYAML, s.PendingYAML, s.PendingHash, s.Enabled, last+1, time.Now())
+		s.PrevYAML, s.PendingYAML, s.PendingHash, s.Enabled, s.Favorite, last+1, time.Now())
 	if err != nil {
 		return 0, err
 	}
@@ -150,6 +158,19 @@ func CountAppsForStation(db *sql.DB, stationID string) int {
 func SetStationEnabled(db *sql.DB, id int64, enabled bool) error {
 	_, err := db.Exec("UPDATE stations SET enabled = ? WHERE id = ?", enabled, id)
 	return err
+}
+
+// ToggleStationFavorite flips the star and reports where it landed. It flips
+// rather than being set, because the caller is a button that knows which
+// station it is on and has no business also knowing which way it was pointing.
+func ToggleStationFavorite(db *sql.DB, stationID string) (bool, error) {
+	if _, err := db.Exec(
+		"UPDATE stations SET favorite = NOT favorite WHERE station_id = ?", stationID); err != nil {
+		return false, err
+	}
+	var on bool
+	err := db.QueryRow("SELECT favorite FROM stations WHERE station_id = ?", stationID).Scan(&on)
+	return on, err
 }
 
 func DeleteStation(db *sql.DB, id int64) error {

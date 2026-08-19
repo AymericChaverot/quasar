@@ -265,6 +265,56 @@ func TestAStationsApplicationFoldsAwayTheMachinery(t *testing.T) {
 	}
 }
 
+// The two or three stations somebody deploys weekly are the same two or three
+// every week, and a starred one is lifted to its own list at the top — without
+// disappearing from the list of everything, which has to mean everything.
+func TestStarringAStationLiftsItWithoutLosingIt(t *testing.T) {
+	s := testServer(t)
+	demo := StationCard{Station: station.Station{ID: "demo", Name: "Demo", Version: "1.0.0"}}
+	other := StationCard{Station: station.Station{ID: "other", Name: "Other", Version: "1.0.0"},
+		Favorite: true}
+
+	var buf bytes.Buffer
+	err := s.pages["stations"].ExecuteTemplate(&buf, "stations_lists", map[string]any{
+		"Stations":  []StationCard{demo, other},
+		"Favorites": []StationCard{other},
+		"IsAdmin":   true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := html.UnescapeString(buf.String())
+
+	for _, want := range []string{
+		"Favourites (1)", // both lists carry their count
+		"All stations (2)",
+		"is-favorite",              // the starred card is marked as one
+		"/stations/demo/favorite",  // and every card can be starred
+		"/stations/other/favorite", // or unstarred
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the lists do not draw %q:\n%s", want, page)
+		}
+	}
+	// Starred and still listed under everything: a list that quietly lost
+	// entries as they were starred is one nobody would trust.
+	if n := strings.Count(page, "/stations/other/deploy"); n != 2 {
+		t.Errorf("the starred station appears %d times, want 2 (favourites and all)", n)
+	}
+
+	// A viewer cannot change what is installed, so they are not offered a star
+	// that would only answer 403.
+	buf.Reset()
+	if err := s.pages["stations"].ExecuteTemplate(&buf, "stations_lists", map[string]any{
+		"Stations": []StationCard{demo}, "IsAdmin": false,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "station-star") {
+		t.Error("a viewer is offered a star they cannot set")
+	}
+}
+
 // The block refreshes itself. Reloading the page throws away the tab somebody
 // was on and the place they had scrolled to, which is a lot to pay for one
 // number — and the author's name belongs at the foot of their own work.

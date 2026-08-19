@@ -263,6 +263,9 @@ func (s *Server) routes() {
 	// than mixed into the catalogue: one is software to browse, the other is a
 	// program somebody wrote for you.
 	s.viewer("GET /stations", s.handleStationsPage)
+	// Starring one lifts it to its own list at the top. The star belongs to the
+	// install rather than to whoever is looking, so setting it is an admin's.
+	s.admin("POST /stations/{id}/favorite", s.handleStationFavorite)
 	// Installing a station is its own page, not the new-application form with
 	// a station in it: somebody else has already answered everything that form
 	// asks, and the only questions left are the station's own.
