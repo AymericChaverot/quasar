@@ -14,7 +14,8 @@
      It is the same two steps either way: fetched once, read, and shown for
      approval before a byte of it is stored. */}}
 {{if .IsAdmin}}
-<form method="post" action="/settings/stations/fetch" class="card mb-8 max-w-3xl space-y-3 p-4">
+<form id="station-import" method="post" action="/settings/stations/fetch"
+      class="card mb-8 max-w-3xl space-y-3 p-4">
   <label class="label mb-0!" for="station-url">Install another</label>
   <div class="flex flex-wrap items-center gap-2">
     <input id="station-url" name="source_url" type="url" required
@@ -28,6 +29,24 @@
     server will run, and nothing re-fetches on its own.
   </p>
 </form>
+<script>
+  // With an address in the field there is one obvious next thing to do, and the
+  // button says so by becoming the primary one. Empty, it is a button beside
+  // another button and neither has any business shouting.
+  (function () {
+    const form = document.getElementById("station-import");
+    if (!form) return;
+    const url = form.querySelector('input[name="source_url"]');
+    const go = form.querySelector('button[type="submit"]');
+    function sync() {
+      const ready = url.value.trim() !== "";
+      go.classList.toggle("btn-primary", ready);
+      go.classList.toggle("btn", !ready);
+    }
+    url.addEventListener("input", sync);
+    sync();
+  })();
+</script>
 {{end}}
 
 {{if .Stations}}

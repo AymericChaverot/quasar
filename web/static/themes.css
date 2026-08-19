@@ -2572,6 +2572,31 @@ button[disabled] { cursor: progress; opacity: 0.65; }
   inset: 0;
 }
 
+/* The mark as the card's ground: large, tilted off square so it reads as a
+   printed device rather than as an icon somebody forgot to shrink, and faint
+   enough that the words in front of it are never competing with it. */
+.station-card-glyph {
+  position: absolute;
+  right: -1.75rem;
+  top: 50%;
+  color: var(--accent);
+  opacity: 0.06;
+  transform: translateY(-50%) rotate(-12deg);
+  pointer-events: none;
+}
+/* Centred on the card's own middle rather than tucked into a corner, and run
+   off the right-hand edge rather than fitted inside it: the silhouette is wide
+   and shallow, a card is wide and shallow, and one that stopped short of the
+   border would read as a picture placed on the card instead of as the ground
+   the card is printed on. The stroke thins as the drawing grows, for the same
+   reason a rule drawn at a hundred pixels is not the same rule drawn at
+   fourteen. */
+.station-card-glyph svg {
+  width: 9rem;
+  height: 9rem;
+  stroke-width: 1;
+}
+
 /* Out of the way until it is wanted, and permanent once it has been used. A
    control that is always visible on every card is a column of grey stars down
    a page nobody asked to be about starring. */
@@ -2612,12 +2637,18 @@ button[disabled] { cursor: progress; opacity: 0.65; }
   position: absolute;
   top: 0;
   left: 0;
-  width: 7rem;
-  height: 7rem;
-  transform: translate(-30%, -30%);
+  /* Further off the left edge than the top: it is a glow leaking in from
+     outside the card, and one centred on the corner reads as a badge stuck
+     there. Wide and soft, with the falloff carrying most of the way across it,
+     so what lands on the card is a wash rather than a disc with an edge. */
+  width: 10rem;
+  height: 10rem;
+  transform: translate(-58%, -30%);
   border-radius: 999px;
   background: radial-gradient(circle,
-    color-mix(in srgb, var(--star) 26%, transparent) 0%, transparent 70%);
+    color-mix(in srgb, var(--star) 17%, transparent) 0%,
+    color-mix(in srgb, var(--star) 9%, transparent) 38%,
+    transparent 76%);
   opacity: 0;
   pointer-events: none;
   transition: opacity 220ms ease-in-out;
