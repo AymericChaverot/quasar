@@ -229,8 +229,8 @@ func (c *Client) writeAdaptedCompose(a *db.App) error {
 	if err != nil || !rep.Adapted() {
 		// A file that cannot be parsed is not this function's to report: `up`
 		// fails on it straight away and says where, in compose's own words.
-		os.Remove(out)
-		return nil //nolint:nilerr // `up` reports an unparseable file, in compose's own words
+		_ = os.Remove(out) // no adapted file is the intended state here
+		return nil         //nolint:nilerr // `up` reports an unparseable file, in compose's own words
 	}
 	header := fmt.Sprintf(adaptedHeader, filepath.Base(src), c.network)
 	return os.WriteFile(out, append([]byte(header), body...), 0o644)

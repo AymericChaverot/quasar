@@ -60,7 +60,9 @@ func (c *Client) RunCommand(ctx context.Context, a *db.App, command string) (str
 	defer resp.Close()
 
 	var buf bytes.Buffer
-	stdcopy.StdCopy(&buf, &buf, resp.Reader)
+	// A demultiplexing error leaves whatever arrived in buf, and the exit code
+	// read below is what decides whether the command worked.
+	_, _ = stdcopy.StdCopy(&buf, &buf, resp.Reader)
 
 	inspect, err := c.api.ContainerExecInspect(ctx, exec.ID)
 	if err != nil {
@@ -156,7 +158,9 @@ func (c *Client) InteractiveShell(ctx context.Context, a *db.App) (types.Hijacke
 }
 
 func (c *Client) ResizeShell(ctx context.Context, execID string, rows, cols uint) {
-	c.api.ContainerExecResize(ctx, execID, container.ResizeOptions{Height: rows, Width: cols})
+	// A resize the daemon refuses leaves the terminal at its old size, which
+	// is a cosmetic problem in a window the user is already looking at.
+	_ = c.api.ContainerExecResize(ctx, execID, container.ResizeOptions{Height: rows, Width: cols})
 }
 
 // HealthURL is the in-network URL probed by the health checker (the dashboard

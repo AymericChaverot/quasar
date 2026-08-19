@@ -46,7 +46,7 @@ func Run(database *sql.DB, k *secrets.Keyring, appsDir, dir string, dump Dump) (
 
 	// VACUUM INTO produces a consistent snapshot even while the DB is in use.
 	snap := filepath.Join(dir, ".db-snapshot.sqlite")
-	os.Remove(snap)
+	_ = os.Remove(snap) // absent is the normal case; VACUUM INTO refuses an existing file
 	if _, err := database.Exec("VACUUM INTO ?", snap); err != nil {
 		return "", fmt.Errorf("sqlite snapshot: %w", err)
 	}
@@ -61,11 +61,15 @@ func Run(database *sql.DB, k *secrets.Keyring, appsDir, dir string, dump Dump) (
 	gz := gzip.NewWriter(f)
 	tw := tar.NewWriter(gz)
 
+	// fail unwinds a half-written archive. Every close and the unlink are
+	// discarded on purpose: the error being handed back is the one that
+	// explains the failure, and a complaint about tidying up on top of it
+	// would only bury it.
 	fail := func(err error) (string, error) {
-		tw.Close()
-		gz.Close()
-		f.Close()
-		os.Remove(path)
+		_ = tw.Close()
+		_ = gz.Close()
+		_ = f.Close()
+		_ = os.Remove(path)
 		return "", err
 	}
 
@@ -227,7 +231,11 @@ func applyRetention(database *sql.DB, dir string) {
 	}
 	backups := List(dir)
 	for i := keep; i < len(backups); i++ {
-		os.Remove(filepath.Join(dir, backups[i].Name))
+		// A backup that will not delete means retention is quietly not being
+		// applied, which is how a disk fills up without anyone noticing.
+		if err := os.Remove(filepath.Join(dir, backups[i].Name)); err != nil {
+			log.Printf("backup: retiring %s: %v", backups[i].Name, err)
+		}
 	}
 }
 

@@ -128,7 +128,10 @@ func (c *Client) WriteEnvFile(a *db.App) error {
 // AppDirSize sums the on-disk size of an app's directory.
 func (c *Client) AppDirSize(appID string) int64 {
 	var size int64
-	filepath.Walk(c.AppDir(appID), func(_ string, info os.FileInfo, err error) error {
+	// Errors are absorbed by the callback below, so the size is a best effort
+	// by construction: an unreadable entry contributes nothing rather than
+	// failing a page that is only showing a number.
+	_ = filepath.Walk(c.AppDir(appID), func(_ string, info os.FileInfo, err error) error {
 		if err == nil && !info.IsDir() {
 			size += info.Size()
 		}

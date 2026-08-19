@@ -139,14 +139,22 @@ func (c *Client) ExecInService(ctx context.Context, a *db.App, service string, a
 	defer resp.Close()
 
 	if stdin != "" {
-		io.WriteString(resp.Conn, stdin)
-		resp.CloseWrite()
+		if _, err := io.WriteString(resp.Conn, stdin); err != nil {
+			return ExecResult{}, fmt.Errorf("exec stdin: %w", err)
+		}
+		// Without the half-close the command waits on input that is never
+		// coming, and the call burns its whole budget doing nothing.
+		if err := resp.CloseWrite(); err != nil {
+			return ExecResult{}, fmt.Errorf("exec stdin close: %w", err)
+		}
 	}
 
 	// One byte past the cap on each stream, which is the only way to tell
 	// output that exactly fills it from output that overran.
 	var stdout, stderr bytes.Buffer
-	stdcopy.StdCopy(
+	// Whatever arrived is kept: the exit code read below is what says whether
+	// the command worked, and a truncated stream is still worth showing.
+	_, _ = stdcopy.StdCopy(
 		&limitedBuffer{buf: &stdout, left: MaxExecOutput + 1},
 		&limitedBuffer{buf: &stderr, left: MaxExecOutput + 1},
 		resp.Reader)
@@ -192,7 +200,9 @@ func (c *Client) TailLogs(ctx context.Context, a *db.App, service string, tail i
 
 	var buf bytes.Buffer
 	w := &limitedBuffer{buf: &buf, left: MaxExecOutput}
-	stdcopy.StdCopy(w, w, rc)
+	// A stream that broke mid-read still leaves usable output, and returning
+	// nothing over a partial read helps nobody reading a log pane.
+	_, _ = stdcopy.StdCopy(w, w, rc)
 	return buf.String(), nil
 }
 

@@ -182,7 +182,9 @@ func (c *Client) Restart(ctx context.Context, a *db.App) error {
 // Remove tears down the app's containers and deletes its directory on disk.
 func (c *Client) Remove(ctx context.Context, a *db.App) error {
 	if c.UsesCompose(a) {
-		c.compose(ctx, a, "down", "--volumes") // best effort
+		// Best effort: the container sweep below is what actually guarantees
+		// the app is gone, and it runs whether or not compose cooperated.
+		_ = c.compose(ctx, a, "down", "--volumes")
 	}
 	// Both sets, whichever way the app is deployed today: an interrupted deploy
 	// can leave a replacement container behind, and a git app built the other
@@ -198,7 +200,9 @@ func (c *Client) Remove(ctx context.Context, a *db.App) error {
 }
 
 func (c *Client) removeContainer(ctx context.Context, name string) {
-	c.api.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
+	// A container that has already gone reports "no such container", which is
+	// the outcome this was asking for.
+	_ = c.api.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
 }
 
 func humanDuration(d time.Duration) string {
