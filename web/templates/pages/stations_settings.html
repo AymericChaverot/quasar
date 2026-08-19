@@ -55,14 +55,7 @@
           answer is not to install it.
         </p>
         {{if .Grants}}
-        <ul class="mt-2 space-y-2">
-          {{range .Grants}}
-          <li class="text-sm">
-            <span class="{{if .Strong}}font-medium{{end}}">{{.Title}}</span>
-            {{with .Detail}}<span class="faint mono block text-xs">{{.}}</span>{{end}}
-          </li>
-          {{end}}
-        </ul>
+        <div class="mt-2">{{template "grant_list" .Grants}}</div>
         {{else}}
         <p class="help mt-2!">
           Nothing. It can compute and return values, and reach nothing else on this server.
@@ -156,14 +149,7 @@
           running {{.Doc.Version}}.
         </p>
         <p class="h-label mt-3">It would additionally be allowed to</p>
-        <ul class="mt-2 space-y-2">
-          {{range .PendingGrants}}{{if .Added}}
-          <li class="text-sm">
-            <span class="{{if .Strong}}font-medium{{end}}">{{.Title}}</span>
-            {{with .Detail}}<span class="faint mono block text-xs">{{.}}</span>{{end}}
-          </li>
-          {{end}}{{end}}
-        </ul>
+        <div class="mt-2">{{template "grant_list_added" .PendingGrants}}</div>
         {{with .PendingDropped}}
         <p class="h-label mt-3">And would give up</p>
         <ul class="mt-2 space-y-1">
@@ -189,13 +175,7 @@
       {{if .Grants}}
       <div>
         <p class="h-label">Allowed to</p>
-        <ul class="mt-2 space-y-1">
-          {{range .Grants}}
-          <li class="text-xs">
-            {{.Title}}{{with .Detail}} <span class="faint mono">{{.}}</span>{{end}}
-          </li>
-          {{end}}
-        </ul>
+        <div class="mt-2">{{template "grant_list" .Grants}}</div>
       </div>
       {{else}}
       <p class="help mt-0!">Allowed nothing: it can compute and return values, and reach nothing else.</p>

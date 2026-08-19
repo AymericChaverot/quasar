@@ -31,6 +31,17 @@ type Grant struct {
 	// that something.
 	Detail string
 
+	// Icon names the mark drawn in front of the title. It is a name rather
+	// than a drawing because this package has no business knowing what an SVG
+	// is; the page maps it to one of Quasar's own icons.
+	//
+	// A list of eight sentences all beginning "Read" and "Change" is a list
+	// nobody reads to the end, and this is a screen whose entire purpose is
+	// being read. A shape per kind — a terminal, a folder, a key, a globe —
+	// is what turns it into something somebody can take in at a glance and
+	// then read the one line that surprised them.
+	Icon string
+
 	// Strong marks the two an operator should look at twice: running commands
 	// in the container is root on it by design, and reaching the internet is
 	// an exfiltration channel with their signature on it.
@@ -78,42 +89,43 @@ func (p Permissions) Granted() bool { return len(p.Summary()) > 0 }
 // reach, and what it can do to the application.
 func (p Permissions) Summary() []Grant {
 	var out []Grant
-	add := func(strong bool, title, detail string) {
-		out = append(out, Grant{Title: title, Detail: detail, Strong: strong})
+	add := func(strong bool, icon, title, detail string) {
+		out = append(out, Grant{Title: title, Detail: detail, Icon: icon, Strong: strong})
 	}
 	list := func(v []string) string { return strings.Join(v, ", ") }
 
 	if len(p.Exec.Services) > 0 {
-		add(true, "Run any command inside the container", list(p.Exec.Services))
+		add(true, "exec", "Run any command inside the container", list(p.Exec.Services))
 	}
 	if len(p.Logs.Services) > 0 {
-		add(false, "Read the container's logs", list(p.Logs.Services))
+		add(false, "logs", "Read the container's logs", list(p.Logs.Services))
 	}
 	if len(p.Files.Paths) > 0 {
-		add(false, "Read and change files under the application's own folder", list(p.Files.Paths))
+		add(false, "files", "Read and change files under the application's own folder", list(p.Files.Paths))
 	}
 	if len(p.Env.Read) > 0 {
-		add(false, "Read these environment values", list(p.Env.Read))
+		add(false, "env_read", "Read these environment values", list(p.Env.Read))
 	}
 	if len(p.Env.Write) > 0 {
-		add(false, "Change these environment values", list(p.Env.Write))
+		add(false, "env_write", "Change these environment values", list(p.Env.Write))
 	}
 	if len(p.NetInternal.Services) > 0 {
 		ports := make([]string, len(p.NetInternal.Ports))
 		for i, n := range p.NetInternal.Ports {
 			ports[i] = strconv.Itoa(n)
 		}
-		add(false, "Talk to its own containers, on this server only",
+		add(false, "net_internal", "Talk to its own containers, on this server only",
 			fmt.Sprintf("%s on %s", list(p.NetInternal.Services), list(ports)))
 	}
 	if len(p.NetExternal.Allow) > 0 {
-		add(true, "Reach these addresses over the internet, and no others", list(p.NetExternal.Allow))
+		add(true, "net_external", "Reach these addresses over the internet, and no others",
+			list(p.NetExternal.Allow))
 	}
 	if len(p.Lifecycle) > 0 {
-		add(false, "Start, stop and redeploy this application", list(p.Lifecycle))
+		add(false, "lifecycle", "Start, stop and redeploy this application", list(p.Lifecycle))
 	}
 	if p.Notify {
-		add(false, "Send messages to your notification webhook", "")
+		add(false, "notify", "Send messages to your notification webhook", "")
 	}
 	return out
 }

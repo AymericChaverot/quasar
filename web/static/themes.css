@@ -2506,6 +2506,31 @@ button[disabled] { cursor: progress; opacity: 0.65; }
 }
 .station-body { margin-top: auto; }
 
+/* What a station is allowed to do, on the one screen whose whole purpose is
+   being read. The shape in front of each line is what makes eight sentences
+   scannable; the two worth a second look wear the warning colour, because a
+   glance should land on them before it lands anywhere else. */
+.grant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+.grant {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  font-size: 0.875rem;
+}
+.grant-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 0.0625rem;
+  color: var(--text-muted);
+}
+.grant-icon svg { width: 1rem; height: 1rem; }
+.grant.is-strong .grant-icon { color: var(--warn); }
+.grant.is-strong .grant-title { font-weight: 500; }
+
 /* Gold is gold on every theme. It is not a palette token because no theme gets
    to reinterpret it: a star that came out green on Nebula and blue on Nord
    would stop reading as a star. */

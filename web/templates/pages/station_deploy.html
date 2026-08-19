@@ -65,14 +65,7 @@
     <h2 class="h-label">What it is allowed to do on this server</h2>
     <div class="card p-4">
       {{if .Grants}}
-      <ul class="space-y-2">
-        {{range .Grants}}
-        <li class="text-sm">
-          <span class="{{if .Strong}}font-medium{{end}}">{{.Title}}</span>
-          {{with .Detail}}<span class="faint mono block text-xs">{{.}}</span>{{end}}
-        </li>
-        {{end}}
-      </ul>
+      {{template "grant_list" .Grants}}
       <p class="help">
         These were declared by whoever wrote the station and accepted when it was installed.
         They are not chosen per application: a revision that asks for anything more is held
