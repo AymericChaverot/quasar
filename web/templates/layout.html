@@ -83,6 +83,8 @@
   <main class="mx-auto max-w-6xl px-6 py-8">
     {{template "content" .}}
   </main>
+  {{/* Asks the question a data-confirm carries, for every destructive form. */}}
+  <script src="/static/js/confirm.js" defer></script>
   {{/* Pins every shimmer to the document clock so a polled panel does not
        restart its animation on each swap. See the file for why. */}}
   <script src="/static/js/motion.js" defer></script>

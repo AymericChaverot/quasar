@@ -172,7 +172,7 @@
             <button type="submit" class="btn py-1! text-xs">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
           </form>
           <form method="post" action="/settings/stations/{{.ID}}/delete"
-                onsubmit="return confirm('Remove this station? Applications deployed from it keep running, without its tabs.')">
+                data-confirm="Remove this station? Applications deployed from it keep running, without its tabs.">
             <button type="submit" class="btn-danger py-1! text-xs">{{template "icon_trash"}}Remove</button>
           </form>
         </div>

@@ -67,7 +67,7 @@
     {{with .Traefik}}
     {{if and .IsAdmin .Available (not .Busy)}}
     <form method="post" action="/system/traefik/update" class="shrink-0"
-          onsubmit="return confirm('Update Traefik to {{.Tested}}? The router restarts, so every site — including this dashboard — is unavailable for a few seconds. If the new version will not start, Quasar puts the current one back.')">
+          data-confirm="Update Traefik to {{.Tested}}? The router restarts, so every site — including this dashboard — is unavailable for a few seconds. If the new version will not start, Quasar puts the current one back.">
       <button type="submit" class="btn py-1! text-xs">{{template "icon_deploy"}}Update to {{.Tested}}</button>
     </form>
     {{end}}

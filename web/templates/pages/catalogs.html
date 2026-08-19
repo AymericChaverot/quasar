@@ -54,7 +54,7 @@
             <button type="submit" class="btn py-1! text-xs">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
           </form>
           <form method="post" action="/settings/catalogs/{{.ID}}/delete"
-                onsubmit="return confirm('Delete this catalogue? Its entries leave the new-application page. Applications already deployed from them are unaffected.')">
+                data-confirm="Delete this catalogue? Its entries leave the new-application page. Applications already deployed from them are unaffected.">
             <button type="submit" class="btn-danger py-1! text-xs">{{template "icon_trash"}}Delete</button>
           </form>
         </div>

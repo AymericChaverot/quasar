@@ -278,22 +278,19 @@
     <p class="text-sm font-medium">That did not work</p>
     <p class="mono mt-1 text-xs">{{.Error}}</p>
   </div>
-  <button type="button" class="station-toast-close" aria-label="Dismiss"
-          onclick="this.closest('.station-toast').remove()">&times;</button>
+  <button type="button" class="station-toast-close" aria-label="Dismiss">&times;</button>
 </div>
 {{else if .Warn}}
 <div class="station-toast station-toast-warn" role="status" data-toast-life="9000">
   <span class="station-toast-icon" aria-hidden="true">{{template "icon_alert_triangle"}}</span>
   <span class="min-w-0 flex-1 text-sm">{{.Warn}}</span>
-  <button type="button" class="station-toast-close" aria-label="Dismiss"
-          onclick="this.closest('.station-toast').remove()">&times;</button>
+  <button type="button" class="station-toast-close" aria-label="Dismiss">&times;</button>
 </div>
 {{else if .Toast}}
 <div class="station-toast station-toast-ok" role="status" data-toast-life="6000">
   <span class="station-toast-icon" aria-hidden="true">{{template "icon_check_circle"}}</span>
   <span class="min-w-0 flex-1 text-sm">{{.Toast}}</span>
-  <button type="button" class="station-toast-close" aria-label="Dismiss"
-          onclick="this.closest('.station-toast').remove()">&times;</button>
+  <button type="button" class="station-toast-close" aria-label="Dismiss">&times;</button>
 </div>
 {{end}}
 {{end}}

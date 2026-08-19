@@ -71,7 +71,7 @@
          button. The whole scan is still what an untouched form submits. */}}
     <form method="post" action="/system/cleanup" data-sweep
           data-total="{{.Bytes}}" data-count="{{.Count}}"
-          onsubmit="return confirm(this.dataset.confirm || 'Remove {{.Count}} unused {{plural .Count "object" "objects"}}? Applications, their images and the last few rollback builds are left untouched.')">
+          data-confirm="Remove {{.Count}} unused {{plural .Count "object" "objects"}}? Applications, their images and the last few rollback builds are left untouched.">
       {{range .Items}}{{template "cleanup_row" (dict "Row" . "IsAdmin" true)}}{{end}}
 
       {{/* A volume is the one thing here that cannot be pulled or rebuilt

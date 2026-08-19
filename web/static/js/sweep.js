@@ -24,7 +24,7 @@
     var scope = form.querySelector("[data-sweep-scope]");
     var button = form.querySelector('button[type="submit"]');
     var volumes = form.querySelector('input[name="volumes"]');
-    var whole = { label: label.textContent, scope: scope.textContent };
+    var whole = { label: label.textContent, scope: scope.textContent, confirm: form.dataset.confirm };
     var busy = false;
 
     // How many objects the current ticks add up to. A category ticked whole
@@ -58,7 +58,7 @@
       if (n === 0) {
         label.textContent = whole.label;
         scope.textContent = whole.scope;
-        form.dataset.confirm = "";
+        form.dataset.confirm = whole.confirm;
         return;
       }
       var objects = n + (n === 1 ? " object" : " objects");

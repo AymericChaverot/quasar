@@ -210,15 +210,15 @@
             <td class="flex items-center gap-2">
               <a href="/system/backups/{{.Name}}" class="btn py-1! text-xs">Download</a>
               <form method="post" action="/system/backups/{{.Name}}/restore" enctype="multipart/form-data"
-                    onsubmit="return confirm('Restore this backup? Current app configuration and data will be overwritten; redeploy applications afterwards.')">
+                    data-confirm="Restore this backup? Current app configuration and data will be overwritten; redeploy applications afterwards.">
                 <label class="btn py-1! cursor-pointer text-xs" title="Only needed for an archive from another server: its master.key file">
                   Key…
-                  <input type="file" name="master_key" class="hidden" onchange="this.form.querySelector('[data-restore]').textContent = this.files.length ? 'Restore with key' : 'Restore'">
+                  <input type="file" name="master_key" class="hidden">
                 </label>
                 <button type="submit" data-restore class="btn py-1! text-xs">Restore</button>
               </form>
               <form method="post" action="/system/backups/{{.Name}}/delete"
-                    onsubmit="return confirm('Delete this backup?')">
+                    data-confirm="Delete this backup?">
                 <button type="submit" class="btn-danger py-1! text-xs">Delete</button>
               </form>
             </td>
@@ -239,4 +239,6 @@
 {{/* The cleanup card is a partial htmx swaps in, so its wiring is loaded here,
      once, and binds again after each swap. */}}
 <script src="/static/js/sweep.js" defer></script>
+{{/* The restore button, which says whether a master key was chosen. */}}
+<script src="/static/js/backups.js" defer></script>
 {{end}}

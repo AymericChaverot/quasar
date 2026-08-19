@@ -61,4 +61,12 @@
   document.body.addEventListener("htmx:afterSwap", (e) => {
     if (e.target === toasts) arm();
   });
+
+  // Dismissing one. Delegated, because every toast in here arrived from the
+  // server after this ran, and a listener per button would have to be hung on
+  // each of them as it landed.
+  toasts.addEventListener("click", (e) => {
+    const close = e.target.closest(".station-toast-close");
+    if (close) close.closest(".station-toast").remove();
+  });
 })();
