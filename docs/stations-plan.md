@@ -94,7 +94,7 @@ the whole state machine, and a station with a hundred revisions is not a problem
 anyone has.
 
 Files: `internal/db/stations.go`, a line in `internal/db/db.go`,
-`internal/server/handlers_stations.go`,
+`internal/server/station_pages.go`, `internal/server/station_install.go`,
 `web/templates/pages/stations_settings.html`.
 
 Tests: importing a duplicate `station_id` is refused and names the holder; a
@@ -132,7 +132,7 @@ manager once for three servers.
 application. It has no custom interface yet, but everything catalogue-shaped
 works, and every remaining step only adds to a page that already renders.
 
-Files: `internal/server/handlers_stations.go`,
+Files: `internal/server/station_pages.go`, `internal/server/station_views.go`,
 `web/templates/pages/stations.html`, `internal/db/apps.go`.
 
 > `Deploy an application from a station`
@@ -254,7 +254,7 @@ already does.
 
 **Milestone.** This is the feature. Everything after it is enrichment.
 
-Files: `internal/server/handlers_station_ui.go`,
+Files: `internal/server/station_ui.go`,
 `internal/station/ui/{schema,render}.go`,
 `web/templates/partials/station_*.html`, a block in `app_detail.html`.
 
