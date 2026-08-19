@@ -197,7 +197,10 @@ func (s *Server) handleRegistryDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad id", http.StatusBadRequest)
 		return
 	}
-	db.DeleteRegistry(s.db, id)
+	if err := db.DeleteRegistry(s.db, id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	s.audit(r, "registry.delete", strconv.FormatInt(id, 10), "")
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
@@ -206,7 +209,17 @@ func (s *Server) handleRegistryDelete(w http.ResponseWriter, r *http.Request) {
 // Git credentials moved to their own page once one token per forge became the
 // point; see handlers_git.go.
 func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) {
-	db.SetSetting(s.db, db.SettingNotifyURL, strings.TrimSpace(r.FormValue("notify_url")))
+	// The form is saved key by key, but it is one action to the operator: if
+	// any key failed, saying "saved" would be a lie, and the first failure is
+	// the one worth showing — the rest are the same locked database twice.
+	var failed error
+	save := func(key, value string) {
+		if err := db.SetSetting(s.db, key, value); err != nil && failed == nil {
+			failed = err
+		}
+	}
+
+	save(db.SettingNotifyURL, strings.TrimSpace(r.FormValue("notify_url")))
 
 	// Thresholds are stored as typed, so an unparseable or out-of-range value
 	// is dropped rather than silently disabling the alert (0 means "off").
@@ -220,26 +233,30 @@ func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) 
 			continue
 		}
 		if v, err := strconv.Atoi(raw); err == nil && v >= 0 && v <= 100 {
-			db.SetSetting(s.db, key, strconv.Itoa(v))
+			save(key, strconv.Itoa(v))
 		}
 	}
-	db.SetSetting(s.db, db.SettingNtfyURL, strings.TrimSpace(r.FormValue("ntfy_url")))
-	db.SetSetting(s.db, db.SettingSMTPHost, strings.TrimSpace(r.FormValue("smtp_host")))
-	db.SetSetting(s.db, db.SettingSMTPFrom, strings.TrimSpace(r.FormValue("smtp_from")))
-	db.SetSetting(s.db, db.SettingSMTPTo, strings.TrimSpace(r.FormValue("smtp_to")))
-	db.SetSetting(s.db, db.SettingSMTPUser, strings.TrimSpace(r.FormValue("smtp_user")))
+	save(db.SettingNtfyURL, strings.TrimSpace(r.FormValue("ntfy_url")))
+	save(db.SettingSMTPHost, strings.TrimSpace(r.FormValue("smtp_host")))
+	save(db.SettingSMTPFrom, strings.TrimSpace(r.FormValue("smtp_from")))
+	save(db.SettingSMTPTo, strings.TrimSpace(r.FormValue("smtp_to")))
+	save(db.SettingSMTPUser, strings.TrimSpace(r.FormValue("smtp_user")))
 	if port := strings.TrimSpace(r.FormValue("smtp_port")); port != "" {
 		if v, err := strconv.Atoi(port); err == nil && v > 0 && v <= 65535 {
-			db.SetSetting(s.db, db.SettingSMTPPort, strconv.Itoa(v))
+			save(db.SettingSMTPPort, strconv.Itoa(v))
 		}
 	}
 	// Blank means "keep the stored password", so saving the rest of the form
 	// does not silently wipe a credential the field never displays.
 	if pw := r.FormValue("smtp_password"); pw != "" {
-		db.SetSetting(s.db, db.SettingSMTPPassword, pw)
+		save(db.SettingSMTPPassword, pw)
 	}
 	if r.FormValue("clear_smtp_password") == "on" {
-		db.SetSetting(s.db, db.SettingSMTPPassword, "")
+		save(db.SettingSMTPPassword, "")
+	}
+	if failed != nil {
+		http.Error(w, failed.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	// No values in the detail: this form carries a git access token and an SMTP
@@ -248,8 +265,6 @@ func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
-// handleNotifyTest sends a probe through every configured channel. A webhook
-// that has quietly been broken for weeks is indistinguishable from a healthy
 // platform, so this is the only way to know delivery works.
 func (s *Server) handleNotifyTest(w http.ResponseWriter, r *http.Request) {
 	s.audit(r, "notify.test", "", "")

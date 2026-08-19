@@ -64,7 +64,9 @@ func GetCatalog(db *sql.DB, id int64) *Catalog {
 // returns its ID.
 func InsertCatalog(db *sql.DB, c *Catalog) (int64, error) {
 	var last int
-	db.QueryRow("SELECT COALESCE(MAX(position), 0) FROM catalogs").Scan(&last)
+	if err := db.QueryRow("SELECT COALESCE(MAX(position), 0) FROM catalogs").Scan(&last); err != nil {
+		return 0, err
+	}
 	res, err := db.Exec(`INSERT INTO catalogs (name, source_url, yaml, enabled, position, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?)`, c.Name, c.SourceURL, c.YAML, c.Enabled, last+1, time.Now())
 	if err != nil {

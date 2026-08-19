@@ -115,7 +115,9 @@ func GetStationByStationID(db *sql.DB, stationID string) *Station {
 // InsertStation stores a newly approved station at the end of the list.
 func InsertStation(db *sql.DB, s *Station) (int64, error) {
 	var last int
-	db.QueryRow("SELECT COALESCE(MAX(position), 0) FROM stations").Scan(&last)
+	if err := db.QueryRow("SELECT COALESCE(MAX(position), 0) FROM stations").Scan(&last); err != nil {
+		return 0, err
+	}
 	res, err := db.Exec(`INSERT INTO stations
 		(station_id, name, source_url, yaml, perms_hash, prev_yaml, pending_yaml, pending_hash, enabled, favorite, position, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -144,7 +146,9 @@ func UpdateStation(db *sql.DB, s *Station) error {
 // business carrying a navigation entry for one.
 func CountEnabledStations(db *sql.DB) int {
 	var n int
-	db.QueryRow("SELECT COUNT(*) FROM stations WHERE enabled = 1").Scan(&n)
+	if err := db.QueryRow("SELECT COUNT(*) FROM stations WHERE enabled = 1").Scan(&n); err != nil {
+		return 0
+	}
 	return n
 }
 
@@ -152,7 +156,9 @@ func CountEnabledStations(db *sql.DB) int {
 // which is what makes removing one a decision rather than a click.
 func CountAppsForStation(db *sql.DB, stationID string) int {
 	var n int
-	db.QueryRow("SELECT COUNT(*) FROM apps WHERE station_id = ?", stationID).Scan(&n)
+	if err := db.QueryRow("SELECT COUNT(*) FROM apps WHERE station_id = ?", stationID).Scan(&n); err != nil {
+		return 0
+	}
 	return n
 }
 

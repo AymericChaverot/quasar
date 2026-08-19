@@ -151,15 +151,19 @@ func pushOffsite(database *sql.DB, k *secrets.Keyring, path, name string) {
 	if err != nil {
 		log.Printf("offsite upload of %s: %v", name, err)
 		notify.Send(database, fmt.Sprintf("Quasar: backup %s was written locally but the offsite upload FAILED: %v", name, err))
-		db.RecordAudit(database, db.AuditEntry{
+		if auditErr := db.RecordAudit(database, db.AuditEntry{
 			Actor: db.ActorSystem, Action: "offsite.failed", Target: name, Detail: err.Error(),
-		})
+		}); auditErr != nil {
+			log.Printf("audit: recording the failed offsite upload: %v", auditErr)
+		}
 		return
 	}
-	db.RecordAudit(database, db.AuditEntry{
+	if err := db.RecordAudit(database, db.AuditEntry{
 		Actor: db.ActorSystem, Action: "offsite.upload", Target: name,
 		Detail: cfg.Bucket,
-	})
+	}); err != nil {
+		log.Printf("audit: recording the offsite upload: %v", err)
+	}
 }
 
 // List returns existing backups, newest first.

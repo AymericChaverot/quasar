@@ -39,20 +39,22 @@ func DeleteTask(db *sql.DB, id int64) error {
 	return err
 }
 
-func DeleteTasksForApp(db *sql.DB, appID string) {
-	db.Exec("DELETE FROM tasks WHERE app_id = ?", appID)
+func DeleteTasksForApp(db *sql.DB, appID string) error {
+	_, err := db.Exec("DELETE FROM tasks WHERE app_id = ?", appID)
+	return err
 }
 
 func GetTask(db *sql.DB, id int64) (*Task, error) {
 	return scanTask(db.QueryRow("SELECT id, app_id, command, interval_minutes, last_run, last_status, last_output FROM tasks WHERE id = ?", id))
 }
 
-func RecordTaskRun(db *sql.DB, id int64, status, output string) {
+func RecordTaskRun(db *sql.DB, id int64, status, output string) error {
 	if len(output) > 8192 {
 		output = output[:8192] + "\n… (truncated)"
 	}
-	db.Exec("UPDATE tasks SET last_run = ?, last_status = ?, last_output = ? WHERE id = ?",
+	_, err := db.Exec("UPDATE tasks SET last_run = ?, last_status = ?, last_output = ? WHERE id = ?",
 		time.Now(), status, output, id)
+	return err
 }
 
 func scanTask(row interface{ Scan(...any) error }) (*Task, error) {

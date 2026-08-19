@@ -129,7 +129,10 @@ func (b *bridge) app(raw json.RawMessage) (*goja.Object, error) {
 			return nil, fmt.Errorf("the application this call is about is not readable: %w", err)
 		}
 	}
-	obj := b.vm.ToValue(fields).(*goja.Object)
+	obj, ok := b.vm.ToValue(fields).(*goja.Object)
+	if !ok {
+		return nil, fmt.Errorf("the application this call is about is not an object")
+	}
 
 	// The verbs, over the parent, which is where the list the operator
 	// accepted lives. setImage is spelled in JavaScript here and in snake_case
@@ -170,20 +173,33 @@ func (b *bridge) progress(pct float64, message string) goja.Value {
 	return goja.Undefined()
 }
 
+// set hangs one member off a namespace object.
+//
+// goja returns an error from Set only when the property refuses the write —
+// non-writable, or an object somebody sealed. Every object here was made by
+// the line above it and is neither, so there is no failure to report and no
+// station that could act on one. A panic says exactly that: if it ever fires,
+// the assumption changed, not the input.
+func set(obj *goja.Object, name string, value any) {
+	if err := obj.Set(name, value); err != nil {
+		panic(fmt.Sprintf("station bridge: %s refused the write: %v", name, err))
+	}
+}
+
 // store is the key–value space, over the pipe because that is where the disk
 // is.
 func (b *bridge) store() *goja.Object {
 	obj := b.vm.NewObject()
-	obj.Set("get", func(key string) goja.Value {
+	set(obj, "get", func(key string) goja.Value {
 		return b.ask("store.get", map[string]any{"key": key})
 	})
-	obj.Set("set", func(key string, value goja.Value) goja.Value {
+	set(obj, "set", func(key string, value goja.Value) goja.Value {
 		return b.ask("store.set", map[string]any{"key": key, "value": exported(value)})
 	})
-	obj.Set("delete", func(key string) goja.Value {
+	set(obj, "delete", func(key string) goja.Value {
 		return b.ask("store.delete", map[string]any{"key": key})
 	})
-	obj.Set("keys", func() goja.Value {
+	set(obj, "keys", func() goja.Value {
 		return b.ask("store.keys", map[string]any{})
 	})
 	return obj
@@ -193,12 +209,12 @@ func (b *bridge) store() *goja.Object {
 // parent to the globs the document declared.
 func (b *bridge) files() *goja.Object {
 	obj := b.vm.NewObject()
-	obj.Set("list", func(path string) goja.Value { return b.ask("files.list", pathArg(path)) })
-	obj.Set("read", func(path string) goja.Value { return b.ask("files.read", pathArg(path)) })
-	obj.Set("readBytes", func(path string) goja.Value { return b.ask("files.readBytes", pathArg(path)) })
-	obj.Set("delete", func(path string) goja.Value { return b.ask("files.delete", pathArg(path)) })
-	obj.Set("mkdir", func(path string) goja.Value { return b.ask("files.mkdir", pathArg(path)) })
-	obj.Set("write", func(path string, content goja.Value) goja.Value {
+	set(obj, "list", func(path string) goja.Value { return b.ask("files.list", pathArg(path)) })
+	set(obj, "read", func(path string) goja.Value { return b.ask("files.read", pathArg(path)) })
+	set(obj, "readBytes", func(path string) goja.Value { return b.ask("files.readBytes", pathArg(path)) })
+	set(obj, "delete", func(path string) goja.Value { return b.ask("files.delete", pathArg(path)) })
+	set(obj, "mkdir", func(path string) goja.Value { return b.ask("files.mkdir", pathArg(path)) })
+	set(obj, "write", func(path string, content goja.Value) goja.Value {
 		return b.ask("files.write", map[string]any{"path": path, "content": text(content)})
 	})
 	return obj
@@ -208,10 +224,10 @@ func (b *bridge) files() *goja.Object {
 // key at a time because that is how the permission is written.
 func (b *bridge) env() *goja.Object {
 	obj := b.vm.NewObject()
-	obj.Set("get", func(key string) goja.Value {
+	set(obj, "get", func(key string) goja.Value {
 		return b.ask("env.get", map[string]any{"key": key})
 	})
-	obj.Set("set", func(key string, value goja.Value) goja.Value {
+	set(obj, "set", func(key string, value goja.Value) goja.Value {
 		return b.ask("env.set", map[string]any{"key": key, "value": text(value)})
 	})
 	return obj
@@ -246,8 +262,8 @@ func text(v goja.Value) string {
 // http is the way out, over the parent, which is where the allowlist lives.
 func (b *bridge) http() *goja.Object {
 	obj := b.vm.NewObject()
-	obj.Set("get", func(url string, opts goja.Value) goja.Value { return b.request("http.get", url, opts) })
-	obj.Set("post", func(url string, opts goja.Value) goja.Value { return b.request("http.post", url, opts) })
+	set(obj, "get", func(url string, opts goja.Value) goja.Value { return b.request("http.get", url, opts) })
+	set(obj, "post", func(url string, opts goja.Value) goja.Value { return b.request("http.post", url, opts) })
 	return obj
 }
 
@@ -282,7 +298,7 @@ func (b *bridge) request(capability, url string, opts goja.Value) goja.Value {
 	if !ok {
 		return resp
 	}
-	obj.Set("json", func() goja.Value {
+	set(obj, "json", func() goja.Value {
 		body := obj.Get("body")
 		if body == nil || goja.IsUndefined(body) {
 			return goja.Undefined()

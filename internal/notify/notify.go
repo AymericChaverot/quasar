@@ -59,11 +59,13 @@ func Send(database *sql.DB, msg string) {
 	// operator already knows, and the audit trail is not a place to accumulate
 	// one entry per transient hiccup.
 	if sent == 0 && len(failures) > 0 {
-		db.RecordAudit(database, db.AuditEntry{
+		if err := db.RecordAudit(database, db.AuditEntry{
 			Actor:  db.ActorSystem,
 			Action: "notify.failed",
 			Detail: strings.Join(failures, "; "),
-		})
+		}); err != nil {
+			log.Printf("audit: recording the failed notification: %v", err)
+		}
 	}
 }
 

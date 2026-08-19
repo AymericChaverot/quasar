@@ -104,7 +104,9 @@ func checkHealth(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring
 			}
 
 			ok := probe(url)
-			db.RecordHealth(database, a.ID, ok)
+			if err := db.RecordHealth(database, a.ID, ok); err != nil {
+				log.Printf("monitor: recording the health of %s: %v", a.ID, err)
+			}
 			if ok {
 				continue
 			}
@@ -130,7 +132,7 @@ func probe(url string) bool {
 	if err != nil {
 		return false
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close() // the status code below is the whole answer
 	return resp.StatusCode < 400
 }
 
@@ -141,7 +143,9 @@ func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyri
 	for {
 		time.Sleep(metricsInterval)
 		if s, err := vps.Collect(hostRoot); err == nil {
-			db.RecordServerMetric(database, s.CPUPercent, s.MemPercent, s.DiskPercent)
+			if err := db.RecordServerMetric(database, s.CPUPercent, s.MemPercent, s.DiskPercent); err != nil {
+				log.Printf("monitor: recording the server sample: %v", err)
+			}
 			alerts.check(database, s)
 		}
 		apps, err := db.ListApps(database, keyring)
@@ -151,17 +155,25 @@ func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyri
 				// is graphed like any other app instead of showing nothing.
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				if st, err := dock.Stats(ctx, a); err == nil {
-					db.RecordAppMetric(database, a.ID, st.CPUPercent, st.MemUsedMB)
+					if err := db.RecordAppMetric(database, a.ID, st.CPUPercent, st.MemUsedMB); err != nil {
+						log.Printf("monitor: recording the sample for %s: %v", a.ID, err)
+					}
 				}
 				cancel()
 			}
 		}
 		if time.Since(lastPrune) > time.Hour {
-			db.PruneTimeSeries(database, time.Now().Add(-retention))
-			db.PruneLogs(database)
+			if err := db.PruneTimeSeries(database, time.Now().Add(-retention)); err != nil {
+				log.Printf("monitor: trimming the time series: %v", err)
+			}
+			if err := db.PruneLogs(database); err != nil {
+				log.Printf("monitor: trimming stored output: %v", err)
+			}
 			// Bounded by count rather than age: an audit trail is worth
 			// keeping far longer than metrics, but not without limit.
-			db.PruneAudit(database)
+			if err := db.PruneAudit(database); err != nil {
+				log.Printf("monitor: trimming the audit log: %v", err)
+			}
 			if freed := db.Reclaim(database); freed > 0 {
 				log.Printf("reclaimed %d MB of database space", freed>>20)
 			}
@@ -260,7 +272,9 @@ func streamAppLogs(ctx context.Context, database *sql.DB, dock *docker.Client, a
 			if len(buf) == 0 {
 				return
 			}
-			db.AppendLogs(database, a.ID, buf)
+			if err := db.AppendLogs(database, a.ID, buf); err != nil {
+				log.Printf("monitor: storing %s output: %v", a.ID, err)
+			}
 			buf = buf[:0]
 		}
 		for {
@@ -279,9 +293,13 @@ func streamAppLogs(ctx context.Context, database *sql.DB, dock *docker.Client, a
 			}
 		}
 	}()
-	dock.StreamLogs(ctx, a, func(l docker.LogLine) {
+	// The stream ends when the context is cancelled or the container goes
+	// away, and both are ordinary. An error worth a line says which.
+	if err := dock.StreamLogs(ctx, a, func(l docker.LogLine) {
 		lines <- db.LogEntry{TS: l.TS, Line: l.Text}
-	})
+	}); err != nil && ctx.Err() == nil {
+		log.Printf("monitor: following %s output: %v", a.ID, err)
+	}
 	close(lines)
 	<-done
 }
@@ -306,11 +324,17 @@ func runScheduledTasks(database *sql.DB, dock *docker.Client, keyring *secrets.K
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			out, err := dock.RunCommand(ctx, a, t.Command)
 			cancel()
+			status, detail := "success", out
 			if err != nil {
-				db.RecordTaskRun(database, t.ID, "failed", out+"\n"+err.Error())
+				status, detail = "failed", out+"\n"+err.Error()
+			}
+			// The task ran; the row saying so is a separate promise. Losing it
+			// is worth a line, and not worth skipping the alert below.
+			if recErr := db.RecordTaskRun(database, t.ID, status, detail); recErr != nil {
+				log.Printf("monitor: recording the run of task %d: %v", t.ID, recErr)
+			}
+			if err != nil {
 				notify.Send(database, fmt.Sprintf("Quasar: scheduled task failed on %s: %s (%v)", a.Name, t.Command, err))
-			} else {
-				db.RecordTaskRun(database, t.ID, "success", out)
 			}
 		}
 	}

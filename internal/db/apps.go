@@ -175,8 +175,10 @@ func UpdateAppImage(db *sql.DB, id, imageRef string) error {
 }
 
 // SetAppOrder writes an app's explicit position in the list.
-func SetAppOrder(db *sql.DB, id string, order int) {
-	db.Exec("UPDATE apps SET sort_order = ? WHERE id = ?", order, id)
+// SetAppOrder writes an app's explicit position in the list.
+func SetAppOrder(db *sql.DB, id string, order int) error {
+	_, err := db.Exec("UPDATE apps SET sort_order = ? WHERE id = ?", order, id)
+	return err
 }
 
 // UpdateAppGitBuild stores how a git app's checkout is built. It takes effect
@@ -245,7 +247,9 @@ func DeleteApp(db *sql.DB, id string) error {
 	// Whatever a station remembered about this application goes with it: a
 	// scratch space that outlived the thing it was about would come back as
 	// stale answers under the next application to take the id.
-	DeleteStationStore(db, id)
+	if err := DeleteStationStore(db, id); err != nil {
+		return err
+	}
 	_, err := db.Exec("DELETE FROM apps WHERE id = ?", id)
 	return err
 }
@@ -295,12 +299,14 @@ func ResealApps(database *sql.DB, from, to *secrets.Keyring) (int, error) {
 	for rows.Next() {
 		var r row
 		if err := rows.Scan(&r.id, &r.env, &r.compose, &r.preBackup); err != nil {
-			rows.Close()
+			_ = rows.Close() // the scan failure is the one worth reporting
 			return 0, err
 		}
 		all = append(all, r)
 	}
-	rows.Close()
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
 	if err := rows.Err(); err != nil {
 		return 0, err
 	}
@@ -355,14 +361,16 @@ func EncryptLegacyApps(database *sql.DB, k *secrets.Keyring) (int, error) {
 	for rows.Next() {
 		var r legacyRow
 		if err := rows.Scan(&r.id, &r.env, &r.compose); err != nil {
-			rows.Close()
+			_ = rows.Close() // the scan failure is the one worth reporting
 			return 0, err
 		}
 		if (r.env != "" && !secrets.IsEncrypted(r.env)) || (r.compose != "" && !secrets.IsEncrypted(r.compose)) {
 			legacy = append(legacy, r)
 		}
 	}
-	rows.Close()
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
 	if err := rows.Err(); err != nil {
 		return 0, err
 	}

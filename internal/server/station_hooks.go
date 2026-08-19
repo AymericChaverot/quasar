@@ -208,10 +208,12 @@ func (s *Server) runHook(a *db.App, doc station.Station, action string) {
 // is where every other privileged thing a station did already is.
 func (s *Server) recordHookFailure(a *db.App, doc station.Station, action, problem string) {
 	log.Printf("station %s on %s: hook %s failed: %s", doc.ID, a.Name, action, problem)
-	db.RecordAudit(s.db, db.AuditEntry{
+	if err := db.RecordAudit(s.db, db.AuditEntry{
 		Actor:  "station " + doc.ID,
 		Action: "station.hook.fail",
 		Target: doc.ID + " on " + a.Name,
 		Detail: action + ": " + problem,
-	})
+	}); err != nil {
+		log.Printf("audit: recording the failed hook of station %s: %v", doc.ID, err)
+	}
 }

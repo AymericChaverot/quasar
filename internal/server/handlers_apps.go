@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -486,7 +487,10 @@ func (s *Server) handleAppMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i, other := range apps {
-		db.SetAppOrder(s.db, other.ID, i+1)
+		if err := db.SetAppOrder(s.db, other.ID, i+1); err != nil {
+			http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 	s.handleAppsPartial(w, r)
 }
@@ -506,10 +510,20 @@ func (s *Server) handleAppDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	db.DeleteDeployments(s.db, a.ID)
-	db.DeleteTasksForApp(s.db, a.ID)
-	db.DeleteAppTimeSeries(s.db, a.ID)
-	db.DeleteAppLogs(s.db, a.ID)
+	// The app row is already gone. What is left is its debris, and a failure
+	// to clear it leaves orphaned rows rather than a half-deleted app — worth
+	// a log line, not worth telling the operator the delete failed when it did
+	// not.
+	for what, err := range map[string]error{
+		"deployments":   db.DeleteDeployments(s.db, a.ID),
+		"tasks":         db.DeleteTasksForApp(s.db, a.ID),
+		"time series":   db.DeleteAppTimeSeries(s.db, a.ID),
+		"stored output": db.DeleteAppLogs(s.db, a.ID),
+	} {
+		if err != nil {
+			log.Printf("app delete: clearing the %s of %s: %v", what, a.ID, err)
+		}
+	}
 	// Recorded after the fact and deliberately outside DeleteAppLogs' reach:
 	// deleting an app must not also erase the record of who deleted it.
 	s.audit(r, "app.delete", a.Name, a.Subdomain+" ("+a.DeployType+")")

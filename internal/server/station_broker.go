@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -163,10 +164,12 @@ func (c *stationCall) audit(action, detail string) {
 	// A hook or a scheduled action is nobody's click. Attributing it to
 	// whoever happened to be signed in would be worse than saying which
 	// station did it.
-	db.RecordAudit(c.srv.db, db.AuditEntry{
+	if err := db.RecordAudit(c.srv.db, db.AuditEntry{
 		Actor:  "station " + c.doc.ID,
 		Action: action,
 		Target: target,
 		Detail: detail,
-	})
+	}); err != nil {
+		log.Printf("audit: recording %q for station %s: %v", action, c.doc.ID, err)
+	}
 }

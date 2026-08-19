@@ -2,8 +2,10 @@ package db
 
 import (
 	"database/sql"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -262,11 +264,17 @@ func Open(path string) (*sql.DB, error) {
 	// SQLite handles one writer at a time; a single connection avoids SQLITE_BUSY.
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
-		db.Close()
+		_ = db.Close() // the schema error is the one worth returning
 		return nil, err
 	}
 	for _, m := range migrations {
-		db.Exec(m) // duplicate-column errors are fine on fresh databases
+		// A migration that has already run reports a duplicate column, which
+		// is the expected answer on every database but a brand new one.
+		// Anything else is logged rather than fatal: refusing to start would
+		// lock an operator out of the dashboard they need in order to fix it.
+		if _, err := db.Exec(m); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			log.Printf("db: migration %q: %v", m, err)
+		}
 	}
 	return db, nil
 }
