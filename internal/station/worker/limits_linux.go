@@ -23,16 +23,23 @@ import (
 // RLIMIT_DATA is set well above the resident ceiling for the same reason: since
 // Linux 4.7 it counts anonymous mappings, so the Go heap grows against it, and
 // the number that matters is the one the parent enforces.
+//
+// Both refusals are dropped, and that is the whole of the decision. This
+// process has nowhere to report one: its pipe is not open yet, and its stderr
+// is read only if it dies. A kernel that will not take a ceiling leaves the
+// line that actually holds — the parent, sampling and killing from outside —
+// exactly where it was, so failing the call here would trade a working station
+// for a defence that was never the one being relied on.
 func selfLimit(call Call) {
 	if call.MaxMemoryBytes > 0 {
 		data := uint64(call.MaxMemoryBytes) * 4
-		syscall.Setrlimit(syscall.RLIMIT_DATA, &syscall.Rlimit{Cur: data, Max: data})
+		_ = syscall.Setrlimit(syscall.RLIMIT_DATA, &syscall.Rlimit{Cur: data, Max: data})
 	}
 	if call.WallMS > 0 {
 		// Seconds, rounded up, with one to spare: a script spending its whole
 		// budget on the CPU should be stopped by the interrupt it can report,
 		// not by a signal it cannot.
 		secs := uint64((time.Duration(call.WallMS)*time.Millisecond + time.Second - 1) / time.Second)
-		syscall.Setrlimit(syscall.RLIMIT_CPU, &syscall.Rlimit{Cur: secs + 1, Max: secs + 2})
+		_ = syscall.Setrlimit(syscall.RLIMIT_CPU, &syscall.Rlimit{Cur: secs + 1, Max: secs + 2})
 	}
 }

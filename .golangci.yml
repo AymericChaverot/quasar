@@ -1,5 +1,11 @@
 # The lint gate. What CI enforces is what this file says, so an IDE that
 # disagrees is the IDE's problem, not a reason to loosen the rules here.
+#
+# One thing the rules cannot say for themselves: a linter only sees the files
+# the current platform builds, so `access_linux.go` and `limits_linux.go` are
+# invisible to a run on the Windows machine this is written on and are checked
+# for the first time by CI, which runs on Linux — where Quasar is deployed. On
+# Windows, `GOOS=linux golangci-lint run` sees what CI will.
 version: "2"
 
 linters:
