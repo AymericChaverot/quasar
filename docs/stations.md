@@ -820,8 +820,6 @@ Named so they are decisions rather than omissions.
 - **Station-owned palettes.** Inheriting the operator's ground is what makes
   legibility free.
 - **Attaching a station to an application deployed some other way.**
-- **`{download: ...}`** — a station handing the operator a file. Useful, but it
-  routes bytes through the VM and needs its own limits.
 - **Languages other than JavaScript**, via WASM. It would make a station a
   binary, and stations are meant to be read before they are trusted.
 - **A public station registry.** Import by URL is the whole distribution story

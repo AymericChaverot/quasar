@@ -38,7 +38,7 @@ The first three are meant to be run. The last three are meant to be read.
 
 | File | What it is |
 | --- | --- |
-| [`minecraft.yaml`](minecraft.yaml) | The format at full stretch: a console, player administration, world archives with a restore, mod management against Modrinth, and a day of player history the station draws itself as an SVG. Every component, every hook. |
+| [`minecraft.yaml`](minecraft.yaml) | The format at full stretch: a console, player administration, world archives with a restore and a download, mod management against Modrinth, a version picked from Mojang's own list of releases rather than typed, and a day of player history the station draws itself as an SVG. Every component, every hook. |
 | [`postgres.yaml`](postgres.yaml) | A Postgres server with a query console, per-database dumps on a schedule, and a restore. Everything over the container's own socket — it asks for nothing on the network, inside or out. |
 | [`gitea.yaml`](gitea.yaml) | A Git forge that reads its own API over the internal network, embeds its pages without publishing a port for them, and watches GitHub for a release — then moves to it by changing one environment key and redeploying. |
 | [`components.yaml`](components.yaml) | One of every panel the format offers, drawn from a script granted **nothing at all**. The baseline everything else is measured against. |
@@ -59,9 +59,12 @@ each one had to ask for:
   for its own API and the pages it embeds, `net.external` for one named host —
   and for `env` **write**, because changing the image tag is how a compose
   application changes version.
-- **`minecraft.yaml`** asks for `files` over eight paths and for two named
-  hosts, and pointedly **not** for the world directory: a station that can write
-  into a live world is a station that can corrupt one.
+- **`minecraft.yaml`** asks for `files` over eight paths and for three named
+  hosts — two at Modrinth and Mojang's list of releases — and pointedly **not**
+  for the world directory: a station that can write into a live world is a
+  station that can corrupt one. The archives are in those eight paths, which is
+  what lets it hand one over: a file a station may offer is a file it could
+  have read.
 
 None of the three asks for `stop`. A station has no business being able to take
 an application off the network for good.

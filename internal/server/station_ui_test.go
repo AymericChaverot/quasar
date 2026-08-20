@@ -94,6 +94,35 @@ func TestAWrongShapeDrawsALegibleError(t *testing.T) {
 	}
 }
 
+// A station's mark and the generic device sit on the same plate, so the header
+// of a station that brought one is laid out exactly like the header of a
+// station that did not — and so an icon that was filtered out of its own
+// attribute would show up here as an empty plate rather than as nothing at all.
+func TestTheBlockDrawsAStationsOwnMark(t *testing.T) {
+	const icon = "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="
+	block := func(theme ui.Theme) string {
+		t.Helper()
+		b := &StationBlock{App: &db.App{ID: "abcd1234"}, Doc: station.Station{Name: "Demo",
+			UI: ui.UI{Theme: theme, Tabs: []ui.Tab{{ID: "mods", Name: "Mods", Panels: []ui.Panel{testModTable}}}}}}
+		var buf bytes.Buffer
+		if err := testServer(t).pages["app_detail"].ExecuteTemplate(&buf, "station_block", b); err != nil {
+			t.Fatalf("rendering the block: %v", err)
+		}
+		return html.UnescapeString(buf.String())
+	}
+
+	withIcon := block(ui.Theme{Icon: icon})
+	if !strings.Contains(withIcon, `<img src="`+icon+`"`) {
+		t.Errorf("the station's own mark is not drawn:\n%s", withIcon)
+	}
+	if !strings.Contains(withIcon, "station-icon-plate") {
+		t.Error("the mark has no plate to sit on")
+	}
+	if plain := block(ui.Theme{}); !strings.Contains(plain, "station-icon-plate") {
+		t.Error("a station with no icon of its own lost the plate as well")
+	}
+}
+
 // The panel listens for one event and the action's response sends the same one.
 // They are written in two files, so the thing worth testing is that they agree.
 func TestAnActionsRefreshReachesTheRightPanel(t *testing.T) {
