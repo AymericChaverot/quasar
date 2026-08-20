@@ -273,3 +273,114 @@ func TestNothingSurvivesBetweenTwoCalls(t *testing.T) {
 		}
 	}
 }
+
+// Parse and Validate say a great deal about a station document and nothing at
+// all about its script. A missing brace therefore installs cleanly and fails
+// at the first click — on somebody else's server, the first time they tried
+// the feature — which is the failure the folder full of examples can least
+// afford.
+//
+// Loading it is the whole check, and the action asked for is missing on
+// purpose: Run loads the script before it goes looking for one, so a script
+// that is good JavaScript comes back complaining about the action and a script
+// that is not comes back complaining about itself. Telling those two messages
+// apart is the test.
+func TestEveryShippedStationIsLoadableJavaScript(t *testing.T) {
+	dir := filepath.Join("..", "..", "..", "stations")
+	paths, err := filepath.Glob(filepath.Join(dir, "*.yaml"))
+	if err != nil {
+		t.Fatalf("looking for shipped stations: %v", err)
+	}
+	if len(paths) == 0 {
+		t.Fatalf("no station in %s", dir)
+	}
+
+	for _, path := range paths {
+		name := strings.TrimSuffix(filepath.Base(path), ".yaml")
+		t.Run(name, func(t *testing.T) {
+			doc, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("reading: %v", err)
+			}
+			s, err := station.Parse(string(doc))
+			if err != nil {
+				t.Fatalf("%s no longer parses: %v", path, err)
+			}
+			if strings.TrimSpace(s.Script) == "" {
+				return // a station may legitimately carry none
+			}
+
+			_, _, err = call(t, s.Script, "there_is_no_action_by_this_name")
+			if err == nil {
+				t.Fatal("an action nothing exports came back with a value")
+			}
+			if !strings.Contains(err.Error(), "exports no action") {
+				t.Errorf("the script would not load: %v", err)
+			}
+		})
+	}
+}
+
+// The Minecraft station draws its own graph: it keeps a player count in its
+// store and returns an SVG as a data: URI, which is the format's claim that a
+// script never produces markup taken to its limit — a picture computed by a
+// station, landing in an attribute, drawn by the browser, unable to reach the
+// page around it.
+//
+// It is worth running rather than reading because three separate things have
+// to hold for it to appear at all: the script has to build a URI, the image
+// component has to accept one, and html/template has to keep it instead of
+// writing #ZgotmplZ over it.
+func TestTheMinecraftStationDrawsItsOwnGraph(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "stations", "minecraft.yaml")
+	doc, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := station.Parse(string(doc))
+	if err != nil {
+		t.Fatalf("%s no longer parses: %v", path, err)
+	}
+
+	// A day of samples is the only thing it is allowed to read.
+	const samples = `[{"t":"09:00","n":0},{"t":"09:10","n":3},{"t":"09:20","n":7},{"t":"09:30","n":2}]`
+	broker := &asked{answer: func(capability string, args json.RawMessage) (json.RawMessage, error) {
+		if capability != "store.get" {
+			return nil, errors.New("this station has not been granted " + capability)
+		}
+		var a struct {
+			Key string `json:"key"`
+		}
+		if err := json.Unmarshal(args, &a); err != nil {
+			return nil, err
+		}
+		if a.Key == "samples" {
+			return json.RawMessage(samples), nil
+		}
+		return json.RawMessage("null"), nil
+	}}
+
+	out, _, err := callWith(t, s.Script, "players_graph", broker)
+	if err != nil {
+		t.Fatalf("the graph did not come back: %v", err)
+	}
+	result := ui.ParseResult(out.Value)
+	if result.Error != "" {
+		t.Fatalf("the graph reported: %s", result.Error)
+	}
+	if result.Waiting != "" {
+		t.Fatalf("four samples was not enough for it: %s", result.Waiting)
+	}
+
+	view := ui.Render("abcd1234", findPanel(s, "mc_graph"), result.Data)
+	if view.Problem != "" {
+		t.Fatalf("the image panel got: %s", view.Problem)
+	}
+	src := string(view.ImageSrc())
+	if !strings.HasPrefix(src, "data:image/svg+xml") {
+		t.Fatalf("the panel would draw %.80q", src)
+	}
+	if !strings.Contains(src, "%3Csvg") {
+		t.Errorf("the SVG did not survive being made into a URI: %.120q", src)
+	}
+}
