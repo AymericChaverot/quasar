@@ -1,0 +1,754 @@
+# Gitea, with the administration a self-hosted forge actually needs.
+#
+# This one is the station format at full stretch: it reads its own container's
+# API over the internal network, embeds the forge's own pages without
+# publishing a port for them, runs the gitea CLI for everything the API cannot
+# do, takes dumps in the background, and watches GitHub for a newer release —
+# then moves to it by changing one environment key and redeploying, which is
+# how a compose application changes version.
+#
+# Paste it into Settings → Stations, or fetch it from this repository. The
+# install screen lists everything below in plain words before anything runs.
+
+schema: 1
+id: gitea-station
+name: Gitea
+description: A Git forge with user administration, embedded pages, background dumps and a release watcher
+author: quasar
+version: "1.0.0"
+
+# ---------------------------------------------------------------- deploy ----
+deploy:
+  deploy_type: compose
+  compose_service: gitea
+  port: 3000
+  app_name: "{{SITE_NAME}}"
+  subdomain: "git"
+  note: >
+    SSH cloning is published on the host port chosen below, because Traefik
+    carries HTTP and nothing else. HTTPS cloning works over the subdomain with
+    no extra port at all.
+  params:
+    - name: SITE_NAME
+      label: What the forge calls itself
+      default: Gitea
+    - name: VERSION
+      label: Image tag
+      default: "1.24"
+      help: A published tag of gitea/gitea. The Updates tab moves this on for you.
+    - name: SSH_PORT
+      label: SSH port
+      kind: port
+      default: "2222"
+      help: Where git clone over SSH lands. Port 22 is usually the host's own.
+    - name: DISABLE_REGISTRATION
+      label: Closed to new sign-ups
+      kind: select
+      default: "true"
+      options: ["true", "false"]
+      help: Closed is the right answer for a forge with a public address.
+  env: |
+    GITEA_VERSION={{VERSION}}
+    GITEA_SITE_NAME={{SITE_NAME}}
+    GITEA_SSH_PORT={{SSH_PORT}}
+    GITEA_SSH_DOMAIN={{HOST}}
+    GITEA_ROOT_URL={{URL}}/
+    GITEA_DISABLE_REGISTRATION={{DISABLE_REGISTRATION}}
+  compose: |
+    services:
+      gitea:
+        image: gitea/gitea:${GITEA_VERSION}
+        environment:
+          USER_UID: "1000"
+          USER_GID: "1000"
+          # Four underscores: the section name is empty, because APP_NAME sits
+          # at the top of app.ini and not under a heading.
+          GITEA____APP_NAME: ${GITEA_SITE_NAME}
+          # Installed by this file rather than by the web installer, which is
+          # what makes the station work the moment the container is up: until
+          # INSTALL_LOCK is set, Gitea considers itself uninstalled and refuses
+          # both its own CLI and its API — so every panel here would have been
+          # waiting on a form somebody had to fill in by hand first.
+          #
+          # It leaves exactly one thing to do, and the People tab is where it
+          # is done: create the first administrator.
+          GITEA__security__INSTALL_LOCK: "true"
+          GITEA__database__DB_TYPE: sqlite3
+          GITEA__database__PATH: /data/gitea/gitea.db
+          GITEA__server__ROOT_URL: ${GITEA_ROOT_URL}
+          GITEA__server__SSH_DOMAIN: ${GITEA_SSH_DOMAIN}
+          GITEA__server__SSH_PORT: ${GITEA_SSH_PORT}
+          GITEA__server__SSH_LISTEN_PORT: "22"
+          GITEA__service__DISABLE_REGISTRATION: ${GITEA_DISABLE_REGISTRATION}
+        volumes:
+          # One mount: everything Gitea owns lives under the application's own
+          # folder, so Quasar's backup of the application is a backup of the
+          # forge.
+          - ./data:/data
+        ports:
+          # HTTP is not published. Traefik reaches 3000 on the internal
+          # network, and so does this station.
+          - "${GITEA_SSH_PORT}:22"
+        restart: unless-stopped
+
+# ----------------------------------------------------------- permissions ----
+# Six lines, and each one is a sentence on the install screen:
+#
+#   exec         — the gitea CLI, in this application's own container. It is
+#                  root on that container, which is what the CLI needs to drop
+#                  to the git user with su-exec.
+#   files        — the dumps it takes, and nothing else. Not the repositories:
+#                  a files grant covers writing as well as reading, and no
+#                  panel here has any business writing into a repository.
+#   env          — the image tag, read to show it and written to change it.
+#                  Not the root URL, not the SSH domain.
+#   net.internal — the forge's own API, on the one port it serves.
+#   net.external — GitHub's release list. One host, and the install screen says
+#                  which, because "may reach the internet" tells nobody
+#                  anything.
+#   lifecycle    — restart and redeploy. Not stop.
+permissions:
+  exec: {services: [gitea]}
+  logs: {services: [gitea]}
+  files: {paths: ["data/backups/**"]}
+  env: {read: [GITEA_VERSION], write: [GITEA_VERSION]}
+  net.internal: {services: [gitea], ports: [3000]}
+  net.external: {allow: ["api.github.com"]}
+  lifecycle: [restart, redeploy]
+  notify: true
+
+ui:
+  theme:
+    accent: "#609926"   # Gitea's green
+    tint: 0.06
+    radius: 8px
+    tracking: wide
+
+  tabs:
+    # ---------------------------------------------------------- overview ----
+    - id: overview
+      name: Overview
+      panels:
+        - {id: gt_users_count, type: stat, title: Accounts, width: third,
+           source: {action: count_users}, refresh: {seconds: 120}}
+        - {id: gt_repos_count, type: stat, title: Repositories, width: third,
+           source: {action: count_repos}, refresh: {seconds: 120}}
+        - {id: gt_build, type: keyvalue, title: This forge, width: third,
+           source: {action: build_info}, refresh: {seconds: 120}}
+
+        - id: gt_log
+          type: log
+          title: Server log
+          service: gitea
+          tail: 200
+
+    # ------------------------------------------------------------- users ----
+    - id: users
+      name: People
+      panels:
+        - id: gt_userlist
+          type: table
+          title: Accounts
+          help: Read with the gitea CLI, which is the only thing that can list them without a token.
+          source: {action: list_users}
+          refresh: {seconds: 120}
+          columns:
+            - {key: name, label: Username}
+            - {key: email, label: Email}
+            - {key: role, label: "", type: badge}
+            - {key: state, label: "", type: badge}
+          row_actions:
+            - {label: New password next time, action: must_change_password, tone: warn}
+            - {label: Delete, action: delete_user, tone: err,
+               confirm: "Delete {{name}}? Their repositories go with them."}
+          empty: "No accounts yet. The first administrator is made in the form below."
+
+        - id: gt_newuser
+          type: form
+          title: Add someone
+          width: half
+          help: >
+            This is also where the first administrator comes from. The forge is
+            installed by its own compose file rather than by the web installer,
+            so it comes up with no accounts at all and nobody able to sign in
+            until one is made here.
+          fields:
+            - {name: username, label: Username, placeholder: "ada"}
+            - {name: email, label: Email, placeholder: "ada@example.com"}
+            - {name: password, label: First password, type: secret}
+            - {name: admin, label: Administrator, type: toggle}
+            - {name: change, label: Make them choose a new one at first sign-in, type: toggle, default: "true"}
+          submit: {label: Create, action: create_user}
+
+        - id: gt_password
+          type: form
+          title: Reset a password
+          width: half
+          help: For the account that locked itself out, which is the reason this panel exists.
+          fields:
+            - {name: username, label: Username}
+            - {name: password, label: New password, type: secret}
+          submit: {label: Set it, action: reset_password}
+
+    # ------------------------------------------------------ repositories ----
+    - id: repositories
+      name: Repositories
+      panels:
+        - id: gt_repolist
+          type: table
+          title: What is on here
+          help: From the forge's own API, over the internal network. Private repositories are not in it.
+          source: {action: list_repos}
+          refresh: {seconds: 300}
+          columns:
+            - {key: name, label: Repository}
+            - {key: owner, label: Owner}
+            - {key: branch, label: Default branch}
+            - {key: size, label: Size, align: right}
+            - {key: updated, label: Last push, align: right}
+          empty: "Nothing public to show."
+
+        - id: gt_explore
+          type: iframe
+          title: The forge itself
+          help: >
+            Reached through Quasar on the application's own network. No port is
+            published for this, and the container's address never leaves the
+            server.
+          src: "{{service:gitea:3000}}/explore/repos"
+          height: "560px"
+
+    # ------------------------------------------------------- maintenance ----
+    - id: maintenance
+      name: Maintenance
+      panels:
+        - id: gt_dump
+          type: button
+          title: Take a dump
+          width: half
+          label: Dump the whole forge
+          long: true
+          action: take_dump
+          help: >
+            Repositories, database, configuration and attachments, in one zip
+            under data/backups. Runs in the background and survives a reload.
+
+        - id: gt_doctor
+          type: button
+          title: Check itself over
+          width: half
+          label: Run the doctor
+          long: true
+          action: run_doctor
+          help: Gitea's own consistency checks. Reads only; it changes nothing.
+
+        - id: gt_dumps
+          type: table
+          title: Dumps
+          source: {action: list_dumps}
+          columns:
+            - {key: name, label: File}
+            - {key: size, label: Size, align: right}
+            - {key: taken, label: Taken}
+          row_actions:
+            - {label: Delete, action: delete_dump, tone: err, confirm: "Delete {{name}}?"}
+          empty: "No dumps yet."
+
+        - id: gt_flush
+          type: button
+          title: Queues
+          width: half
+          label: Flush them
+          action: flush_queues
+          help: For the push that has been "processing" for ten minutes.
+
+        - id: gt_hooks
+          type: confirm
+          title: Git hooks
+          width: half
+          label: Regenerate every hook
+          tone: warn
+          confirm: "Regenerate the git hooks in every repository? Safe, and slow on a big forge."
+          action: regenerate_hooks
+
+        - id: gt_doctor_out
+          type: code
+          title: What the doctor said
+          source: {action: doctor_output}
+
+        - id: gt_restore_note
+          type: markdown
+          title: Putting a dump back
+          source:
+            static: |
+              There is deliberately no restore button. A Gitea dump is put back
+              by hand — stop the application, unpack the zip over data/, put
+              gitea-db.sql back into the database it came from, and start it
+              again — and a one-click version of that would be a button that
+              destroys a working forge when it half succeeds.
+
+              The zip is under data/backups in the storage explorer, which is
+              where to download it from.
+
+    # ----------------------------------------------------------- updates ----
+    - id: updates
+      name: Updates
+      panels:
+        - {id: gt_versions, type: keyvalue, title: Versions, width: half,
+           source: {action: versions}}
+
+        - id: gt_check
+          type: button
+          title: Ask GitHub
+          width: half
+          label: Check for a newer release
+          action: check_release
+          help: One request, to api.github.com, which is the only host this station may reach.
+
+        - id: gt_upgrade
+          type: confirm
+          title: Move to the newest release
+          label: Change the tag and redeploy
+          tone: warn
+          confirm: "Pin this forge to the newest release and redeploy it? Take a dump first."
+          action: upgrade_now
+          help: >
+            Writes the new tag into this application's environment and
+            redeploys. Nothing about the data is touched — Gitea migrates its
+            own database on the way up.
+
+        - id: gt_upgrade_note
+          type: markdown
+          source:
+            static: |
+              The tag lives in the application's environment as
+              `GITEA_VERSION`, and the compose file reads it. Changing it here
+              and redeploying is exactly what changing it in the Environment
+              section by hand and pressing Update would do — which is the point:
+              a station drives the machinery Quasar already has rather than
+              inventing a second one beside it.
+
+hooks:
+  after_deploy: {action: prepare}
+  on_health_fail: {action: collect_diagnostics}
+  every:
+    - {minutes: 1440, action: check_release}
+
+script: |
+  // ---------------------------------------------------------------------
+  // Running the CLI.
+  //
+  // The container runs as root, and Gitea refuses to run as root — for good
+  // reason — so every command drops to the git user with su-exec, which the
+  // official image ships for exactly this. argv all the way through: nothing
+  // between here and the daemon parses a shell string, so a username with a
+  // semicolon in it is a username with a semicolon in it.
+  // ---------------------------------------------------------------------
+
+  const CONFIG = '/data/gitea/conf/app.ini'
+  const DUMPS = 'data/backups'
+
+  function cli(args) {
+    const argv = ['su-exec', 'git', 'gitea'].concat(args, ['-c', CONFIG])
+    const r = quasar.exec('gitea', argv)
+    if (r.code !== 0) {
+      throw new Error(tidy(r.stderr) || tidy(r.stdout) || 'gitea ' + args[0] + ' exited ' + r.code)
+    }
+    return plain(r.stdout)
+  }
+
+  // The CLI colours its output, and a panel is not a terminal: the escape
+  // codes arrive as literal rubbish in the middle of the words. Rendering ANSI
+  // is Quasar's job in the log pane and nobody's job anywhere else.
+  function plain(s) {
+    return String(s || '').replace(new RegExp(String.fromCharCode(27) + '\[[0-9;]*m', 'g'), '')
+  }
+
+  // Gitea logs every line with a timestamp, including the one that says why it
+  // stopped. Dropping all the timestamped lines is the obvious way to get rid
+  // of the noise and it throws away exactly the sentence worth reading, so the
+  // fatal and error lines are kept and stripped of their prefix instead.
+  function tidy(s) {
+    const lines = String(s || '').split('\n')
+    const said = lines.filter(function (l) { return /\[[FE]\]/.test(l) })
+    if (said.length) {
+      return said[said.length - 1].replace(/^.*\[[FE]\]\s*/, '').trim()
+    }
+    return lines
+      .filter(function (l) { return l.trim() && !/^\d{4}\/\d\d\/\d\d /.test(l) })
+      .join('\n')
+      .trim()
+  }
+
+  // The forge's own API, on the internal network. The address is handed over
+  // by Quasar for a service and a port the document declared — a station never
+  // learns a container's name and has nothing to guess with.
+  function api(path) {
+    const base = quasar.service('gitea', 3000)
+    return quasar.http.get(base + '/api/v1' + path, { headers: { Accept: 'application/json' } })
+  }
+
+  // A forge is a running container for a good half minute before it serves
+  // anything, and only this script knows what that looks like. Said as
+  // waiting, the panel draws a spinner and asks again; said as an error, it
+  // reads to whoever just pressed Deploy as something they broke.
+  function comingUp(e) {
+    return /connection refused|no such container|is not running|EOF|timeout|502|503/i
+      .test(String(e && e.message))
+  }
+
+  function whileComingUp(fn, why) {
+    try {
+      return fn()
+    } catch (e) {
+      if (comingUp(e)) return { waiting: why }
+      return { error: String(e.message || e) }
+    }
+  }
+
+  // ----------------------------------------------------------- overview ----
+
+  export function count_users() {
+    return whileComingUp(function () {
+      const people = users()
+      const admins = people.filter(function (u) { return u.admin }).length
+      return { data: { value: people.length, label: admins + ' administrator' + (admins === 1 ? '' : 's') } }
+    }, 'Waiting for the forge to start')
+  }
+
+  export function count_repos() {
+    return whileComingUp(function () {
+      const r = api('/repos/search?limit=1')
+      const total = r.headers['x-total-count']
+      if (total === undefined) return { data: { value: '—', label: 'the API did not say' } }
+      return { data: { value: total, label: 'public and visible' } }
+    }, 'Waiting for the forge to start')
+  }
+
+  export function build_info() {
+    return whileComingUp(function () {
+      const version = api('/version').json().version
+      return { data: [
+        { key: 'Running',   value: version },
+        { key: 'Image tag', value: quasar.env.get('GITEA_VERSION') },
+        { key: 'Address',   value: quasar.app.domain },
+        { key: 'Clone over SSH', value: 'port ' + (quasar.app.params.SSH_PORT || '?') },
+        { key: 'Sign-ups',  value: quasar.app.params.DISABLE_REGISTRATION === 'true' ? 'closed' : 'open' },
+      ]}
+    }, 'Waiting for the forge to start')
+  }
+
+  // -------------------------------------------------------------- users ----
+
+  // `gitea admin user list` prints a table with a header. Six columns, laid
+  // out with a tab writer, so the split is on runs of whitespace and a line
+  // that does not yield six fields is not a user.
+  function users() {
+    const out = cli(['admin', 'user', 'list'])
+    const people = []
+    for (const line of out.split('\n')) {
+      const f = line.trim().split(/\s+/)
+      if (f.length < 6 || f[0] === 'ID' || !/^\d+$/.test(f[0])) continue
+      people.push({
+        id: f[0], name: f[1], email: f[2],
+        active: f[3] === 'true', admin: f[4] === 'true', twofa: f[5] === 'true',
+      })
+    }
+    return people
+  }
+
+  export function list_users() {
+    return whileComingUp(function () {
+      return { data: users().map(function (u) {
+        return {
+          name: u.name,
+          email: u.email,
+          role: u.admin ? { label: 'admin', tone: 'accent' } : null,
+          state: u.active
+            ? (u.twofa ? { label: '2FA', tone: 'ok' } : null)
+            : { label: 'inactive', tone: 'warn' },
+        }
+      }) }
+    }, 'Waiting for the forge to start')
+  }
+
+  export function create_user({ username, email, password, admin, change }) {
+    if (!username || !email || !password) {
+      return { error: 'A username, an email address and a first password.' }
+    }
+    const args = ['admin', 'user', 'create',
+      '--username', String(username), '--email', String(email), '--password', String(password)]
+    if (admin) args.push('--admin')
+    args.push('--must-change-password=' + (change ? 'true' : 'false'))
+
+    try {
+      cli(args)
+    } catch (e) {
+      return { error: String(e.message || e) }
+    }
+    return { toast: username + ' created.', refresh: ['gt_userlist', 'gt_users_count'] }
+  }
+
+  export function reset_password({ username, password }) {
+    if (!username || !password) return { error: 'A username and the password to set.' }
+    try {
+      cli(['admin', 'user', 'change-password', '--username', String(username), '--password', String(password)])
+    } catch (e) {
+      return { error: String(e.message || e) }
+    }
+    return { toast: 'Password set for ' + username + '.' }
+  }
+
+  export function must_change_password({ name }) {
+    try {
+      cli(['admin', 'user', 'must-change-password', String(name)])
+    } catch (e) {
+      return { error: String(e.message || e) }
+    }
+    return { toast: name + ' will be asked for a new password at their next sign-in.',
+             refresh: ['gt_userlist'] }
+  }
+
+  export function delete_user({ name }) {
+    try {
+      cli(['admin', 'user', 'delete', '--username', String(name)])
+    } catch (e) {
+      return { error: String(e.message || e) }
+    }
+    return { toast: name + ' deleted.', refresh: ['gt_userlist', 'gt_users_count'] }
+  }
+
+  // ------------------------------------------------------- repositories ----
+
+  export function list_repos() {
+    return whileComingUp(function () {
+      const found = api('/repos/search?limit=50&sort=updated&order=desc').json()
+      return { data: (found.data || []).map(function (r) {
+        return {
+          name: r.name,
+          owner: (r.owner && r.owner.login) || '',
+          branch: r.default_branch || '',
+          size: readableSize((r.size || 0) * 1024),
+          updated: String(r.updated_at || '').slice(0, 10),
+        }
+      }) }
+    }, 'Waiting for the forge to start')
+  }
+
+  // -------------------------------------------------------- maintenance ----
+
+  // The dump is written by the git user, so the folder has to belong to it.
+  // Docker creates a bind mount's source as root, which is exactly the case
+  // this line exists for.
+  function ensureDumpDir() {
+    quasar.exec('gitea', ['mkdir', '-p', '/data/backups'])
+    quasar.exec('gitea', ['chown', 'git:git', '/data/backups'])
+
+    // And the repository root, which Gitea does not create until somebody
+    // pushes something — while `gitea dump` refuses to run without it. A forge
+    // nobody has used yet is exactly when an operator presses the backup
+    // button to see what it does.
+    quasar.exec('gitea', ['mkdir', '-p', '/data/git/repositories'])
+    quasar.exec('gitea', ['chown', 'git:git', '/data/git/repositories'])
+  }
+
+  function stamp() {
+    return new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')
+  }
+
+  // Long: a forge of any size takes minutes, and a browser that gave up
+  // waiting must not be the thing that cancelled it.
+  export function take_dump() {
+    ensureDumpDir()
+    const name = 'gitea-' + stamp() + '.zip'
+
+    quasar.progress(10, 'dumping repositories, database and configuration')
+    try {
+      cli(['dump', '--file', '/data/backups/' + name, '--tempdir', '/data/backups', '--type', 'zip'])
+    } catch (e) {
+      // A dump that stopped half way leaves the file it had opened behind, and
+      // a zero-byte archive in the list is worse than no archive: it is one
+      // somebody might one day try to restore from.
+      try { quasar.files.delete(DUMPS + '/' + name) } catch (ignored) { /* never written */ }
+      quasar.log(String(e.message || e))
+      return { error: 'The dump failed: ' + String(e.message || e).slice(0, 400) }
+    }
+    quasar.progress(100, 'done')
+
+    return { toast: name + ' written to data/backups.', refresh: ['gt_dumps'] }
+  }
+
+  function dumpFiles() {
+    try {
+      return quasar.files.list(DUMPS).filter(function (f) { return !f.dir && /\.zip$/.test(f.name) })
+    } catch (e) {
+      return [] // nothing taken yet, which is not a failure
+    }
+  }
+
+  export function list_dumps() {
+    return { data: dumpFiles()
+      .sort(function (a, b) { return a.name < b.name ? 1 : -1 })
+      .map(function (f) {
+        const m = f.name.match(/(\d{8})-(\d{6})/)
+        return {
+          name: f.name,
+          size: readableSize(f.size),
+          taken: m ? m[1].replace(/(\d{4})(\d\d)(\d\d)/, '$1-$2-$3') + ' ' +
+                     m[2].replace(/(\d\d)(\d\d)(\d\d)/, '$1:$2:$3') : '',
+        }
+      }) }
+  }
+
+  export function delete_dump({ name }) {
+    quasar.files.delete(DUMPS + '/' + name)
+    return { toast: 'Deleted.', refresh: ['gt_dumps'] }
+  }
+
+  export function flush_queues() {
+    try {
+      cli(['manager', 'flush-queues'])
+    } catch (e) {
+      return { error: String(e.message || e) }
+    }
+    return { toast: 'Queues flushed.' }
+  }
+
+  export function regenerate_hooks() {
+    try {
+      cli(['admin', 'regenerate', 'hooks'])
+    } catch (e) {
+      return { error: String(e.message || e) }
+    }
+    return { toast: 'Every repository has its hooks back.' }
+  }
+
+  // Long: the doctor walks every repository on a big forge.
+  export function run_doctor() {
+    quasar.progress(10, 'checking')
+    let out, failed = false
+    try {
+      out = cli(['doctor', 'check', '--all'])
+    } catch (e) {
+      out = String(e.message || e)
+      failed = true
+    }
+    quasar.progress(100, 'done')
+
+    quasar.store.set('doctor', {
+      when: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      out: out.slice(0, 8000),
+      failed: failed,
+    })
+    return failed
+      ? { warn: 'The doctor found something. It is in the panel below.', refresh: ['gt_doctor_out'] }
+      : { toast: 'Nothing to report.', refresh: ['gt_doctor_out'] }
+  }
+
+  export function doctor_output() {
+    const last = quasar.store.get('doctor')
+    if (!last) return { data: '# The doctor has not run yet.' }
+    return { data: '# ' + last.when + (last.failed ? '  (it complained)' : '') + '\n\n' + last.out }
+  }
+
+  // ------------------------------------------------------------ updates ----
+
+  export function versions() {
+    const known = quasar.store.get('release') || {}
+    let running = '?'
+    try {
+      running = api('/version').json().version
+    } catch (e) {
+      running = 'not answering yet'
+    }
+    return { data: [
+      { key: 'Running',     value: running },
+      { key: 'Image tag',   value: quasar.env.get('GITEA_VERSION') },
+      { key: 'Newest',      value: known.tag || 'not checked yet' },
+      { key: 'Checked',     value: known.when || '—' },
+    ]}
+  }
+
+  export function check_release() {
+    let latest
+    try {
+      latest = quasar.http.get('https://api.github.com/repos/go-gitea/gitea/releases/latest', {
+        headers: { Accept: 'application/vnd.github+json' },
+      }).json()
+    } catch (e) {
+      return { error: 'GitHub did not answer: ' + String(e.message || e) }
+    }
+
+    const tag = String(latest.tag_name || '').replace(/^v/, '')
+    if (!tag) return { error: 'GitHub answered without a release tag.' }
+
+    const before = (quasar.store.get('release') || {}).tag
+    quasar.store.set('release', {
+      tag: tag,
+      when: new Date().toISOString().slice(0, 16).replace('T', ' '),
+      notes: String(latest.html_url || ''),
+    })
+
+    const current = quasar.env.get('GITEA_VERSION')
+    if (tag === current) {
+      return { toast: 'Already on ' + tag + '.', refresh: ['gt_versions'] }
+    }
+    // Only worth a message the first time a given release shows up: a nightly
+    // check that says the same thing every night is a check people turn off.
+    if (tag !== before) {
+      quasar.notify('Gitea ' + tag + ' is out; ' + quasar.app.name + ' runs ' + current)
+    }
+    return { warn: tag + ' is out, and this runs ' + current + '.', refresh: ['gt_versions'] }
+  }
+
+  // The compose file reads the tag out of the environment, so changing the
+  // version is changing one key and redeploying — the same two steps somebody
+  // would take by hand in the Environment section, which is the point.
+  export function upgrade_now() {
+    const known = quasar.store.get('release') || {}
+    if (!known.tag) return { error: 'Check for a release first; there is nothing to move to.' }
+    if (known.tag === quasar.env.get('GITEA_VERSION')) {
+      return { toast: 'Already pinned to ' + known.tag + '.' }
+    }
+
+    quasar.env.set('GITEA_VERSION', known.tag)
+    quasar.app.redeploy()
+    return { toast: 'Pinned to ' + known.tag + '. The redeploy is running; watch the deploy panel.',
+             refresh: ['gt_versions'], navigate: 'overview' }
+  }
+
+  // -------------------------------------------------------------- hooks ----
+
+  export function prepare() {
+    ensureDumpDir()
+    return { toast: 'Ready.' }
+  }
+
+  // Runs when Quasar's own healthcheck has given up on this application. It
+  // cannot fix anything and does not try: it collects what somebody would ask
+  // for first, so that the answer is already on the page when they arrive.
+  export function collect_diagnostics() {
+    let tail = ''
+    try {
+      tail = quasar.logs('gitea', { tail: 100 })
+    } catch (e) {
+      tail = 'the log could not be read: ' + String(e.message || e)
+    }
+    quasar.store.set('doctor', {
+      when: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      out: 'The healthcheck failed. The last hundred lines of the log:\n\n' + tail.slice(0, 7000),
+      failed: true,
+    })
+    quasar.notify(quasar.app.name + ' stopped answering; the last hundred log lines are on its Maintenance tab')
+    return { warn: 'Collected.' }
+  }
+
+  // -------------------------------------------------------------- bits -----
+
+  function readableSize(bytes) {
+    const n = Number(bytes) || 0
+    const units = ['B', 'kB', 'MB', 'GB']
+    let i = 0, v = n
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+    return (i === 0 ? v : v.toFixed(1)) + ' ' + units[i]
+  }

@@ -1,0 +1,793 @@
+# A PostgreSQL server with the console its operator actually wants.
+#
+# Deploying this gives you an ordinary Quasar application — the same
+# containers, logs, storage explorer, backups and resource limits as anything
+# else on the dashboard — and, on top of it, the five tabs a database needs:
+# what it is doing, which databases it holds, a place to type SQL, dumps taken
+# on a schedule, and a record of what the station itself has been up to.
+#
+# It asks for exec on one service, the backups folder, two environment keys it
+# was itself given, and permission to restart the server it deployed. It asks
+# for nothing on the network: everything here happens over the container's own
+# unix socket.
+#
+# Paste it into Settings → Stations, or fetch it from this repository.
+
+schema: 1
+id: postgres-station
+name: PostgreSQL
+description: A Postgres server with a query console, per-database dumps on a schedule and a restore button
+author: quasar
+version: "1.0.0"
+
+# ---------------------------------------------------------------- deploy ----
+# A catalogue entry, unchanged. The parameters, the {{RANDOM}} password, the
+# compose rewriting and the host-port check are the ones Quasar already has.
+deploy:
+  deploy_type: compose
+  compose_service: postgres
+  port: 5432
+  raw: true
+  app_name: "PostgreSQL {{VERSION}} ({{DB_NAME}})"
+  subdomain: "pg-{{DB_NAME}}"
+  params:
+    - name: VERSION
+      label: PostgreSQL version
+      kind: select
+      default: "17"
+      options: ["17", "16", "15"]
+      help: Upgrading between majors is not a matter of changing this; take a dump first.
+    - name: DB_NAME
+      label: First database
+      default: app
+      help: Created on the very first start, and only then. More can be added from the Databases tab.
+    - name: DB_USER
+      label: Owner
+      default: app
+    - name: HOST_PORT
+      label: Port
+      kind: port
+      default: "5432"
+      help: Give every server on this machine its own.
+  env: |
+    PG_VERSION={{VERSION}}
+    POSTGRES_DB={{DB_NAME}}
+    POSTGRES_USER={{DB_USER}}
+    POSTGRES_PASSWORD={{RANDOM}}
+    HOST_PORT={{HOST_PORT}}
+  compose: |
+    services:
+      postgres:
+        image: postgres:${PG_VERSION}-alpine
+        ports:
+          - "${HOST_PORT}:5432"
+        environment:
+          POSTGRES_DB: ${POSTGRES_DB}
+          POSTGRES_USER: ${POSTGRES_USER}
+          POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+          PGDATA: /var/lib/postgresql/data/pgdata
+        volumes:
+          # Both under the application's own folder, which is what the storage
+          # explorer shows and what Quasar's own backups pick up.
+          - ./data/pgdata:/var/lib/postgresql/data
+          - ./data/backups:/backups
+        shm_size: 256mb
+        healthcheck:
+          test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+          interval: 10s
+          timeout: 5s
+          retries: 6
+        restart: unless-stopped
+
+# ----------------------------------------------------------- permissions ----
+# Narrow on purpose, and each line is worth reading on the install screen:
+#
+#   exec   — psql, pg_dump and pg_restore, in this application's own container.
+#            It is root on that container, which is what taking a dump needs.
+#   files  — the dumps, and nothing else. Not pgdata: a station has no business
+#            reaching into a live server's data directory.
+#   env    — the two keys that say who to connect as. Not the password: nothing
+#            here needs it, because the connection is over the local socket.
+#   lifecycle — restart, for the settings that need one. Not stop, not redeploy.
+permissions:
+  exec: {services: [postgres]}
+  logs: {services: [postgres]}
+  files: {paths: ["data/backups/**"]}
+  env: {read: [POSTGRES_USER, POSTGRES_DB, PG_VERSION]}
+  lifecycle: [restart]
+  notify: true
+
+ui:
+  theme:
+    accent: "#336791"   # the elephant's own blue
+    tint: 0.06
+    radius: 6px
+    chart: ["#336791", "#7aa6c2"]
+
+  tabs:
+    # ------------------------------------------------------------ server ----
+    - id: server
+      name: Server
+      panels:
+        - id: pg_banner
+          type: banner
+          tone: accent
+          source:
+            static: >
+              Everything on this page runs over the container's own socket.
+              This station reaches nothing on the network, inside or out.
+
+        - {id: pg_size, type: stat, title: On disk, width: third,
+           source: {action: total_size}, refresh: {seconds: 60}}
+        - {id: pg_conns, type: gauge, title: Connections, width: third,
+           source: {action: connection_load}, refresh: {seconds: 30}}
+        - {id: pg_server, type: keyvalue, title: Server, width: third,
+           source: {action: server_info}, refresh: {seconds: 60}}
+
+        - id: pg_activity
+          type: table
+          title: What it is doing right now
+          help: Anything that is not this panel's own query.
+          source: {action: activity}
+          refresh: {seconds: 15}
+          columns:
+            - {key: db, label: Database}
+            - {key: user, label: User}
+            - {key: state, label: State, type: badge}
+            - {key: waiting, label: Waiting on}
+            - {key: age, label: For, align: right}
+            - {key: query, label: Query, type: code}
+          empty: "Nothing is running."
+
+        - {id: pg_log, type: log, title: Server log, service: postgres, tail: 200}
+
+    # --------------------------------------------------------- databases ----
+    - id: databases
+      name: Databases
+      panels:
+        - id: pg_dblist
+          type: table
+          title: Databases
+          source: {action: list_databases}
+          refresh: {seconds: 60}
+          columns:
+            - {key: name, label: Database}
+            - {key: owner, label: Owner}
+            - {key: size, label: Size, align: right}
+            - {key: conns, label: Connections, align: right}
+            - {key: mark, label: "", type: badge}
+          row_actions:
+            - {label: Vacuum, action: vacuum_database, tone: accent, long: true}
+            - {label: Drop, action: drop_database, tone: err,
+               confirm: "Drop {{name}} and everything in it? There is no undo but a restore."}
+          empty: "No databases yet, which should not be possible."
+
+        - id: pg_newdb
+          type: form
+          title: Add a database
+          width: half
+          help: Owned by whoever this server was created for, unless you say otherwise.
+          fields:
+            - {name: name, label: Name, placeholder: "reports"}
+            - {name: owner, label: Owner, help: "Left empty, the server's own user."}
+            - {name: encoding, label: Encoding, type: select, default: UTF8,
+               options: [UTF8, LATIN1, SQL_ASCII]}
+          submit: {label: Create, action: create_database}
+
+        - id: pg_search
+          type: search
+          title: Find a table
+          width: half
+          label: Search
+          placeholder: "part of a table name"
+          action: search_tables
+          help: Looks through every database on this server.
+
+        - id: pg_found
+          type: table
+          title: What the search found
+          source: {action: found_tables}
+          columns:
+            - {key: db, label: Database}
+            - {key: schema, label: Schema}
+            - {key: name, label: Table}
+            - {key: rows, label: Rows, align: right}
+            - {key: size, label: Size, align: right}
+          empty: "Nothing searched for yet."
+
+    # ------------------------------------------------------------- query ----
+    - id: query
+      name: Query
+      panels:
+        - id: pg_console
+          type: form
+          title: SQL
+          help: >
+            Sent as one argument to psql, never through a shell. It runs as the
+            server's own user, so it can do anything that user can do.
+          fields:
+            - {name: db, label: Database, placeholder: "left empty, the first one"}
+            - {name: sql, label: Statement, type: textarea,
+               placeholder: "select relname, n_live_tup from pg_stat_user_tables order by 2 desc limit 20;"}
+            - {name: explain, label: Explain it instead of running it, type: toggle}
+          submit: {label: Run, action: run_query}
+
+        - id: pg_result
+          type: code
+          title: Result
+          source: {action: last_result}
+          help: The last statement this console ran, and what came back.
+
+    # ----------------------------------------------------------- backups ----
+    - id: backups
+      name: Backups
+      panels:
+        - id: pg_backup_now
+          type: button
+          title: Take one now
+          width: half
+          label: Dump every database
+          long: true
+          action: back_up
+          help: >
+            Runs in the background, one database at a time, and survives a
+            reload. A custom-format dump per database, plus the roles.
+
+        - id: pg_policy
+          type: form
+          title: What the schedule keeps
+          width: half
+          source: {action: policy}
+          fields:
+            - {name: keep, label: Dumps to keep, type: number, default: "7",
+               help: "Per database. Older ones are deleted after each run."}
+            - {name: notify, label: Send a message when a scheduled run fails, type: toggle}
+          submit: {label: Save, action: save_policy}
+
+        - id: pg_backups
+          type: table
+          title: Dumps
+          source: {action: list_backups}
+          columns:
+            - {key: name, label: File}
+            - {key: db, label: Database}
+            - {key: size, label: Size, align: right}
+            - {key: taken, label: Taken}
+          row_actions:
+            - {label: Restore, action: restore_backup, tone: warn, long: true,
+               confirm: "Restore {{db}} from {{name}}? Everything currently in that database is replaced."}
+            - {label: Delete, action: delete_backup, tone: err, confirm: "Delete {{name}}?"}
+          empty: "No dumps yet. Press the button above, or wait for the nightly run."
+
+        - id: pg_forget
+          type: confirm
+          title: Start again
+          width: half
+          label: Delete every dump
+          tone: err
+          confirm: "Delete every dump this station has taken? The databases themselves are untouched."
+          action: forget_backups
+
+    # ------------------------------------------------------------- about ----
+    - id: about
+      name: History
+      panels:
+        - id: pg_events
+          type: timeline
+          title: What this station has done
+          width: half
+          source: {action: recent_events}
+
+        - id: pg_notes
+          type: markdown
+          title: Reaching it from another application
+          width: half
+          source:
+            static: |
+              This server publishes its port on the host, so an application on
+              the same machine reaches it at the server's own address on the
+              port chosen at deploy time — not at the subdomain, which a
+              Postgres client never sends a Host header to.
+
+              The password is in this application's own environment, under
+              POSTGRES_PASSWORD. This station was never given it: everything on
+              these tabs goes over the container's unix socket, where the
+              server trusts local connections.
+
+        - {id: pg_divider, type: divider}
+
+        - id: pg_about
+          type: markdown
+          source:
+            static: |
+              Dumps are written by pg_dump inside the container, into /backups,
+              which is data/backups in this application's folder — so Quasar's
+              own backup of the application carries them too, and the storage
+              explorer can download one.
+
+hooks:
+  # Not on the critical path: a failing hook is reported in the deploy panel
+  # and the audit log, and the deployment stands.
+  after_deploy: {action: prepare}
+  on_start: {action: note_start}
+  on_stop: {action: note_stop}
+  every:
+    - {minutes: 1440, action: nightly_backup}
+
+script: |
+  // ---------------------------------------------------------------------
+  // Talking to the server.
+  //
+  // Everything goes through psql in the application's own container, over
+  // the local socket, where Postgres trusts the connection. The password is
+  // never read: this station was not granted it.
+  // ---------------------------------------------------------------------
+
+  function owner() { return quasar.env.get('POSTGRES_USER') }
+  function firstDB() { return quasar.env.get('POSTGRES_DB') }
+
+  // argv, never a shell string. Whatever is typed into the console arrives as
+  // one argument and nothing between here and the daemon parses it.
+  function psql(db, sql, flags) {
+    const argv = ['psql', '-U', owner(), '-d', db || firstDB(), '-v', 'ON_ERROR_STOP=1']
+    for (const f of (flags || ['-A', '-t', '-q'])) argv.push(f)
+    argv.push('-c', sql)
+    const r = quasar.exec('postgres', argv)
+    if (r.code !== 0) throw new Error(tidy(r.stderr) || tidy(r.stdout) || 'psql exited ' + r.code)
+    return r.stdout
+  }
+
+  // Rows come back as JSON built by the server, which saves parsing a table
+  // drawn for human eyes and gets the nulls and the numbers right.
+  function rows(db, sql) {
+    const out = psql(db, "select coalesce(json_agg(t), '[]')::text from (" + sql + ") t")
+    return JSON.parse(out.trim() || '[]')
+  }
+
+  function one(db, sql) {
+    return psql(db, sql).trim().split('\n')[0]
+  }
+
+  function tidy(s) {
+    return String(s || '').replace(/^psql:[^:]*:\d+:\s*/gm, '').trim()
+  }
+
+  // A container is running for a good few seconds before the server inside it
+  // answers, and only this script knows what that failure looks like. Reported
+  // as an error it reads, to whoever pressed Deploy a moment ago, as something
+  // they broke; reported as waiting it is a spinner that asks again until the
+  // server is there.
+  //
+  // The list is what psql actually says on the way up, in the order it says it:
+  // the socket is not there yet, then the server is starting, then the first
+  // database does not exist yet because initdb is still making it. All three
+  // arrive within half a minute of a deploy and none of them is a fault.
+  function starting(e) {
+    return /no such file or directory|is the server running|database system is starting up|does not exist|connection refused|could not connect|not yet accepting|no such container|is not running|recovery mode/i
+      .test(String(e && e.message))
+  }
+
+  function whileComingUp(fn, why) {
+    try {
+      return fn()
+    } catch (e) {
+      if (starting(e)) return { waiting: why }
+      return { error: String(e.message || e) }
+    }
+  }
+
+  // ------------------------------------------------------------- server ----
+
+  export function total_size() {
+    return whileComingUp(function () {
+      const size = one(null, "select pg_size_pretty(sum(pg_database_size(datname))) from pg_database")
+      const n = one(null, "select count(*) from pg_database where not datistemplate")
+      return { data: { value: size, label: n + ' database' + (n === '1' ? '' : 's') } }
+    }, 'Waiting for the server to accept connections')
+  }
+
+  export function connection_load() {
+    return whileComingUp(function () {
+      const r = rows(null,
+        "select (select count(*) from pg_stat_activity) as used," +
+        " current_setting('max_connections')::int as cap")[0]
+      const pct = Math.round((r.used / Math.max(r.cap, 1)) * 100)
+      return { data: { value: pct, suffix: '%', label: r.used + ' of ' + r.cap } }
+    }, 'Waiting for the server to accept connections')
+  }
+
+  export function server_info() {
+    return whileComingUp(function () {
+      const r = rows(null,
+        "select current_setting('server_version') as version," +
+        " current_setting('shared_buffers') as buffers," +
+        " date_trunc('second', now() - pg_postmaster_start_time())::text as up," +
+        " pg_is_in_recovery() as replica")[0]
+      return { data: [
+        { key: 'Version',  value: r.version + ' (image tag ' + quasar.env.get('PG_VERSION') + ')' },
+        { key: 'Up for',   value: r.up },
+        { key: 'Buffers',  value: r.buffers },
+        { key: 'Role',     value: r.replica ? 'standby' : 'primary' },
+        { key: 'Owner',    value: owner() },
+      ]}
+    }, 'Waiting for the server to accept connections')
+  }
+
+  export function activity() {
+    return whileComingUp(function () {
+      return { data: rows(null,
+        "select datname as db, usename as \"user\", state," +
+        " coalesce(wait_event_type || ':' || wait_event, '') as waiting," +
+        " date_trunc('second', now() - query_start)::text as age," +
+        " left(regexp_replace(query, '\\s+', ' ', 'g'), 90) as query" +
+        " from pg_stat_activity" +
+        " where pid <> pg_backend_pid() and state is not null and backend_type = 'client backend'" +
+        " order by query_start").map(function (r) {
+          return {
+            db: r.db, user: r.user, waiting: r.waiting, age: r.age, query: r.query,
+            state: r.state === 'active'
+              ? { label: 'active', tone: 'ok' }
+              : { label: r.state, tone: r.state === 'idle in transaction' ? 'warn' : 'accent' },
+          }
+        }) }
+    }, 'Waiting for the server to accept connections')
+  }
+
+  // ---------------------------------------------------------- databases ----
+
+  export function list_databases() {
+    return whileComingUp(function () {
+      const mine = firstDB()
+      return { data: rows(null,
+        "select d.datname as name, pg_get_userbyid(d.datdba) as owner," +
+        " pg_size_pretty(pg_database_size(d.datname)) as size," +
+        " (select count(*) from pg_stat_activity a where a.datname = d.datname) as conns" +
+        " from pg_database d where not d.datistemplate order by pg_database_size(d.datname) desc")
+        .map(function (r) {
+          return {
+            name: r.name, owner: r.owner, size: r.size, conns: String(r.conns),
+            mark: r.name === mine ? { label: 'first', tone: 'accent' } : null,
+          }
+        }) }
+    }, 'Waiting for the server to accept connections')
+  }
+
+  // Identifiers cannot be parameters in Postgres, so they are quoted rather
+  // than interpolated raw: a name is checked here and doubled-quoted below, and
+  // a database called "; drop database app" is a database with a silly name
+  // rather than an incident.
+  function ident(name) {
+    const s = String(name || '').trim()
+    if (!/^[A-Za-z_][A-Za-z0-9_$]*$/.test(s)) {
+      throw new Error(JSON.stringify(s) + ' is not a name this station will pass on. ' +
+        'Letters, digits and underscores; use the console for anything stranger.')
+    }
+    return '"' + s + '"'
+  }
+
+  export function create_database({ name, owner: who, encoding }) {
+    if (!name) return { error: 'A database needs a name.' }
+    try {
+      psql(null, 'create database ' + ident(name) +
+        ' owner ' + ident(who || owner()) +
+        " encoding '" + (encoding === 'LATIN1' ? 'LATIN1' : encoding === 'SQL_ASCII' ? 'SQL_ASCII' : 'UTF8') + "'" +
+        ' template template0')
+    } catch (e) {
+      return { error: String(e.message || e) }
+    }
+    note('created the database ' + name)
+    return { toast: name + ' created.', refresh: ['pg_dblist', 'pg_size'] }
+  }
+
+  export function drop_database({ name }) {
+    if (name === firstDB()) {
+      return { error: 'That is the database this server was created for. ' +
+        'Dropping it from here would leave the application pointing at nothing.' }
+    }
+    try {
+      psql(null, 'drop database ' + ident(name) + ' with (force)')
+    } catch (e) {
+      return { error: String(e.message || e) }
+    }
+    note('dropped the database ' + name)
+    return { toast: name + ' dropped.', refresh: ['pg_dblist', 'pg_size'] }
+  }
+
+  // Long, because a vacuum on a real table is not something to hold an HTTP
+  // request open for.
+  export function vacuum_database({ name }) {
+    quasar.progress(10, 'vacuuming ' + name)
+    psql(name, 'vacuum (analyze)')
+    quasar.progress(100, 'done')
+    note('vacuumed ' + name)
+    return { toast: name + ' vacuumed and analysed.', refresh: ['pg_dblist'] }
+  }
+
+  export function search_tables({ q }) {
+    const needle = String(q || '').trim()
+    if (!needle) return { warn: 'Nothing to look for.' }
+
+    const found = []
+    for (const db of databaseNames()) {
+      const hits = rows(db,
+        "select n.nspname as schema, c.relname as name," +
+        " c.reltuples::bigint as rows, pg_size_pretty(pg_total_relation_size(c.oid)) as size" +
+        " from pg_class c join pg_namespace n on n.oid = c.relnamespace" +
+        " where c.relkind in ('r','p') and n.nspname not in ('pg_catalog','information_schema')" +
+        "   and c.relname ilike " + literal('%' + needle + '%') +
+        " order by pg_total_relation_size(c.oid) desc limit 40")
+      for (const h of hits) {
+        // reltuples is the planner's estimate, and it is -1 for a table
+        // nothing has analysed yet. Printing that as a row count would be a
+        // lie with a minus sign on it.
+        const known = Number(h.rows) >= 0
+        found.push({ db: db, schema: h.schema, name: h.name,
+                     rows: known ? String(h.rows) : 'not counted', size: h.size })
+      }
+    }
+    quasar.store.set('found', found.slice(0, 100))
+    const said = found.length + ' table' + (found.length === 1 ? '' : 's') + ' matching ' + JSON.stringify(needle)
+    return found.length
+      ? { toast: said, refresh: ['pg_found'] }
+      : { warn: said, refresh: ['pg_found'] }
+  }
+
+  export function found_tables() {
+    return { data: quasar.store.get('found') || [] }
+  }
+
+  // A string literal, quoted the way Postgres wants one. Only ever used on
+  // values, never on identifiers — those go through ident above.
+  function literal(s) {
+    return "'" + String(s).replace(/'/g, "''") + "'"
+  }
+
+  function databaseNames() {
+    return rows(null, "select datname as name from pg_database where not datistemplate order by 1")
+      .map(function (r) { return r.name })
+  }
+
+  // -------------------------------------------------------------- query ----
+
+  export function run_query({ db, sql, explain }) {
+    const text = String(sql || '').trim()
+    if (!text) return { error: 'Nothing to run.' }
+
+    const target = String(db || '').trim() || firstDB()
+    const statement = explain ? 'explain (analyze false, verbose, costs) ' + text : text
+
+    let out, failed = null
+    try {
+      // psql's own flags, none of the ones the panels use: a console is the
+      // one place the command tags are the answer. A CREATE TABLE that
+      // reported "(no rows)" would be telling the operator nothing about the
+      // only thing that happened.
+      out = psql(target, statement, [])
+    } catch (e) {
+      failed = String(e.message || e)
+    }
+
+    // Kept so the panel beside the form can draw it, and truncated because the
+    // store is a small space and a select with no limit is a common accident.
+    quasar.store.set('last', {
+      db: target,
+      sql: statement,
+      out: String(failed || out || '(no rows)').slice(0, 8000),
+      when: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      failed: !!failed,
+    })
+    note((failed ? 'failed a' : 'ran a') + ' statement against ' + target)
+
+    return failed
+      ? { error: failed, refresh: ['pg_result'] }
+      : { toast: 'Ran against ' + target + '.', refresh: ['pg_result', 'pg_activity'] }
+  }
+
+  export function last_result() {
+    const last = quasar.store.get('last')
+    if (!last) return { data: '-- Nothing run yet.' }
+    return { data: '-- ' + last.when + '  ' + last.db + (last.failed ? '  (failed)' : '') +
+      '\n' + last.sql + '\n\n' + last.out }
+  }
+
+  // ------------------------------------------------------------ backups ----
+
+  const DUMPS = 'data/backups'
+
+  function policyNow() {
+    const p = quasar.store.get('policy') || {}
+    return { keep: Math.max(Number(p.keep) || 7, 1), notify: !!p.notify }
+  }
+
+  export function policy() {
+    const p = policyNow()
+    return { data: { keep: p.keep, notify: p.notify } }
+  }
+
+  export function save_policy({ keep, notify }) {
+    const n = Math.max(Math.min(Number(keep) || 7, 60), 1)
+    quasar.store.set('policy', { keep: n, notify: !!notify })
+    return { toast: 'Keeping the last ' + n + ' of each.', refresh: ['pg_policy'] }
+  }
+
+  function stamp() {
+    return new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')
+  }
+
+  // Long: one pg_dump per database, and a real one takes minutes.
+  export function back_up() {
+    return runBackup('by hand')
+  }
+
+  export function nightly_backup() {
+    return runBackup('on the schedule')
+  }
+
+  function runBackup(how) {
+    const names = databaseNames()
+    const at = stamp()
+    const failures = []
+
+    for (let i = 0; i < names.length; i++) {
+      const db = names[i]
+      quasar.progress(Math.round((i / (names.length + 1)) * 100), 'dumping ' + db)
+      const file = '/backups/' + db + '-' + at + '.dump'
+      const r = quasar.exec('postgres', ['pg_dump', '-U', owner(), '-d', db, '-Fc', '-f', file])
+      if (r.code !== 0) {
+        failures.push(db + ': ' + tidy(r.stderr))
+        quasar.log('pg_dump ' + db + ' exited ' + r.code + ': ' + tidy(r.stderr))
+      }
+    }
+
+    // The roles, which no per-database dump carries and every restore onto a
+    // fresh server turns out to need.
+    quasar.progress(95, 'dumping the roles')
+    const roles = quasar.exec('postgres',
+      ['sh', '-c', 'pg_dumpall -U ' + owner() + ' --roles-only > /backups/roles-' + at + '.sql'])
+    if (roles.code !== 0) failures.push('roles: ' + tidy(roles.stderr))
+
+    const removed = prune()
+    quasar.progress(100, 'done')
+
+    const said = names.length + ' database' + (names.length === 1 ? '' : 's') + ' dumped ' + how +
+      (removed ? ', ' + removed + ' old dump(s) deleted' : '')
+    note(said)
+
+    if (failures.length) {
+      const why = failures.length + ' of ' + names.length + ' failed: ' + failures.join('; ')
+      if (policyNow().notify) quasar.notify('PostgreSQL backup on ' + quasar.app.name + ' — ' + why)
+      return { warn: why, refresh: ['pg_backups', 'pg_events'] }
+    }
+    return { toast: said, refresh: ['pg_backups', 'pg_events'] }
+  }
+
+  // Keep the last N of each database, and of the roles. Counted per database
+  // rather than overall, so one busy database cannot push every other one's
+  // history off the end.
+  function prune() {
+    const keep = policyNow().keep
+    const byPrefix = {}
+    for (const f of dumpFiles()) {
+      const key = f.name.replace(/-\d{8}-\d{6}\.(dump|sql)$/, '')
+      ;(byPrefix[key] = byPrefix[key] || []).push(f)
+    }
+    let removed = 0
+    for (const key of Object.keys(byPrefix)) {
+      const files = byPrefix[key].sort(function (a, b) { return a.name < b.name ? 1 : -1 })
+      for (const old of files.slice(keep)) {
+        quasar.files.delete(DUMPS + '/' + old.name)
+        removed++
+      }
+    }
+    return removed
+  }
+
+  function dumpFiles() {
+    let listing
+    try {
+      listing = quasar.files.list(DUMPS)
+    } catch (e) {
+      return [] // nothing taken yet, which is not a failure
+    }
+    return listing.filter(function (f) { return !f.dir && /\.(dump|sql)$/.test(f.name) })
+  }
+
+  export function list_backups() {
+    return { data: dumpFiles()
+      .sort(function (a, b) { return a.name < b.name ? 1 : -1 })
+      .map(function (f) {
+        const m = f.name.match(/^(.*)-(\d{8})-(\d{6})\.(dump|sql)$/)
+        return {
+          name: f.name,
+          db: m ? (m[1] === 'roles' ? 'roles only' : m[1]) : '?',
+          size: readableSize(f.size),
+          taken: m ? m[2].replace(/(\d{4})(\d\d)(\d\d)/, '$1-$2-$3') + ' ' +
+                     m[3].replace(/(\d\d)(\d\d)(\d\d)/, '$1:$2:$3') : '',
+        }
+      }) }
+  }
+
+  export function delete_backup({ name }) {
+    quasar.files.delete(DUMPS + '/' + name)
+    note('deleted the dump ' + name)
+    return { toast: 'Deleted.', refresh: ['pg_backups'] }
+  }
+
+  export function forget_backups() {
+    let n = 0
+    for (const f of dumpFiles()) {
+      quasar.files.delete(DUMPS + '/' + f.name)
+      n++
+    }
+    note('deleted every dump (' + n + ')')
+    return { toast: n + ' dump(s) deleted.', refresh: ['pg_backups'] }
+  }
+
+  // Long, and destructive, which is why the row asks first.
+  export function restore_backup({ name, db }) {
+    if (/^roles/.test(name)) {
+      quasar.progress(20, 'restoring roles')
+      const r = quasar.exec('postgres', ['sh', '-c', 'psql -U ' + owner() + ' -d postgres -f /backups/' + name])
+      if (r.code !== 0) return { error: tidy(r.stderr) || 'psql exited ' + r.code }
+      note('restored the roles from ' + name)
+      return { toast: 'Roles restored.' }
+    }
+
+    quasar.progress(20, 'restoring ' + db)
+    const r = quasar.exec('postgres',
+      ['pg_restore', '-U', owner(), '-d', db, '--clean', '--if-exists', '--no-owner', '/backups/' + name])
+    quasar.progress(100, 'done')
+
+    // pg_restore reports a non-zero exit for warnings it recovered from, so
+    // what it said matters more than what it returned.
+    if (r.code !== 0) {
+      const why = tidy(r.stderr) || 'pg_restore exited ' + r.code
+      note('restored ' + db + ' from ' + name + ' with complaints')
+      return { warn: db + ' restored, with complaints: ' + why.slice(0, 400),
+               refresh: ['pg_dblist', 'pg_size'] }
+    }
+    note('restored ' + db + ' from ' + name)
+    return { toast: db + ' restored from ' + name + '.', refresh: ['pg_dblist', 'pg_size'] }
+  }
+
+  function readableSize(bytes) {
+    const n = Number(bytes) || 0
+    const units = ['B', 'kB', 'MB', 'GB']
+    let i = 0, v = n
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+    return (i === 0 ? v : v.toFixed(1)) + ' ' + units[i]
+  }
+
+  // -------------------------------------------------------------- hooks ----
+
+  export function prepare() {
+    // The bind mount creates it, but a station that assumes so is a station
+    // that fails on the one deployment where it did not.
+    quasar.exec('postgres', ['mkdir', '-p', '/backups'])
+    note('deployed, version ' + quasar.env.get('PG_VERSION'))
+    return { toast: 'Ready.' }
+  }
+
+  export function note_start() {
+    note('the server was started')
+    return { toast: 'Noted.' }
+  }
+
+  export function note_stop() {
+    note('the server was stopped')
+    return { toast: 'Noted.' }
+  }
+
+  // ------------------------------------------------------------ history ----
+
+  export function recent_events() {
+    const events = quasar.store.get('events') || []
+    if (!events.length) return { data: [{ label: 'Nothing yet', note: '' }] }
+    return { data: events.slice().reverse() }
+  }
+
+  function note(what) {
+    const events = quasar.store.get('events') || []
+    events.push({ label: what, note: new Date().toISOString().slice(0, 16).replace('T', ' ') })
+    quasar.store.set('events', events.slice(-40))
+  }
