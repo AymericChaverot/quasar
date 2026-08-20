@@ -1,21 +1,31 @@
 # A station: an application that arrives with a control surface of its own.
 #
-# Paste this into Settings → Stations, or fetch it from this repository. You
-# will be shown what it asks to be allowed to do before anything is installed.
+# This is the format at full stretch, and it is meant to be read as much as
+# installed. Between them the six tabs below use every component the format
+# offers, every hook, and every capability except the two that reach another
+# container — because a Minecraft server is one container, and a station asks
+# for what it needs and nothing else.
 #
 # Deploying it produces an ordinary application — the same containers, logs,
-# storage, backups and TLS as anything else on the dashboard — with the tabs
-# below on top of it.
+# storage explorer, backups, resource limits and TLS as anything else on the
+# dashboard — with the tabs below on top of it. Removing the station leaves the
+# server running and perfectly normal.
+#
+# Paste it into Settings → Stations, or fetch it from this repository. You will
+# be shown what it asks to be allowed to do before anything is installed.
 
 schema: 1
 id: minecraft-station
 name: Minecraft
-description: Fabric, Forge or Paper server, with mod management and a live console
+description: A server with a console, player administration, world backups, mod management and a day of player history
 author: quasar
-version: "1.0.0"
+version: "2.0.0"
 
-# What to run. This block is a catalogue entry, unchanged: the same parameters,
-# the same {{RANDOM}} secrets, the same compose rewriting and host-port checks.
+# ---------------------------------------------------------------- deploy ----
+# This block is a catalogue entry, unchanged: the same parameters, the same
+# {{RANDOM}} secret, the same compose rewriting and host-port checks. Not a
+# convenience — it is the point. Everything Quasar already knows how to deploy,
+# a station deploys without a line of new code.
 deploy:
   deploy_type: compose
   compose_service: minecraft
@@ -32,7 +42,7 @@ deploy:
       help: Paper for plugins, Fabric or Forge for mods, Vanilla for neither.
     - name: VERSION
       label: Minecraft version
-      default: "1.20.4"
+      default: "1.21.4"
     - name: HOST_PORT
       label: Port
       kind: port
@@ -42,12 +52,28 @@ deploy:
       label: Memory
       kind: select
       default: "4G"
-      options: ["2G", "4G", "6G", "8G"]
+      options: ["2G", "4G", "6G", "8G", "12G"]
+      help: The heap the JVM is given. The container needs a few hundred megabytes more than this.
+    - name: MOTD
+      label: Message of the day
+      default: A Quasar station
+    - name: DIFFICULTY
+      label: Difficulty
+      kind: select
+      default: normal
+      options: [peaceful, easy, normal, hard]
+    - name: MAX_PLAYERS
+      label: Maximum players
+      kind: number
+      default: "20"
   env: |
     TYPE={{TYPE}}
     MINECRAFT_VERSION={{VERSION}}
     HOST_PORT={{HOST_PORT}}
     MEMORY={{MEMORY}}
+    MOTD={{MOTD}}
+    DIFFICULTY={{DIFFICULTY}}
+    MAX_PLAYERS={{MAX_PLAYERS}}
     RCON_PASSWORD={{RANDOM}}
   compose: |
     services:
@@ -60,155 +86,935 @@ deploy:
           TYPE: ${TYPE}
           VERSION: ${MINECRAFT_VERSION}
           MEMORY: ${MEMORY}
+          MOTD: ${MOTD}
+          DIFFICULTY: ${DIFFICULTY}
+          MAX_PLAYERS: ${MAX_PLAYERS}
           ENABLE_RCON: "true"
           RCON_PASSWORD: ${RCON_PASSWORD}
+          # The server writes these once, on the first start. Everything after
+          # that is edited from the Settings tab, which is what a station is
+          # for.
+          OVERRIDE_SERVER_PROPERTIES: "false"
         volumes:
           - ./data:/data
         restart: unless-stopped
 
-# What the script may reach. Nothing is granted by default, and each of these
-# is narrowed by name: one service, three paths, two keys, two hosts.
+# ----------------------------------------------------------- permissions ----
+# Nothing is granted by default, and every line here is narrowed by name. Read
+# them as the install screen will show them:
+#
+#   exec         — commands in this application's own container. It is root on
+#                  that container by design: it is how RCON, tar and du are
+#                  reached, and it is the strongest thing on this list.
+#   logs         — the server's output, for the live pane and for working out
+#                  who joined this afternoon.
+#   files        — the mods, the four administration files and the archives.
+#                  Not the world: a station that can write into a live world
+#                  directory is a station that can corrupt one.
+#   env          — the version, the type and the memory. Not RCON_PASSWORD:
+#                  the console goes through rcon-cli inside the container,
+#                  which reads it for itself.
+#   net.external — two hosts, named. "May reach the internet" tells an operator
+#                  nothing; "may reach api.modrinth.com" is real information.
+#   lifecycle    — restart and redeploy. Not stop: a station has no business
+#                  being able to take a server off the network for good.
 permissions:
   exec: {services: [minecraft]}
   logs: {services: [minecraft]}
-  files: {paths: ["data/mods/**", "data/plugins/**", "data/server.properties"]}
-  env: {read: [MINECRAFT_VERSION, TYPE], write: [MINECRAFT_VERSION]}
+  files:
+    paths:
+      - "data/mods/**"
+      - "data/plugins/**"
+      - "data/backups/**"
+      - "data/server.properties"
+      - "data/ops.json"
+      - "data/whitelist.json"
+      - "data/banned-players.json"
+      - "data/usercache.json"
+  env: {read: [MINECRAFT_VERSION, TYPE, MEMORY], write: [MINECRAFT_VERSION]}
   net.external: {allow: ["api.modrinth.com", "cdn.modrinth.com"]}
   lifecycle: [restart, redeploy]
+  notify: true
 
+# ---------------------------------------------------------------- the UI ----
 ui:
+  # A station changes how its own block looks, and only its own block. It never
+  # sets a background, a surface, a text colour or a border, so this reads
+  # correctly on Nebula, on Paper and on Solarized without its author ever
+  # having thought about them. What it does set is an accent, a shape and a
+  # voice: square corners, hard borders, small caps and wide tracking, which is
+  # about as close to a Minecraft sign as twenty-two CSS variables get.
   theme:
     accent: "#5b8c3a"
-    tint: 0.05
+    tint: 0.07
+    chart: ["#5b8c3a", "#c8a145", "#7aa6c2"]
     radius: 2px
+    radius_badge: 0
+    border_w: 2px
     case: upper
+    tracking: wide
+    density: normal
+    # A grass block, sixteen pixels square, carried inside the document rather
+    # than fetched — the same rule the typefaces follow, and for the same
+    # reason: this has to draw on a server with no route to the internet.
+    icon: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgc2hhcGUtcmVuZGVyaW5nPSJjcmlzcEVkZ2VzIj48cmVjdCB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIGZpbGw9IiM3YTUyMzAiLz48cmVjdCB5PSI5IiB3aWR0aD0iMTYiIGhlaWdodD0iNyIgZmlsbD0iIzZiNDYyNiIvPjxyZWN0IHdpZHRoPSIxNiIgaGVpZ2h0PSI1IiBmaWxsPSIjNWI4YzNhIi8+PHJlY3QgeT0iNSIgd2lkdGg9IjMiIGhlaWdodD0iMiIgZmlsbD0iIzViOGMzYSIvPjxyZWN0IHg9IjUiIHk9IjUiIHdpZHRoPSIyIiBoZWlnaHQ9IjIiIGZpbGw9IiM1YjhjM2EiLz48cmVjdCB4PSI5IiB5PSI1IiB3aWR0aD0iMyIgaGVpZ2h0PSIyIiBmaWxsPSIjNWI4YzNhIi8+PHJlY3QgeD0iMTQiIHk9IjUiIHdpZHRoPSIyIiBoZWlnaHQ9IjIiIGZpbGw9IiM1YjhjM2EiLz48cmVjdCB3aWR0aD0iMTYiIGhlaWdodD0iMiIgZmlsbD0iIzZlYTM0YSIvPjxyZWN0IHg9IjIiIHk9IjExIiB3aWR0aD0iMiIgaGVpZ2h0PSIyIiBmaWxsPSIjOGE2MDM4Ii8+PHJlY3QgeD0iMTAiIHk9IjEyIiB3aWR0aD0iMyIgaGVpZ2h0PSIyIiBmaWxsPSIjOGE2MDM4Ii8+PC9zdmc+"
 
   tabs:
+    # ------------------------------------------------------------ server ----
     - id: server
       name: Server
       panels:
-        - {id: players, type: stat, title: Players online, width: third,
-           source: {action: player_count}, refresh: {seconds: 30}}
-        - {id: build, type: keyvalue, title: Build, width: third,
-           source: {action: build_info}}
-        - id: console
+        - id: mc_banner
+          type: banner
+          tone: accent
+          source:
+            static: >
+              Everything on this page goes through RCON inside this server's own
+              container, or through files in its own folder. The only two
+              addresses this station may reach are Modrinth's, and only the Mods
+              tab uses them.
+
+        - id: mc_vitals
+          type: grid
+          panels:
+            - {id: mc_online, type: stat, title: Players online, width: third,
+               source: {action: player_count}, refresh: {seconds: 20}}
+            - {id: mc_memory, type: gauge, title: Memory, width: third,
+               source: {action: memory_load}, refresh: {seconds: 30}}
+            - {id: mc_build, type: keyvalue, title: Build, width: third,
+               source: {action: build_info}, refresh: {seconds: 60}}
+
+        - id: mc_console
           type: form
           title: Console
-          width: third
-          help: Sent over RCON, as the server operator.
+          width: half
+          help: Sent over RCON, as the server operator. The reply appears below.
           fields:
             - {name: cmd, label: Command, placeholder: "say hello"}
           submit: {label: Send, action: rcon}
-        - {id: output, type: log, title: Live output, service: minecraft}
 
+        - id: mc_quick
+          type: grid
+          title: Without typing anything
+          width: half
+          panels:
+            - {id: mc_save, type: button, width: half, label: Save the world, action: save_now}
+            - {id: mc_day, type: button, width: half, label: Make it morning, action: set_day}
+            - {id: mc_clear, type: button, width: half, label: Clear the sky, action: clear_weather}
+            - {id: mc_restart, type: confirm, width: half, label: Restart, tone: warn,
+               confirm: "Restart the server? Everyone online is disconnected for a minute.",
+               action: restart_server}
+
+        - id: mc_reply
+          type: code
+          title: Last command
+          source: {action: last_command}
+
+        - id: mc_log
+          type: log
+          title: Live output
+          service: minecraft
+          tail: 200
+
+    # ----------------------------------------------------------- players ----
+    - id: players
+      name: Players
+      panels:
+        - id: mc_online_table
+          type: table
+          title: Online now
+          source: {action: online_players}
+          refresh: {seconds: 30}
+          columns:
+            - {key: name, label: Player}
+            - {key: role, label: "", type: badge}
+            - {key: listed, label: "", type: badge}
+          row_actions:
+            - {label: Op, action: toggle_op, tone: accent}
+            - {label: Kick, action: kick_player, tone: warn, confirm: "Kick {{name}}?"}
+            - {label: Ban, action: ban_player, tone: err,
+               confirm: "Ban {{name}}? They are kicked now and refused from here on."}
+          empty: "Nobody is online."
+
+        - id: mc_whitelist_add
+          type: form
+          title: Let somebody in
+          width: half
+          help: Only has an effect while the whitelist is on, which is a switch on the Settings tab.
+          fields:
+            - {name: name, label: Player, placeholder: "Notch"}
+          submit: {label: Add to the whitelist, action: whitelist_add}
+
+        - id: mc_find
+          type: search
+          title: Look somebody up
+          width: half
+          label: Find
+          placeholder: "part of a name"
+          action: find_player
+          help: Searches everyone the server has ever seen, online or not.
+
+        - id: mc_whitelist
+          type: table
+          title: Whitelist
+          width: half
+          source: {action: whitelist_list}
+          columns:
+            - {key: name, label: Player}
+          row_actions:
+            - {label: Remove, action: whitelist_remove, tone: err, confirm: "Take {{name}} off the whitelist?"}
+          empty: "Nobody is whitelisted."
+
+        - id: mc_player
+          type: keyvalue
+          title: Who that is
+          width: half
+          source: {action: player_card}
+
+        - id: mc_ops
+          type: list
+          title: Operators
+          width: half
+          source: {action: ops_list}
+          empty: "Nobody is an operator."
+
+        - id: mc_banned
+          type: list
+          title: Banned
+          width: half
+          source: {action: banned_players}
+          empty: "Nobody is banned."
+
+    # ------------------------------------------------------------- world ----
+    - id: world
+      name: World
+      panels:
+        - {id: mc_world, type: keyvalue, title: The world, width: half,
+           source: {action: world_info}, refresh: {seconds: 120}}
+
+        - id: mc_time
+          type: form
+          title: Time and weather
+          width: half
+          source: {action: sky_now}
+          fields:
+            - {name: time, label: Time of day, type: select, default: day,
+               options: [day, noon, night, midnight]}
+            - {name: weather, label: Weather, type: select, default: clear,
+               options: [clear, rain, thunder]}
+            - {name: freeze, label: Hold it there, type: toggle,
+               help: "Sets doDaylightCycle and doWeatherCycle off."}
+          submit: {label: Set it, action: set_sky}
+
+        - id: mc_graph
+          type: image
+          title: Players, over the last day
+          help: >
+            Drawn by the station as an SVG and handed over as data, not as
+            markup — a sample every ten minutes, kept in the station's own
+            store, which no other station and no other application can read.
+          source: {action: players_graph}
+          refresh: {seconds: 300}
+
+        - id: mc_joins
+          type: list
+          title: Who has been in today
+          width: half
+          source: {action: recent_joins}
+          empty: "Nobody has joined since the server started."
+
+        - id: mc_events
+          type: timeline
+          title: What this station has done
+          width: half
+          source: {action: recent_events}
+
+    # -------------------------------------------------------------- mods ----
     - id: mods
       name: Mods
       panels:
-        - id: mod_list
+        - id: mc_modlist
           type: table
           title: Installed
           source: {action: list_mods}
           columns:
             - {key: name, label: Mod}
             - {key: version, label: Version, align: right}
+            - {key: size, label: Size, align: right}
             - {key: state, label: "", type: badge}
           row_actions:
+            - {label: Update, action: update_mod, tone: accent, long: true}
             - {label: Remove, action: remove_mod, tone: err, confirm: "Remove {{name}}?"}
-          empty: "Nothing installed. Paste a Modrinth link below."
-        - id: add
+          empty: "Nothing installed. Search Modrinth below, or paste a link."
+
+        - id: mc_modsearch
+          type: search
+          title: Search Modrinth
+          width: half
+          label: Search
+          placeholder: "sodium, worldedit, dynmap…"
+          action: mod_search
+          help: One request to api.modrinth.com, filtered to this server's loader and version.
+
+        - id: mc_add
           type: form
-          title: Install from Modrinth
+          title: Or paste a link
+          width: half
           fields:
             - {name: url, label: Modrinth address, placeholder: "https://modrinth.com/mod/sodium"}
           submit: {label: Install, action: add_mod}
-        - id: sweep
+
+        - id: mc_results
+          type: table
+          title: What Modrinth has
+          source: {action: mod_results}
+          columns:
+            - {key: title, label: Mod}
+            - {key: description, label: What it does}
+            - {key: downloads, label: Downloads, align: right}
+          row_actions:
+            - {label: Install, action: install_result, tone: accent}
+          empty: "Nothing searched for yet."
+
+        - id: mc_sweep
           type: button
           title: Everything at once
           label: Check every mod for updates
           long: true
           action: check_all_mods
-          help: Runs in the background; the answer appears below and survives a reload.
+          help: >
+            One request per installed mod, so it runs in the background: the
+            pane below survives a reload, and what it finds shows up as badges
+            on the table above.
 
+    # ----------------------------------------------------------- backups ----
+    - id: backups
+      name: Backups
+      panels:
+        - id: mc_backup_now
+          type: button
+          title: Take one now
+          width: half
+          label: Archive the world
+          long: true
+          action: back_up
+          help: >
+            Saves and flushes first, so the archive is a world nobody was
+            half-way through writing. Runs in the background.
+
+        - id: mc_policy
+          type: form
+          title: What the nightly run keeps
+          width: half
+          source: {action: policy}
+          fields:
+            - {name: keep, label: Archives to keep, type: number, default: "7"}
+            - {name: notify, label: Send a message when a nightly run fails, type: toggle}
+          submit: {label: Save, action: save_policy}
+
+        - id: mc_backups
+          type: table
+          title: Archives
+          source: {action: list_backups}
+          columns:
+            - {key: name, label: File}
+            - {key: size, label: Size, align: right}
+            - {key: taken, label: Taken}
+          row_actions:
+            - {label: Restore, action: restore_backup, tone: err, long: true,
+               confirm: "Replace the live world with {{name}}? Everything built since it was taken is gone."}
+            - {label: Delete, action: delete_backup, tone: err, confirm: "Delete {{name}}?"}
+          empty: "No archives yet. Press the button above, or wait for the nightly run."
+
+        - id: mc_forget
+          type: confirm
+          title: Start again
+          width: half
+          label: Delete every archive
+          tone: err
+          confirm: "Delete every archive? The live world is untouched."
+          action: forget_backups
+
+    # ---------------------------------------------------------- settings ----
     - id: settings
       name: Settings
       panels:
-        - id: props
+        - id: mc_props
           type: form
           title: server.properties
           source: {action: read_props}
+          help: Saved to the file and applied with a restart, because most of these are only read at start.
           fields:
             - {name: motd, label: Message of the day}
             - {name: difficulty, label: Difficulty, type: select,
                options: [peaceful, easy, normal, hard]}
-            - {name: pvp, label: PvP, type: toggle}
             - {name: max_players, label: Maximum players, type: number}
+            - {name: view_distance, label: View distance, type: number,
+               help: "Chunks. The single biggest thing you can turn down."}
+            - {name: spawn_protection, label: Spawn protection, type: number}
+            - {name: pvp, label: PvP, type: toggle}
+            - {name: white_list, label: Whitelist only, type: toggle}
+            - {name: allow_flight, label: Allow flight, type: toggle}
+            - {name: enable_command_block, label: Command blocks, type: toggle}
           submit: {label: Save and restart, action: write_props}
-        - id: about
+
+        - id: mc_grants
+          type: keyvalue
+          title: What this station may reach
+          width: half
+          help: Written into the document, so it costs no process and cannot go out of date without the file changing.
+          source:
+            static:
+              - {key: "Commands in", value: "the minecraft container"}
+              - {key: "Files under", value: "mods, plugins, backups, four .json, server.properties"}
+              - {key: "Environment", value: "version, type, memory, max players"}
+              - {key: "Addresses", value: "api.modrinth.com, cdn.modrinth.com"}
+              - {key: "May also", value: "restart, redeploy, send one notification"}
+              - {key: "Never", value: "the world folder, the RCON password, any other application"}
+
+        - id: mc_about
           type: markdown
           title: About this station
+          width: half
           source:
             static: |
-              Mods are installed from Modrinth, into data/mods for Fabric and
-              Forge or data/plugins for Paper. Nothing here reaches anything
-              but this server's own container and the two Modrinth addresses
-              listed on the install screen.
+              Mods are installed from Modrinth into data/mods for Fabric,
+              Forge and NeoForge, or data/plugins for Paper, and the search is
+              filtered to the loader and version this server actually runs, so
+              a result that appears is one that will load.
 
+              The graph on the World tab is drawn by this script: it keeps a
+              player count every ten minutes in its own key-value space, and
+              renders an SVG when the panel asks for one. Nothing about it
+              touches the page — a station returns data, and Quasar decides
+              what to do with it.
+
+        - {id: mc_divider, type: divider}
+
+# ----------------------------------------------------------------- hooks ----
+# Hooks never block. A failing after_deploy is reported in the deploy panel and
+# the audit log; the deployment stands. Third-party code on the critical path
+# of a deployment is how a working site goes down for a reason nobody can find.
 hooks:
+  after_deploy: {action: prepare}
+  on_start: {action: note_start}
+  on_stop: {action: save_world}
   every:
+    - {minutes: 10, action: sample_players}
     - {minutes: 360, action: check_mod_updates}
+    - {minutes: 1440, action: nightly_backup}
 
 script: |
-  // Where a build of this type keeps the things it loads.
-  function modDir() {
-    return quasar.app.params.TYPE === 'PAPER' ? 'data/plugins' : 'data/mods'
-  }
+  // =====================================================================
+  // Talking to the server.
+  //
+  // Two ways in and no others: rcon-cli inside the container, and files in
+  // this application's own folder. argv all the way down — nothing between
+  // here and the Docker daemon parses a shell string, so a player called
+  // `; rm -rf /` is a player with a silly name.
+  // =====================================================================
 
-  function rconExec(cmd) {
-    const r = quasar.exec('minecraft', ['rcon-cli', cmd])
-    if (r.code !== 0) throw new Error((r.stderr || r.stdout || 'rcon failed').trim())
+  const BACKUPS = 'data/backups'
+
+  function exec(argv) {
+    const r = quasar.exec('minecraft', argv)
+    if (r.code !== 0) throw new Error(tidy(r.stderr) || tidy(r.stdout) || argv[0] + ' exited ' + r.code)
     return r.stdout
   }
 
-  export function player_count() {
-    // A Minecraft server is a running container for the best part of a minute
-    // before it answers on RCON, and only this script knows that. Reported as
-    // an error it reads, to whoever pressed Deploy a moment ago, as something
-    // they broke; reported as waiting it is a spinner that asks again until the
-    // server is there.
-    let out
+  // The console form posts to an action called `rcon`, so the helper every
+  // other function calls is named apart from it: an exported action quietly
+  // shadowing an internal helper is the kind of thing that works until
+  // somebody renames a panel.
+  function rconRaw(cmd) {
+    const r = quasar.exec('minecraft', ['rcon-cli', cmd])
+    if (r.code !== 0) throw new Error(tidy(r.stderr) || tidy(r.stdout) || 'could not connect to the server over RCON')
+    return r.stdout
+  }
+
+  function tidy(s) { return String(s || '').trim() }
+
+  // A Minecraft server is a running container for the best part of a minute
+  // before it answers on RCON, and only this script knows that. Reported as an
+  // error it reads, to whoever pressed Deploy a moment ago, as something they
+  // broke; reported as waiting it is a spinner that asks again until the server
+  // is there.
+  //
+  // Matched on what a refused connection says, not on the word "rcon": a
+  // server that answered and disliked the command has to keep reading as the
+  // error it is.
+  function comingUp(e) {
+    return /connection refused|could not connect|failed to connect|no such container|is not running|EOF|dial |i\/o timeout/i
+      .test(String(e && e.message))
+  }
+
+  // For a panel. Waiting is not failing: the panel draws a spinner and asks
+  // again, so it comes alive on its own when the server arrives.
+  function whileComingUp(fn, why) {
     try {
-      out = rconExec('list')
+      return fn()
     } catch (e) {
-      return { waiting: 'Waiting for the server to finish starting' }
+      if (comingUp(e)) return { waiting: why || 'Waiting for the server to finish starting' }
+      return { error: String(e.message || e) }
     }
-    const m = out.match(/There are (\d+) of a max of (\d+)/)
-    return { data: { value: m ? m[1] : '—', suffix: m ? '/ ' + m[2] : '' } }
+  }
+
+  // For a button. The same not-yet, said differently on purpose: a panel with
+  // nothing to draw draws a spinner, but an action that came back with only a
+  // waiting has nothing on the page to attach it to, and a button that appears
+  // to do nothing at all is worse than one that says why.
+  function ifItAnswers(fn) {
+    try {
+      return fn()
+    } catch (e) {
+      if (comingUp(e)) return { warn: 'The server is not answering yet — give it a moment.' }
+      return { error: String(e.message || e) }
+    }
+  }
+
+  // Reading a file that has not been written yet is not a failure: a server
+  // with no operators has no ops.json at all.
+  function readJSON(path, fallback) {
+    try {
+      return JSON.parse(quasar.files.read(path) || 'null') || fallback
+    } catch (e) {
+      return fallback
+    }
+  }
+
+  function parseProps(text) {
+    const out = {}
+    for (const line of String(text || '').split('\n')) {
+      if (!line || line.startsWith('#')) continue
+      const i = line.indexOf('=')
+      if (i > 0) out[line.slice(0, i).trim()] = line.slice(i + 1).trim()
+    }
+    return out
+  }
+
+  function props() {
+    try {
+      return parseProps(quasar.files.read('data/server.properties'))
+    } catch (e) {
+      return {}
+    }
+  }
+
+  function worldName() { return props()['level-name'] || 'world' }
+
+  function readableSize(bytes) {
+    const n = Number(bytes) || 0
+    const units = ['B', 'kB', 'MB', 'GB']
+    let i = 0, v = n
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+    return (i === 0 ? String(v) : v.toFixed(1)) + ' ' + units[i]
+  }
+
+  function stamp() {
+    return new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')
+  }
+
+  function clock() {
+    return new Date().toISOString().slice(0, 16).replace('T', ' ')
+  }
+
+  // =====================================================================
+  // Server
+  // =====================================================================
+
+  export function player_count() {
+    return whileComingUp(function () {
+      const m = rconRaw('list').match(/There are (\d+) of a max of (\d+)/)
+      if (!m) return { waiting: 'Waiting for the server to answer' }
+      return { data: { value: m[1], suffix: '/ ' + m[2], label: quasar.app.params.TYPE } }
+    })
+  }
+
+  // What the container is actually using, against what the JVM was given. The
+  // cgroup files are the honest number — the JVM's own idea of its heap says
+  // nothing about the rest of the process.
+  export function memory_load() {
+    const r = quasar.exec('minecraft', ['cat', '/sys/fs/cgroup/memory.current', '/sys/fs/cgroup/memory.max'])
+    if (r.code !== 0) {
+      return { data: { value: 0, suffix: '%', label: 'the container does not report its memory' } }
+    }
+    const lines = String(r.stdout).trim().split('\n')
+    let used = Number(lines[0])
+
+    // Page cache is charged to the container and is not the server's working
+    // set. docker stats takes it off for the same reason.
+    const cache = quasar.exec('minecraft', ['grep', '-m1', 'inactive_file ', '/sys/fs/cgroup/memory.stat'])
+    if (cache.code === 0) used -= Number(String(cache.stdout).split(/\s+/)[1]) || 0
+
+    // What to measure it against, in the order worth having: the limit the
+    // operator set on this application, then the machine it is on.
+    //
+    // Deliberately not MEMORY. That is -Xmx, the heap, and a healthy Java
+    // server sits well above it once metaspace, the code cache, GC structures
+    // and thread stacks are counted — so a gauge against the heap reads 100%
+    // on a server with nothing whatever wrong with it, which is a gauge that
+    // has stopped saying anything.
+    let cap = Number(lines[1]) // "max" is NaN, which is the unlimited case
+    let against = 'the limit set on this application'
+    if (!cap) {
+      const host = quasar.exec('minecraft', ['grep', '-m1', 'MemTotal', '/proc/meminfo'])
+      cap = host.code === 0 ? Number(String(host.stdout).split(/\s+/)[1]) * 1024 : 0
+      against = 'this machine'
+    }
+    if (!cap) {
+      return { data: { value: 0, suffix: '%', label: readableSize(used) + ' in use, against no ceiling' } }
+    }
+
+    const pct = Math.min(Math.round((used / cap) * 100), 100)
+    return { data: { value: pct, suffix: '%',
+                     label: readableSize(used) + ' of ' + readableSize(cap) + ', ' + against } }
   }
 
   export function build_info() {
+    const p = props()
     return { data: [
-      { key: 'Type',    value: quasar.app.params.TYPE },
-      { key: 'Version', value: quasar.env.get('MINECRAFT_VERSION') },
-      { key: 'Status',  value: quasar.app.status },
-      { key: 'Address', value: quasar.app.domain },
+      { key: 'Type',     value: quasar.app.params.TYPE },
+      { key: 'Version',  value: quasar.env.get('MINECRAFT_VERSION') },
+      { key: 'Status',   value: quasar.app.status },
+      { key: 'Address',  value: quasar.app.domain },
+      { key: 'Heap',     value: quasar.env.get('MEMORY') },
+      { key: 'World',    value: p['level-name'] || 'world' },
+      { key: 'Whitelist', value: p['white-list'] === 'true' ? 'on' : 'off' },
     ]}
   }
 
   export function rcon({ cmd }) {
-    if (!cmd) return { error: 'Nothing to send.' }
-    return { toast: rconExec(cmd).trim() || 'Sent.' }
+    const text = String(cmd || '').trim()
+    if (!text) return { error: 'Nothing to send.' }
+
+    let reply, failed = false
+    try {
+      reply = rconRaw(text)
+    } catch (e) {
+      reply = String(e.message || e)
+      failed = true
+    }
+
+    quasar.store.set('reply', { cmd: text, out: String(reply || '(no reply)').slice(0, 4000),
+                                when: clock(), failed: failed })
+    note((failed ? 'failed to run' : 'ran') + ' /' + text.split(' ')[0])
+
+    return failed
+      ? { error: reply, refresh: ['mc_reply'] }
+      : { toast: tidy(reply) || 'Sent.', refresh: ['mc_reply', 'mc_online', 'mc_online_table', 'mc_events'] }
   }
 
-  export function list_mods() {
-    const known = quasar.store.get('updates') || {}
-    return { data: quasar.files.list(modDir())
-      .filter(f => f.name.endsWith('.jar'))
-      .map(f => ({
-        name:    f.name.replace(/-[\d.]+\.jar$/, ''),
-        version: (f.name.match(/-([\d.]+)\.jar$/) || [, '?'])[1],
-        state:   known[f.name] ? { label: 'update', tone: 'warn' } : null,
-        file:    f.name,
-      })) }
+  export function last_command() {
+    const last = quasar.store.get('reply')
+    if (!last) return { data: '> nothing sent yet' }
+    return { data: '> ' + last.cmd + '\n' + (last.failed ? '! ' : '') + last.out + '\n\n' + last.when }
+  }
+
+  export function save_now() {
+    return ifItAnswers(function () {
+      rconRaw('save-all flush')
+      note('saved the world by hand')
+      return { toast: 'Saved.', refresh: ['mc_events'] }
+    })
+  }
+
+  export function set_day() {
+    return ifItAnswers(function () {
+      rconRaw('time set day')
+      return { toast: 'Morning.', refresh: ['mc_world'] }
+    })
+  }
+
+  export function clear_weather() {
+    return ifItAnswers(function () {
+      rconRaw('weather clear')
+      return { toast: 'Clear skies.', refresh: ['mc_world'] }
+    })
+  }
+
+  export function restart_server() {
+    // Told, if it is listening. A server that is not is a server that has
+    // nobody on it to tell, and the restart goes ahead either way.
+    try {
+      rconRaw('say Server restarting — back shortly.')
+    } catch (e) {
+      quasar.log('nobody to warn: ' + e.message)
+    }
+    quasar.app.restart()
+    note('restarted the server')
+    return { warn: 'Restarting. The panels will come back on their own.', refresh: ['mc_events'] }
+  }
+
+  // =====================================================================
+  // Players
+  // =====================================================================
+
+  function onlineNames() {
+    const out = rconRaw('list')
+    const m = out.match(/players online:?\s*(.*)$/i)
+    if (!m || !m[1].trim()) return []
+    return m[1].split(',').map(function (s) { return s.trim() }).filter(Boolean)
+  }
+
+  export function online_players() {
+    return whileComingUp(function () {
+      const ops = readJSON('data/ops.json', []).map(function (o) { return String(o.name || '').toLowerCase() })
+      const listed = readJSON('data/whitelist.json', []).map(function (w) { return String(w.name || '').toLowerCase() })
+
+      return { data: onlineNames().map(function (name) {
+        const isOp = ops.indexOf(name.toLowerCase()) >= 0
+        return {
+          name: name,
+          op: isOp ? 'true' : 'false',
+          role: isOp ? { label: 'op', tone: 'accent' } : null,
+          listed: listed.indexOf(name.toLowerCase()) >= 0 ? { label: 'whitelisted', tone: 'ok' } : null,
+        }
+      }) }
+    })
+  }
+
+  export function toggle_op({ name, op }) {
+    return ifItAnswers(function () {
+      const making = op !== 'true'
+      rconRaw((making ? 'op ' : 'deop ') + name)
+      note((making ? 'made ' : 'stood down ') + name)
+      return { toast: name + (making ? ' is an operator.' : ' is no longer an operator.'),
+               refresh: ['mc_online_table', 'mc_ops'] }
+    })
+  }
+
+  export function kick_player({ name }) {
+    return ifItAnswers(function () {
+      rconRaw('kick ' + name + ' Kicked from the dashboard')
+      note('kicked ' + name)
+      return { toast: name + ' kicked.', refresh: ['mc_online_table', 'mc_online'] }
+    })
+  }
+
+  export function ban_player({ name }) {
+    return ifItAnswers(function () {
+      rconRaw('ban ' + name + ' Banned from the dashboard')
+      note('banned ' + name)
+      return { toast: name + ' banned.', refresh: ['mc_online_table', 'mc_banned', 'mc_online'] }
+    })
+  }
+
+  export function whitelist_add({ name }) {
+    const who = String(name || '').trim()
+    if (!who) return { error: 'A name to add.' }
+    return ifItAnswers(function () {
+      rconRaw('whitelist add ' + who)
+      note('whitelisted ' + who)
+      return { toast: who + ' may come in.', refresh: ['mc_whitelist', 'mc_online_table'] }
+    })
+  }
+
+  export function whitelist_remove({ name }) {
+    return ifItAnswers(function () {
+      rconRaw('whitelist remove ' + name)
+      note('took ' + name + ' off the whitelist')
+      return { toast: name + ' removed.', refresh: ['mc_whitelist', 'mc_online_table'] }
+    })
+  }
+
+  export function whitelist_list() {
+    return { data: readJSON('data/whitelist.json', []).map(function (w) { return { name: w.name } }) }
+  }
+
+  export function ops_list() {
+    const ops = readJSON('data/ops.json', [])
+    return { data: ops.map(function (o) {
+      return { label: o.name, note: 'level ' + (o.level === undefined ? 4 : o.level) }
+    }) }
+  }
+
+  export function banned_players() {
+    return { data: readJSON('data/banned-players.json', []).map(function (b) {
+      return { label: b.name, note: String(b.reason || '').slice(0, 60) }
+    }) }
+  }
+
+  export function find_player({ q }) {
+    const needle = String(q || '').trim().toLowerCase()
+    if (!needle) return { warn: 'Nothing to look for.' }
+
+    const seen = readJSON('data/usercache.json', [])
+    const hit = seen.filter(function (u) {
+      return String(u.name || '').toLowerCase().indexOf(needle) >= 0
+    })[0]
+
+    if (!hit) {
+      quasar.store.delete('player')
+      return { warn: 'This server has never seen anybody called that.', refresh: ['mc_player'] }
+    }
+
+    const name = hit.name
+    const ops = readJSON('data/ops.json', [])
+    const listed = readJSON('data/whitelist.json', [])
+    const banned = readJSON('data/banned-players.json', [])
+    const matches = function (list) {
+      return list.some(function (e) { return String(e.name || '').toLowerCase() === name.toLowerCase() })
+    }
+
+    let online = false
+    try {
+      online = onlineNames().some(function (n) { return n.toLowerCase() === name.toLowerCase() })
+    } catch (e) {
+      online = false
+    }
+
+    quasar.store.set('player', [
+      { key: 'Name',       value: name },
+      { key: 'UUID',       value: hit.uuid || '?' },
+      { key: 'Online',     value: online ? 'yes' : 'no' },
+      { key: 'Operator',   value: matches(ops) ? 'yes' : 'no' },
+      { key: 'Whitelisted', value: matches(listed) ? 'yes' : 'no' },
+      { key: 'Banned',     value: matches(banned) ? 'yes' : 'no' },
+    ])
+    return { toast: 'Found ' + name + '.', refresh: ['mc_player'] }
+  }
+
+  export function player_card() {
+    return { data: quasar.store.get('player') || [{ key: 'Nobody looked up yet', value: '—' }] }
+  }
+
+  // =====================================================================
+  // World
+  // =====================================================================
+
+  export function world_info() {
+    return whileComingUp(function () {
+      const p = props()
+      const rows = [
+        { key: 'Name',       value: p['level-name'] || 'world' },
+        { key: 'Difficulty', value: p['difficulty'] || '?' },
+        { key: 'PvP',        value: p['pvp'] === 'false' ? 'off' : 'on' },
+        { key: 'View distance', value: (p['view-distance'] || '?') + ' chunks' },
+      ]
+
+      const seed = rconRaw('seed').match(/\[(-?\d+)\]/)
+      rows.push({ key: 'Seed', value: seed ? seed[1] : 'unknown' })
+
+      const time = rconRaw('time query daytime').match(/(\d+)/)
+      if (time) rows.push({ key: 'Time', value: minecraftClock(Number(time[1])) })
+
+      const du = quasar.exec('minecraft', ['du', '-sk', '/data/' + worldName()])
+      if (du.code === 0) {
+        rows.push({ key: 'On disk', value: readableSize(Number(String(du.stdout).split(/\s+/)[0]) * 1024) })
+      }
+      return { data: rows }
+    })
+  }
+
+  // Minecraft counts ticks from six in the morning, twenty of them a second.
+  function minecraftClock(ticks) {
+    const minutes = (Math.floor(ticks / 1000) + 6) * 60 + Math.round((ticks % 1000) * 0.06)
+    const h = Math.floor(minutes / 60) % 24
+    const m = minutes % 60
+    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m
+  }
+
+  export function sky_now() {
+    return { data: quasar.store.get('sky') || { time: 'day', weather: 'clear', freeze: false } }
+  }
+
+  export function set_sky({ time, weather, freeze }) {
+    return ifItAnswers(function () {
+      rconRaw('time set ' + pick(time, ['day', 'noon', 'night', 'midnight'], 'day'))
+      rconRaw('weather ' + pick(weather, ['clear', 'rain', 'thunder'], 'clear'))
+      rconRaw('gamerule doDaylightCycle ' + (freeze ? 'false' : 'true'))
+      rconRaw('gamerule doWeatherCycle ' + (freeze ? 'false' : 'true'))
+
+      quasar.store.set('sky', { time: time, weather: weather, freeze: !!freeze })
+      note('set the sky to ' + time + ', ' + weather + (freeze ? ', held' : ''))
+      return { toast: 'Done.', refresh: ['mc_world', 'mc_events'] }
+    })
+  }
+
+  // A value that came from a form is still a value from outside, and these go
+  // straight into a command.
+  function pick(value, allowed, fallback) {
+    return allowed.indexOf(String(value)) >= 0 ? String(value) : fallback
+  }
+
+  // The graph. A station never produces markup — it returns data — and an SVG
+  // handed over as a data: URI is data: it lands in an attribute, is drawn by
+  // the browser as an image, and cannot reach the page around it.
+  export function players_graph() {
+    const samples = quasar.store.get('samples') || []
+    if (samples.length < 2) {
+      return { waiting: 'Not enough history yet: a sample is taken every ten minutes.' }
+    }
+
+    const w = 720, h = 150, pad = 10
+    let peak = 1
+    for (const s of samples) peak = Math.max(peak, s.n)
+
+    const step = (w - pad * 2) / (samples.length - 1)
+    const at = function (i, n) {
+      return (pad + i * step).toFixed(1) + ',' + (h - pad - (n / peak) * (h - pad * 2)).toFixed(1)
+    }
+
+    const line = samples.map(function (s, i) { return at(i, s.n) }).join(' ')
+    const area = pad + ',' + (h - pad) + ' ' + line + ' ' + (w - pad) + ',' + (h - pad)
+
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '">' +
+      '<polygon points="' + area + '" fill="#5b8c3a" fill-opacity="0.18"/>' +
+      '<polyline points="' + line + '" fill="none" stroke="#5b8c3a" stroke-width="2"/>' +
+      '<line x1="' + pad + '" y1="' + (h - pad) + '" x2="' + (w - pad) + '" y2="' + (h - pad) +
+      '" stroke="#5b8c3a" stroke-opacity="0.35"/>' +
+      '<text x="' + (pad + 2) + '" y="' + (pad + 10) + '" font-family="monospace" font-size="11" fill="#5b8c3a">' +
+      'peak ' + peak + '</text>' +
+      '<text x="' + (w - pad - 2) + '" y="' + (pad + 10) + '" text-anchor="end" ' +
+      'font-family="monospace" font-size="11" fill="#5b8c3a">' +
+      samples.length + ' samples, now ' + samples[samples.length - 1].n + '</text>' +
+      '</svg>'
+
+    return { data: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) }
+  }
+
+  // Who has been in, read out of the container's own log rather than out of a
+  // file — which is what the logs permission is for, and why it is a separate
+  // and much weaker thing to ask for than exec.
+  export function recent_joins() {
+    let text
+    try {
+      text = quasar.logs('minecraft', { tail: 500 })
+    } catch (e) {
+      return { error: String(e.message || e) }
+    }
+
+    const seen = {}
+    const out = []
+    for (const line of String(text).split('\n')) {
+      const m = line.match(/\[(\d\d:\d\d):\d\d\][^:]*:\s*(\w+) joined the game/)
+      if (!m || seen[m[2]]) continue
+      seen[m[2]] = true
+      out.push({ label: m[2], note: 'since ' + m[1] })
+    }
+    return { data: out.reverse().slice(0, 20) }
+  }
+
+  export function recent_events() {
+    const events = quasar.store.get('events') || []
+    if (!events.length) return { data: [{ label: 'Nothing yet', note: '' }] }
+    return { data: events.slice().reverse() }
+  }
+
+  function note(what) {
+    const events = quasar.store.get('events') || []
+    events.push({ label: what, note: clock() })
+    quasar.store.set('events', events.slice(-40))
+  }
+
+  // =====================================================================
+  // Mods
+  // =====================================================================
+
+  // Where a build of this type keeps the things it loads.
+  function modDir() {
+    return quasar.app.params.TYPE === 'PAPER' ? 'data/plugins' : 'data/mods'
   }
 
   // Modrinth's own naming for the loader this server runs.
@@ -217,47 +1023,155 @@ script: |
     return type === 'PAPER' ? 'paper' : type.toLowerCase()
   }
 
+  function jars() {
+    try {
+      return quasar.files.list(modDir()).filter(function (f) { return /\.jar$/.test(f.name) })
+    } catch (e) {
+      return [] // nothing installed, which is not a failure
+    }
+  }
+
+  export function list_mods() {
+    const known = quasar.store.get('updates') || {}
+    return { data: jars().map(function (f) {
+      const found = known[f.name]
+      return {
+        name:    f.name.replace(/-[\d.]+\.jar$/, ''),
+        version: (f.name.match(/-([\d.]+)\.jar$/) || [, '?'])[1],
+        size:    readableSize(f.size),
+        file:    f.name,
+        state:   found ? { label: 'update', tone: 'warn' } : null,
+      }
+    }) }
+  }
+
+  // Modrinth takes its filters as JSON arrays in the query string, and they
+  // have to be percent-encoded: written out as raw brackets and quotes the
+  // request comes back empty, which reads at the panel as "Modrinth did not
+  // answer" and is really "this URL was never valid".
   function newestBuild(slug) {
-    const url = 'https://api.modrinth.com/v2/project/' + slug + '/version'
-      + '?loaders=["' + loader() + '"]'
-      + '&game_versions=["' + quasar.env.get('MINECRAFT_VERSION') + '"]'
+    const url = 'https://api.modrinth.com/v2/project/' + encodeURIComponent(slug) + '/version'
+      + '?loaders=' + encodeURIComponent(JSON.stringify([loader()]))
+      + '&game_versions=' + encodeURIComponent(JSON.stringify([quasar.env.get('MINECRAFT_VERSION')]))
     const versions = quasar.http.get(url).json()
     if (!versions.length) return null
-    return versions[0].files.find(f => f.primary) || versions[0].files[0]
+    const v = versions[0]
+    const file = v.files.filter(function (f) { return f.primary })[0] || v.files[0]
+    return file ? { filename: file.filename, url: file.url, version: v.version_number } : null
   }
 
   export function add_mod({ url }) {
     const slug = String(url || '').replace(/\/$/, '').split('/').pop()
     if (!slug) return { error: 'That is not a Modrinth address.' }
+    return install(slug)
+  }
 
-    const file = newestBuild(slug)
-    if (!file) {
-      return { error: 'No build of ' + slug + ' for ' + quasar.app.params.TYPE
-        + ' ' + quasar.env.get('MINECRAFT_VERSION') + '.' }
+  export function install_result({ slug }) {
+    return install(slug)
+  }
+
+  function install(slug) {
+    let file
+    try {
+      file = newestBuild(slug)
+    } catch (e) {
+      return { error: 'Modrinth did not answer: ' + String(e.message || e) }
     }
+    if (!file) {
+      return { error: 'No build of ' + slug + ' for ' + quasar.app.params.TYPE + ' ' +
+        quasar.env.get('MINECRAFT_VERSION') + '.' }
+    }
+
     quasar.files.write(modDir() + '/' + file.filename, quasar.http.get(file.url).body)
-    return { toast: slug + ' installed — restart to load it', refresh: ['mod_list'] }
+    note('installed ' + slug + ' ' + file.version)
+    return { toast: slug + ' ' + file.version + ' installed — restart to load it',
+             refresh: ['mc_modlist', 'mc_events'] }
   }
 
   export function remove_mod({ file }) {
     quasar.files.delete(modDir() + '/' + file)
-    return { toast: 'Removed.', refresh: ['mod_list'] }
+    note('removed ' + file)
+    return { toast: 'Removed.', refresh: ['mc_modlist'] }
   }
 
-  // Long: it makes one request per installed mod, which is not something to
-  // hold an HTTP request open for.
+  // Long: it downloads a jar, and a browser that gave up waiting must not be
+  // the thing that cancelled it.
+  export function update_mod({ file }) {
+    const known = quasar.store.get('updates') || {}
+    const found = known[file]
+    if (!found) return { warn: 'Nothing newer is known for this one. Check for updates first.' }
+
+    quasar.progress(20, 'downloading ' + found.filename)
+    quasar.files.write(modDir() + '/' + found.filename, quasar.http.get(found.url).body)
+    if (found.filename !== file) quasar.files.delete(modDir() + '/' + file)
+
+    delete known[file]
+    quasar.store.set('updates', known)
+    quasar.progress(100, 'done')
+    note('updated ' + file + ' to ' + found.filename)
+    return { toast: found.filename + ' installed — restart to load it', refresh: ['mc_modlist'] }
+  }
+
+  export function mod_search({ q }) {
+    const needle = String(q || '').trim()
+    if (!needle) return { warn: 'Nothing to search for.' }
+
+    const kind = loader() === 'paper' ? 'plugin' : 'mod'
+    const url = 'https://api.modrinth.com/v2/search?limit=20&query=' + encodeURIComponent(needle) +
+      '&facets=' + encodeURIComponent(JSON.stringify([
+        ['project_type:' + kind],
+        ['categories:' + loader()],
+        ['versions:' + quasar.env.get('MINECRAFT_VERSION')],
+      ]))
+
+    let found
+    try {
+      found = quasar.http.get(url).json()
+    } catch (e) {
+      return { error: 'Modrinth did not answer: ' + String(e.message || e) }
+    }
+
+    const hits = (found.hits || []).map(function (h) {
+      return {
+        title: h.title,
+        slug: h.slug,
+        description: String(h.description || '').slice(0, 90),
+        downloads: shortNumber(h.downloads),
+      }
+    })
+    quasar.store.set('results', hits)
+
+    const said = hits.length + ' result' + (hits.length === 1 ? '' : 's') + ' that fit this server'
+    return hits.length
+      ? { toast: said, refresh: ['mc_results'] }
+      : { warn: said + ' — try a shorter word', refresh: ['mc_results'] }
+  }
+
+  export function mod_results() {
+    return { data: quasar.store.get('results') || [] }
+  }
+
+  function shortNumber(n) {
+    const v = Number(n) || 0
+    if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M'
+    if (v >= 1000) return Math.round(v / 1000) + 'k'
+    return String(v)
+  }
+
+  // Long: one request per installed mod, which is not something to hold an
+  // HTTP request open for.
   export function check_all_mods() {
-    const jars = quasar.files.list(modDir()).filter(f => f.name.endsWith('.jar'))
+    const installed = jars()
     const updates = {}
 
-    for (let i = 0; i < jars.length; i++) {
-      const jar = jars[i]
+    for (let i = 0; i < installed.length; i++) {
+      const jar = installed[i]
       const slug = jar.name.replace(/-[\d.]+\.jar$/, '').toLowerCase()
-      quasar.progress(Math.round((i / Math.max(jars.length, 1)) * 100), 'checking ' + slug)
+      quasar.progress(Math.round((i / Math.max(installed.length, 1)) * 100), 'checking ' + slug)
       try {
         const file = newestBuild(slug)
         if (file && file.filename !== jar.name) {
-          updates[jar.name] = { filename: file.filename, url: file.url }
+          updates[jar.name] = { filename: file.filename, url: file.url, version: file.version }
         }
       } catch (e) {
         quasar.log(slug + ': ' + e.message)
@@ -266,43 +1180,246 @@ script: |
 
     quasar.store.set('updates', updates)
     const n = Object.keys(updates).length
+    if (n) note(n + ' mod(s) have a newer build')
     return { toast: n ? n + ' mod(s) have a newer build' : 'Everything is up to date',
-             refresh: ['mod_list'] }
+             refresh: ['mc_modlist'] }
   }
 
+  // =====================================================================
+  // Backups
+  // =====================================================================
+
+  function policyNow() {
+    const p = quasar.store.get('policy') || {}
+    return { keep: Math.max(Number(p.keep) || 7, 1), notify: !!p.notify }
+  }
+
+  export function policy() {
+    const p = policyNow()
+    return { data: { keep: p.keep, notify: p.notify } }
+  }
+
+  export function save_policy({ keep, notify }) {
+    const n = Math.max(Math.min(Number(keep) || 7, 60), 1)
+    quasar.store.set('policy', { keep: n, notify: !!notify })
+    return { toast: 'Keeping the last ' + n + '.', refresh: ['mc_policy'] }
+  }
+
+  // Long: an archive of a world worth archiving takes a while.
+  export function back_up() { return runBackup('by hand') }
+
+  export function nightly_backup() { return runBackup('on the schedule') }
+
+  function runBackup(how) {
+    const world = worldName()
+    const name = world + '-' + stamp() + '.tgz'
+    let held = false
+
+    quasar.progress(10, 'asking the server to save and hold')
+    try {
+      rconRaw('save-off')
+      held = true
+      rconRaw('save-all flush')
+    } catch (e) {
+      // A stopped server is the easiest world of all to archive.
+      quasar.log('the server did not answer, archiving what is on disk: ' + e.message)
+    }
+
+    let failure = null
+    try {
+      quasar.progress(40, 'archiving ' + world)
+      exec(['mkdir', '-p', '/data/backups'])
+      exec(['tar', '-czf', '/data/backups/' + name, '-C', '/data', world])
+    } catch (e) {
+      failure = String(e.message || e)
+    } finally {
+      // Always, even when the archive failed: a server left with saving off
+      // loses everything at the next crash, and that would be this station's
+      // doing.
+      if (held) {
+        try { rconRaw('save-on') } catch (e) { quasar.log('could not turn saving back on: ' + e.message) }
+      }
+    }
+
+    if (failure) {
+      if (policyNow().notify) quasar.notify('Minecraft backup on ' + quasar.app.name + ' failed: ' + failure)
+      note('a backup failed')
+      return { error: 'The archive failed: ' + failure.slice(0, 400) }
+    }
+
+    const removed = prune()
+    quasar.progress(100, 'done')
+    note('archived the world ' + how + (removed ? ', deleted ' + removed + ' old' : ''))
+    return { toast: name + ' written' + (removed ? ', ' + removed + ' old archive(s) deleted' : '') + '.',
+             refresh: ['mc_backups', 'mc_events'] }
+  }
+
+  function prune() {
+    const keep = policyNow().keep
+    const files = archives().sort(function (a, b) { return a.name < b.name ? 1 : -1 })
+    let removed = 0
+    for (const old of files.slice(keep)) {
+      quasar.files.delete(BACKUPS + '/' + old.name)
+      removed++
+    }
+    return removed
+  }
+
+  function archives() {
+    try {
+      return quasar.files.list(BACKUPS).filter(function (f) { return !f.dir && /\.tgz$/.test(f.name) })
+    } catch (e) {
+      return []
+    }
+  }
+
+  export function list_backups() {
+    return { data: archives()
+      .sort(function (a, b) { return a.name < b.name ? 1 : -1 })
+      .map(function (f) {
+        const m = f.name.match(/(\d{8})-(\d{6})/)
+        return {
+          name: f.name,
+          size: readableSize(f.size),
+          taken: m ? m[1].replace(/(\d{4})(\d\d)(\d\d)/, '$1-$2-$3') + ' ' +
+                     m[2].replace(/(\d\d)(\d\d)(\d\d)/, '$1:$2:$3') : '',
+        }
+      }) }
+  }
+
+  export function delete_backup({ name }) {
+    quasar.files.delete(BACKUPS + '/' + name)
+    note('deleted the archive ' + name)
+    return { toast: 'Deleted.', refresh: ['mc_backups'] }
+  }
+
+  export function forget_backups() {
+    let n = 0
+    for (const f of archives()) {
+      quasar.files.delete(BACKUPS + '/' + f.name)
+      n++
+    }
+    note('deleted every archive (' + n + ')')
+    return { toast: n + ' archive(s) deleted.', refresh: ['mc_backups'] }
+  }
+
+  // Long, and the most destructive thing on these six tabs, which is why the
+  // row asks first and in those words.
+  export function restore_backup({ name }) {
+    const world = worldName()
+
+    quasar.progress(10, 'warning whoever is online')
+    try {
+      rconRaw('say Restoring an earlier world — the server is about to restart.')
+      rconRaw('save-off')
+    } catch (e) {
+      quasar.log('the server did not answer; restoring anyway: ' + e.message)
+    }
+
+    try {
+      quasar.progress(40, 'replacing ' + world)
+      exec(['rm', '-rf', '/data/' + world])
+      exec(['tar', '-xzf', '/data/backups/' + name, '-C', '/data'])
+    } catch (e) {
+      // Saving stays off until the restart puts it back, and the server is
+      // about to be restarted either way — but say so rather than leave it.
+      return { error: 'The restore failed and the world may be half-replaced: ' + String(e.message || e) }
+    }
+
+    quasar.progress(90, 'restarting')
+    quasar.app.restart()
+    note('restored the world from ' + name)
+    return { warn: 'Restored from ' + name + '. The server is restarting.',
+             refresh: ['mc_events', 'mc_world'] }
+  }
+
+  // =====================================================================
+  // Settings
+  // =====================================================================
+
   export function read_props() {
-    const p = parseProps(quasar.files.read('data/server.properties'))
+    const p = props()
     return { data: {
-      motd: p.motd, difficulty: p.difficulty,
-      pvp: p.pvp === 'true', max_players: Number(p['max-players'] || 20),
+      motd: p['motd'] || '',
+      difficulty: p['difficulty'] || 'normal',
+      max_players: Number(p['max-players'] || 20),
+      view_distance: Number(p['view-distance'] || 10),
+      spawn_protection: Number(p['spawn-protection'] || 16),
+      pvp: p['pvp'] !== 'false',
+      white_list: p['white-list'] === 'true',
+      allow_flight: p['allow-flight'] === 'true',
+      enable_command_block: p['enable-command-block'] === 'true',
     }}
   }
 
   export function write_props(v) {
-    const p = parseProps(quasar.files.read('data/server.properties'))
-    p.motd = v.motd
-    p.difficulty = v.difficulty
-    p.pvp = v.pvp ? 'true' : 'false'
-    p['max-players'] = String(v.max_players)
+    const p = props()
+    p['motd'] = String(v.motd || '')
+    p['difficulty'] = pick(v.difficulty, ['peaceful', 'easy', 'normal', 'hard'], 'normal')
+    p['max-players'] = String(Math.max(Number(v.max_players) || 20, 1))
+    p['view-distance'] = String(Math.min(Math.max(Number(v.view_distance) || 10, 3), 32))
+    p['spawn-protection'] = String(Math.max(Number(v.spawn_protection) || 0, 0))
+    p['pvp'] = v.pvp ? 'true' : 'false'
+    p['white-list'] = v.white_list ? 'true' : 'false'
+    p['allow-flight'] = v.allow_flight ? 'true' : 'false'
+    p['enable-command-block'] = v.enable_command_block ? 'true' : 'false'
 
     quasar.files.write('data/server.properties',
-      Object.keys(p).map(k => k + '=' + p[k]).join('\n') + '\n')
+      Object.keys(p).map(function (k) { return k + '=' + p[k] }).join('\n') + '\n')
+
     quasar.app.restart()
-    return { toast: 'Saved — the server is restarting.' }
+    note('saved server.properties and restarted')
+    return { toast: 'Saved — the server is restarting.', refresh: ['mc_events', 'mc_build'] }
   }
 
-  // Runs on its own every six hours while the server is up. What it finds
-  // shows up as badges on the mods table.
+  // =====================================================================
+  // Hooks
+  // =====================================================================
+
+  export function prepare() {
+    quasar.exec('minecraft', ['mkdir', '-p', '/data/backups'])
+    note('deployed, ' + quasar.app.params.TYPE + ' ' + quasar.env.get('MINECRAFT_VERSION'))
+    return { toast: 'Ready.' }
+  }
+
+  export function note_start() {
+    note('the server was started')
+    return { toast: 'Noted.' }
+  }
+
+  // The one thing worth doing on the way down, and the reason on_stop exists.
+  export function save_world() {
+    try {
+      rconRaw('save-all flush')
+      note('saved the world on the way down')
+    } catch (e) {
+      note('could not save on the way down: ' + e.message)
+    }
+    return { toast: 'Saved.' }
+  }
+
+  // Every ten minutes while the server is running — and not while it is
+  // stopped, which is the rule for every scheduled action: a stopped server has
+  // nothing to poll, and a fleet of them quietly burning CPU is a bug people
+  // discover from their hosting bill.
+  export function sample_players() {
+    let n = 0
+    try {
+      const m = rconRaw('list').match(/There are (\d+) of/)
+      n = m ? Number(m[1]) : 0
+    } catch (e) {
+      return { warn: 'not answering' } // a gap in the graph is honest
+    }
+
+    const samples = quasar.store.get('samples') || []
+    samples.push({ t: clock(), n: n })
+    // A day at one sample every ten minutes, which is what the panel says it
+    // draws and what the store can comfortably hold.
+    quasar.store.set('samples', samples.slice(-144))
+    return { toast: String(n) }
+  }
+
   export function check_mod_updates() {
     return check_all_mods()
   }
 
-  function parseProps(text) {
-    const out = {}
-    for (const line of text.split('\n')) {
-      if (!line || line.startsWith('#')) continue
-      const i = line.indexOf('=')
-      if (i > 0) out[line.slice(0, i)] = line.slice(i + 1)
-    }
-    return out
-  }
