@@ -30,6 +30,13 @@
   </p>
 </form>
 <script src="/static/js/station-import.js" defer></script>
+{{end}}
+
+{{/* The lists, and the star's own script beside them: it is delegated from the
+     document because the cards are what a star's answer replaces, and a
+     listener bound to one would go with it. */}}
+{{if .Stations}}
+{{template "stations_lists" .}}
 <script src="/static/js/station-star.js" defer></script>
 {{else}}
 <div class="empty max-w-3xl p-8 text-center">
