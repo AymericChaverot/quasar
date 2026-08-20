@@ -2,8 +2,10 @@ package db
 
 import (
 	"database/sql"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -52,6 +54,8 @@ CREATE TABLE IF NOT EXISTS apps (
 	rate_limit     INTEGER NOT NULL DEFAULT 0,
 	ip_allow_cidrs TEXT NOT NULL DEFAULT '',
 	security_headers INTEGER NOT NULL DEFAULT 0,
+	station_id     TEXT NOT NULL DEFAULT '',
+	station_params TEXT NOT NULL DEFAULT '',
 	created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -147,6 +151,44 @@ CREATE TABLE IF NOT EXISTS catalogs (
 	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- An installed station: an application that arrives with a control surface of
+-- its own, kept as the YAML document it was pasted or fetched as. station_id
+-- is the document's own id and is unique, because a station is a program and
+-- one must not silently replace another.
+--
+-- Three revision columns rather than a revisions table: yaml is what every
+-- application running this station is served from, prev_yaml is the one click
+-- back from a bad update, and pending_yaml is a revision that has been fetched
+-- and is waiting to be approved because its permissions changed.
+CREATE TABLE IF NOT EXISTS stations (
+	id           INTEGER PRIMARY KEY AUTOINCREMENT,
+	station_id   TEXT NOT NULL UNIQUE,
+	name         TEXT NOT NULL,
+	source_url   TEXT NOT NULL DEFAULT '',
+	yaml         TEXT NOT NULL,
+	perms_hash   TEXT NOT NULL,
+	prev_yaml    TEXT NOT NULL DEFAULT '',
+	pending_yaml TEXT NOT NULL DEFAULT '',
+	pending_hash TEXT NOT NULL DEFAULT '',
+	enabled      INTEGER NOT NULL DEFAULT 1,
+	favorite     INTEGER NOT NULL DEFAULT 0,
+	position     INTEGER NOT NULL DEFAULT 0,
+	updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- The small key-value space a station gets, scoped to one application and one
+-- station. It needs no permission because it can reach nothing else — but it
+-- does need a table, because a station's script runs in a process that holds
+-- no disk and nothing in it survives the call.
+CREATE TABLE IF NOT EXISTS station_store (
+	app_id     TEXT NOT NULL,
+	station_id TEXT NOT NULL,
+	key        TEXT NOT NULL,
+	value      TEXT NOT NULL,
+	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY (app_id, station_id, key)
+);
+
 CREATE TABLE IF NOT EXISTS api_tokens (
 	id           INTEGER PRIMARY KEY AUTOINCREMENT,
 	name         TEXT NOT NULL,
@@ -200,6 +242,15 @@ var migrations = []string{
 	// a single repository on one, and every existing value is still a valid
 	// scope — the widest kind.
 	"ALTER TABLE git_credentials RENAME COLUMN host TO scope",
+	// Empty means "not deployed from a station", which every application that
+	// existed before stations did is.
+	"ALTER TABLE apps ADD COLUMN station_id TEXT NOT NULL DEFAULT ''",
+	// The choices a station was deployed with, which quasar.app.params reads
+	// back. Empty for everything that was not deployed from a station.
+	"ALTER TABLE apps ADD COLUMN station_params TEXT NOT NULL DEFAULT ''",
+	// Nothing is starred until somebody stars it, which is the right answer
+	// for an install that already has its stations.
+	"ALTER TABLE stations ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0",
 }
 
 func Open(path string) (*sql.DB, error) {
@@ -213,11 +264,25 @@ func Open(path string) (*sql.DB, error) {
 	// SQLite handles one writer at a time; a single connection avoids SQLITE_BUSY.
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
-		db.Close()
+		_ = db.Close() // the schema error is the one worth returning
 		return nil, err
 	}
 	for _, m := range migrations {
-		db.Exec(m) // duplicate-column errors are fine on fresh databases
+		// A migration that has already run is the expected answer on every
+		// database but a brand new one. Anything else is logged rather than
+		// fatal: refusing to start would lock an operator out of the dashboard
+		// they need in order to fix it.
+		if _, err := db.Exec(m); err != nil && !alreadyApplied(err) {
+			log.Printf("db: migration %q: %v", m, err)
+		}
 	}
 	return db, nil
+}
+
+// alreadyApplied reports the two ways SQLite says a migration has already run.
+// An ADD COLUMN whose column is there answers "duplicate column name"; a RENAME
+// COLUMN that already happened cannot find the name it was told to rename.
+func alreadyApplied(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "duplicate column") || strings.Contains(msg, "no such column")
 }

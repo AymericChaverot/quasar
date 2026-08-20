@@ -1,0 +1,50 @@
+{{define "content"}}
+<div class="mb-8">
+  <h1 class="page-title">Stations</h1>
+  <p class="help max-w-3xl mt-2!">
+    Applications that arrive with a control surface of their own. Installing one asks you the
+    questions its author thought worth asking and works out the rest — what to run, where to
+    route it, what to put in its environment — from the document itself.
+  </p>
+</div>
+
+{{/* Installing one lives here as well as in Settings. Somebody who has just
+     been sent a link to a station is on this page, not three levels into
+     Settings, and telling them where to go instead is a step that buys nothing.
+     It is the same two steps either way: fetched once, read, and shown for
+     approval before a byte of it is stored. */}}
+{{if .IsAdmin}}
+<form id="station-import" method="post" action="/settings/stations/fetch"
+      class="card mb-8 max-w-3xl space-y-3 p-4">
+  <label class="label mb-0!" for="station-url">Install another</label>
+  <div class="flex flex-wrap items-center gap-2">
+    <input id="station-url" name="source_url" type="url" required
+           class="input mono min-w-0 flex-1"
+           placeholder="https://raw.githubusercontent.com/you/station/main/station.yaml">
+    <button type="submit" class="btn station-go px-4 py-2">{{template "icon_download"}}Fetch and read</button>
+    <a href="/settings/stations" class="btn px-4 py-2">{{template "icon_pencil"}}Write or paste one</a>
+  </div>
+  <p class="help mt-0!">
+    Fetched once, now, and shown to you before anything is stored: a station is a program this
+    server will run, and nothing re-fetches on its own.
+  </p>
+</form>
+<script src="/static/js/station-import.js" defer></script>
+{{end}}
+
+{{/* The lists, and the star's own script beside them: it is delegated from the
+     document because the cards are what a star's answer replaces, and a
+     listener bound to one would go with it. */}}
+{{if .Stations}}
+{{template "stations_lists" .}}
+<script src="/static/js/station-star.js" defer></script>
+{{else}}
+<div class="empty max-w-3xl p-8 text-center">
+  <p class="text-sm">No station installed.</p>
+  <p class="help mt-1!">
+    A station is a document somebody wrote for one service in particular.
+    {{if .IsAdmin}}Install one from <a href="/settings/stations" class="underline">Settings → Stations</a>.{{end}}
+  </p>
+</div>
+{{end}}
+{{end}}

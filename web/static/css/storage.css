@@ -1,0 +1,207 @@
+/* --- Storage explorer ------------------------------------------------------ */
+
+/* What is being browsed. Set at reading size rather than as a page title: this
+   page is a list you work in, not a record you have opened, and a heading twice
+   the height of the rows below it made the top of it mostly heading. */
+.file-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.file-title .ico { flex: none; width: 1rem; height: 1rem; color: var(--text-faint); }
+
+/* The strip above the table: where you are on the left, what you can add on the
+   right. It keeps its height when there is no trail to show, so the table does
+   not jump up a line as you walk back to the root. */
+.file-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 1.75rem;
+}
+
+/* The file input itself is the one control a browser will not let us style, so
+   it is taken out of the layout and the label around it does the work. */
+.file-upload input[type="file"] { display: none; }
+.file-upload label { cursor: pointer; }
+
+/* What a write just did. Not a toast: it belongs to the folder on screen, and a
+   message about an upload that floats away over an unrelated page is a message
+   nobody finishes reading. */
+.file-flash {
+  margin-top: 0.75rem;
+  border: var(--border-w) solid color-mix(in srgb, var(--ok) 40%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--ok) 8%, var(--ground));
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--ok);
+}
+.file-flash.is-err {
+  border-color: color-mix(in srgb, var(--err) 40%, transparent);
+  background: color-mix(in srgb, var(--err) 8%, var(--ground));
+  color: var(--err);
+}
+
+/* The editor fills the dialog's body rather than being a box inside it: the
+   file is what the panel is for at that point, and a textarea sized to some
+   number of rows would leave a config file scrolling in a well. */
+.file-editor {
+  display: block;
+  width: 100%;
+  min-height: 24rem;
+  height: 100%;
+  resize: vertical;
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  color: var(--text);
+  tab-size: 2;
+}
+.file-editor:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* The dialog is a column of head/body/foot; when the editor is open the form is
+   what holds the last two, so it has to carry the same column through or the
+   body stops scrolling and the footer leaves the panel. */
+.modal-form {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+/* A footer of controls rather than of prose. Its own class because the plain
+   .modal-foot is a line of explanation elsewhere, and turning that into a flex
+   row to suit this one would change a panel this has nothing to do with. */
+.modal-foot-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* The trail back to the root of a volume. It wraps rather than scrolls: a path
+   ten directories deep is still readable on three lines, and unreadable pushed
+   off the side of a bar nobody thinks to drag. */
+.file-trail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.375rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+.file-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+}
+.file-crumb:hover { color: var(--text); background: var(--surface-2); }
+/* The last step is where the reader is, not somewhere to go. */
+.file-crumb:last-child { color: var(--text); }
+.file-crumb .ico { width: 0.875rem; height: 0.875rem; color: var(--text-faint); }
+.file-sep { color: var(--text-faint); }
+
+/* A row is one target, not a word inside one.
+
+   The name cell gives up its padding to the link, so the link fills the row's
+   full height instead of being as tall as its text — hovering anywhere down a
+   row now lights the same row the pointer is over. The pseudo-element takes
+   that the rest of the way across: it covers the size and date columns too, so
+   the whole line is clickable rather than just the first column of it.
+   Everything else in the row that takes a click has to be lifted above it. */
+.file-table tbody tr { position: relative; }
+.file-table td:first-child { padding: 0; }
+.file-table .file-name { padding: 0.75rem 1rem; }
+.file-table .file-name:not(.is-broken)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.file-table .file-get { position: relative; z-index: 1; }
+
+/* A row's name. The icon is fixed so that a column of them lines up whatever
+   the names do, and the name itself is what truncates. */
+.file-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  color: var(--text);
+}
+.file-name .ico {
+  flex: none;
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--text-faint);
+}
+.file-name:hover { color: var(--accent); }
+.file-name:hover .ico { color: var(--accent); }
+/* A link with nowhere to go: shown, because a folder that silently dropped its
+   symlinks would look emptier than it is, but not offered as a click. */
+.file-name.is-broken { color: var(--text-faint); cursor: default; }
+.file-name.is-broken:hover { color: var(--text-faint); }
+
+.file-get {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.5rem;
+  border-radius: var(--radius);
+  color: var(--text-faint);
+}
+.file-get:hover { color: var(--text); background: var(--surface-2); }
+.file-get .ico { width: 0.875rem; height: 0.875rem; }
+
+/* A file's contents. Wrapped rather than scrolled sideways: these are config
+   files and logs, where the long lines are the ones worth reading whole. */
+.file-text {
+  margin: 0;
+  max-height: 60vh;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+/* A checkerboard behind the image, so a transparent PNG is legible on a light
+   theme and a dark one alike, and its edges are visible either way. */
+.file-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  border-radius: var(--radius);
+  background-color: var(--surface-2);
+  background-image:
+    linear-gradient(45deg, color-mix(in srgb, var(--border) 60%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--border) 60%, transparent) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--border) 60%, transparent) 75%),
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--border) 60%, transparent) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+.file-image img {
+  max-width: 100%;
+  max-height: 55vh;
+  object-fit: contain;
+}

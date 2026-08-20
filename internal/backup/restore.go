@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -114,7 +115,11 @@ func restoreTables(database *sql.DB, snapPath string) error {
 
 	for _, table := range restoredTables {
 		var n int
-		tx.QueryRow("SELECT COUNT(*) FROM restore_src.sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&n)
+		// A count that will not run reads as a table this backup does not
+		// carry, which is the case the next line already skips.
+		if err := tx.QueryRow("SELECT COUNT(*) FROM restore_src.sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&n); err != nil {
+			continue
+		}
 		if n == 0 {
 			continue // table absent from an older backup
 		}
@@ -159,7 +164,7 @@ func extract(archivePath, dest string) error {
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {
@@ -182,11 +187,17 @@ func extract(archivePath, dest string) error {
 			return err
 		}
 		if _, err := io.Copy(out, tr); err != nil {
-			out.Close()
+			_ = out.Close() // the copy error is the one that explains the failure
 			return err
 		}
-		out.Close()
-		os.Chtimes(target, time.Now(), hdr.ModTime)
+		// Checked, not deferred: a close is where a buffered write finally
+		// reaches the disk, and a restore that dropped its last block is
+		// worse than one that said it failed.
+		if err := out.Close(); err != nil {
+			return err
+		}
+		// The timestamp is a courtesy; the contents are the restore.
+		_ = os.Chtimes(target, time.Now(), hdr.ModTime)
 	}
 }
 

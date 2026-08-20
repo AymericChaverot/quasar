@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// An operator's own catalogue, stored as the YAML document it was written or
-// imported as rather than as parsed-out columns.
+// Catalog is an operator's own catalogue, stored as the YAML document it was
+// written or imported as rather than as parsed-out columns.
 //
 // The document is the unit on purpose. A catalogue is a thing people write
 // once, share, and re-import when it changes — so keeping the text lets it be
@@ -64,7 +64,9 @@ func GetCatalog(db *sql.DB, id int64) *Catalog {
 // returns its ID.
 func InsertCatalog(db *sql.DB, c *Catalog) (int64, error) {
 	var last int
-	db.QueryRow("SELECT COALESCE(MAX(position), 0) FROM catalogs").Scan(&last)
+	if err := db.QueryRow("SELECT COALESCE(MAX(position), 0) FROM catalogs").Scan(&last); err != nil {
+		return 0, err
+	}
 	res, err := db.Exec(`INSERT INTO catalogs (name, source_url, yaml, enabled, position, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?)`, c.Name, c.SourceURL, c.YAML, c.Enabled, last+1, time.Now())
 	if err != nil {

@@ -7,28 +7,28 @@ import (
 
 // --- Health history -----------------------------------------------------------
 
-func RecordHealth(db *sql.DB, appID string, ok bool) {
-	db.Exec("INSERT INTO health_history (app_id, ok) VALUES (?, ?)", appID, ok)
+// RecordHealth stores the result of one health probe.
+//
+// The error is returned rather than swallowed because these writes are the
+// only evidence the platform keeps of an app's history: a database that has
+// been refusing them for a week looks exactly like an app nobody has probed,
+// and the caller is where a log line can say which it is.
+func RecordHealth(db *sql.DB, appID string, ok bool) error {
+	_, err := db.Exec("INSERT INTO health_history (app_id, ok) VALUES (?, ?)", appID, ok)
+	return err
 }
 
-// Uptime returns the success ratio (0–100) and check count over a window.
-func Uptime(db *sql.DB, appID string, since time.Time) (float64, int) {
-	var total, up int
-	db.QueryRow("SELECT COUNT(*), COALESCE(SUM(ok), 0) FROM health_history WHERE app_id = ? AND ts >= ?",
-		appID, since).Scan(&total, &up)
-	if total == 0 {
-		return 0, 0
-	}
-	return float64(up) / float64(total) * 100, total
-}
-
-// ConsecutiveHealthFailures counts failures since the last success.
+// ConsecutiveHealthFailures counts failures since the last success. A query
+// that will not run reads as no failures, which is what the caller does with
+// an app it has no history for anyway.
 func ConsecutiveHealthFailures(db *sql.DB, appID string) int {
 	var n int
-	db.QueryRow(`SELECT COUNT(*) FROM health_history
+	if err := db.QueryRow(`SELECT COUNT(*) FROM health_history
 		WHERE app_id = ? AND ok = 0
 		AND ts > COALESCE((SELECT MAX(ts) FROM health_history WHERE app_id = ? AND ok = 1), 0)`,
-		appID, appID).Scan(&n)
+		appID, appID).Scan(&n); err != nil {
+		return 0
+	}
 	return n
 }
 
@@ -40,12 +40,14 @@ type MetricPoint struct {
 	V2 float64 // mem % (server) or mem MB (app)
 }
 
-func RecordServerMetric(db *sql.DB, cpu, mem, disk float64) {
-	db.Exec("INSERT INTO metrics (cpu, mem, disk) VALUES (?, ?, ?)", cpu, mem, disk)
+func RecordServerMetric(db *sql.DB, cpu, mem, disk float64) error {
+	_, err := db.Exec("INSERT INTO metrics (cpu, mem, disk) VALUES (?, ?, ?)", cpu, mem, disk)
+	return err
 }
 
-func RecordAppMetric(db *sql.DB, appID string, cpu, memMB float64) {
-	db.Exec("INSERT INTO app_metrics (app_id, cpu, mem_mb) VALUES (?, ?, ?)", appID, cpu, memMB)
+func RecordAppMetric(db *sql.DB, appID string, cpu, memMB float64) error {
+	_, err := db.Exec("INSERT INTO app_metrics (app_id, cpu, mem_mb) VALUES (?, ?, ?)", appID, cpu, memMB)
+	return err
 }
 
 func ServerMetrics(db *sql.DB, since time.Time) ([]MetricPoint, error) {
@@ -73,12 +75,16 @@ func queryPoints(db *sql.DB, query string, args ...any) ([]MetricPoint, error) {
 	return out, rows.Err()
 }
 
-// PruneTimeSeries drops samples older than the retention window.
-func PruneTimeSeries(db *sql.DB, olderThan time.Time) {
-	db.Exec("DELETE FROM metrics WHERE ts < ?", olderThan)
-	db.Exec("DELETE FROM app_metrics WHERE ts < ?", olderThan)
-	db.Exec("DELETE FROM health_history WHERE ts < ?", olderThan)
-	db.Exec("DELETE FROM app_logs WHERE ts < ?", olderThan)
+// PruneTimeSeries drops samples older than the retention window, reporting the
+// first table it could not trim: one locked database fails all four the same
+// way, and four copies of that in the log say nothing the first did not.
+func PruneTimeSeries(db *sql.DB, olderThan time.Time) error {
+	return firstError(
+		exec(db, "DELETE FROM metrics WHERE ts < ?", olderThan),
+		exec(db, "DELETE FROM app_metrics WHERE ts < ?", olderThan),
+		exec(db, "DELETE FROM health_history WHERE ts < ?", olderThan),
+		exec(db, "DELETE FROM app_logs WHERE ts < ?", olderThan),
+	)
 }
 
 // Reclaim gives the disk back the space deleted rows left behind, returning
@@ -110,7 +116,25 @@ func Reclaim(db *sql.DB) int64 {
 	return recoverable
 }
 
-func DeleteAppTimeSeries(db *sql.DB, appID string) {
-	db.Exec("DELETE FROM app_metrics WHERE app_id = ?", appID)
-	db.Exec("DELETE FROM health_history WHERE app_id = ?", appID)
+func DeleteAppTimeSeries(db *sql.DB, appID string) error {
+	return firstError(
+		exec(db, "DELETE FROM app_metrics WHERE app_id = ?", appID),
+		exec(db, "DELETE FROM health_history WHERE app_id = ?", appID),
+	)
+}
+
+// exec runs a statement whose result row count nobody wants.
+func exec(db *sql.DB, query string, args ...any) error {
+	_, err := db.Exec(query, args...)
+	return err
+}
+
+// firstError is the first of several attempts that failed, or nil.
+func firstError(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

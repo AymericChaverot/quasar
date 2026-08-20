@@ -25,7 +25,7 @@
       </button>
       {{if .UpdateAvail}}
       <form method="post" action="/system/update/apply"
-            onsubmit="return confirm('Update the dashboard to {{.Latest}}? Applications keep running; the dashboard restarts briefly.')">
+            data-confirm="Update the dashboard to {{.Latest}}? Applications keep running; the dashboard restarts briefly.">
         <button type="submit" class="btn-primary">{{template "icon_deploy"}}Update to {{.Latest}}</button>
       </form>
       {{end}}

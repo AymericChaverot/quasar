@@ -29,11 +29,14 @@ const (
 // shares a small disk with everything else.
 const MaxAuditEntries = 20_000
 
-// RecordAudit appends an entry. Failures are swallowed: an audit write must
-// never be the reason an operation the user asked for fails.
-func RecordAudit(db *sql.DB, e AuditEntry) {
-	db.Exec(`INSERT INTO audit_log (actor, action, target, detail, ip) VALUES (?, ?, ?, ?, ?)`,
+// RecordAudit appends an entry. The error comes back, but a caller is not
+// meant to fail on it: an audit write must never be the reason an operation
+// the user asked for fails — which is not the same as nobody being told it
+// did not happen.
+func RecordAudit(db *sql.DB, e AuditEntry) error {
+	_, err := db.Exec(`INSERT INTO audit_log (actor, action, target, detail, ip) VALUES (?, ?, ?, ?, ?)`,
 		e.Actor, e.Action, e.Target, e.Detail, e.IP)
+	return err
 }
 
 // ListAudit returns entries newest first, optionally filtered by a substring
@@ -64,9 +67,10 @@ func ListAudit(db *sql.DB, query string, limit int) ([]*AuditEntry, error) {
 }
 
 // PruneAudit drops the oldest entries beyond MaxAuditEntries.
-func PruneAudit(db *sql.DB) {
-	db.Exec(`
+func PruneAudit(db *sql.DB) error {
+	_, err := db.Exec(`
 		DELETE FROM audit_log WHERE id IN (
 			SELECT id FROM audit_log ORDER BY id DESC LIMIT -1 OFFSET ?
 		)`, MaxAuditEntries)
+	return err
 }

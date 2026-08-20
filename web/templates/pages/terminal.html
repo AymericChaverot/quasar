@@ -7,35 +7,10 @@
 </div>
 
 <link rel="stylesheet" href="https://unpkg.com/@xterm/xterm@6.0.0/css/xterm.css">
-<div id="terminal" class="card overflow-hidden p-1" style="background: var(--log-bg)"></div>
+<div id="terminal" class="card overflow-hidden p-1" style="background: var(--log-bg)" data-app-id="{{.ID}}"></div>
 
 <script src="https://unpkg.com/@xterm/xterm@6.0.0/lib/xterm.js"></script>
 <script src="https://unpkg.com/@xterm/addon-fit@0.11.0/lib/addon-fit.js"></script>
-<script>
-  const term = new Terminal({
-    fontFamily: 'ui-monospace, "Cascadia Code", Menlo, monospace',
-    fontSize: 13,
-    theme: { background: getComputedStyle(document.documentElement).getPropertyValue('--log-bg').trim() || '#000' },
-  });
-  const fit = new FitAddon.FitAddon();
-  term.loadAddon(fit);
-  term.open(document.getElementById('terminal'));
-  fit.fit();
-
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/apps/{{.ID}}/terminal/ws`);
-  ws.binaryType = 'arraybuffer';
-
-  ws.onopen = () => {
-    ws.send(JSON.stringify({ t: 'r', cols: term.cols, rows: term.rows }));
-    term.focus();
-  };
-  ws.onmessage = (ev) => term.write(new Uint8Array(ev.data));
-  ws.onclose = () => term.write('\r\n\x1b[2m[session closed]\x1b[0m\r\n');
-
-  term.onData((data) => ws.send(JSON.stringify({ t: 'i', d: data })));
-  term.onResize(({ cols, rows }) => ws.send(JSON.stringify({ t: 'r', cols, rows })));
-  addEventListener('resize', () => fit.fit());
-</script>
+<script src="/static/js/terminal.js" defer></script>
 {{end}}
 {{end}}

@@ -182,14 +182,14 @@ func waitReady(e Template, dir, project string, port int) error {
 		last = err
 		time.Sleep(3 * time.Second)
 	}
-	return fmt.Errorf("nothing answered on %s within the budget: %v", url, last)
+	return fmt.Errorf("nothing answered on %s within the budget: %w", url, last)
 }
 
 // assertUp fails if any container of the project has exited or is restarting.
 func assertUp(dir, project string) error {
 	out, err := compose_(dir, project, time.Minute, "ps", "-a", "--format", "{{.Service}} {{.State}} {{.ExitCode}}")
 	if err != nil {
-		return fmt.Errorf("compose ps: %v", err)
+		return fmt.Errorf("compose ps: %w", err)
 	}
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		f := strings.Fields(strings.TrimSpace(line))

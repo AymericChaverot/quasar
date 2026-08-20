@@ -1,7 +1,6 @@
 package server
 
 import (
-	"errors"
 	"net/http"
 	"slices"
 	"strconv"
@@ -167,7 +166,7 @@ func (s *Server) handleCatalogEntrySave(w http.ResponseWriter, r *http.Request) 
 	}
 	entry := readEntryForm(r)
 	if entry.ID == "" {
-		s.renderEntryForm(w, r, row, entry, []error{errors.New("An entry needs an id. It is proposed as the subdomain, so keep it to lowercase letters, digits and hyphens.")})
+		s.renderEntryForm(w, r, row, entry, []error{formError("An entry needs an id. It is proposed as the subdomain, so keep it to lowercase letters, digits and hyphens.")})
 		return
 	}
 
@@ -182,7 +181,7 @@ func (s *Server) handleCatalogEntrySave(w http.ResponseWriter, r *http.Request) 
 		next.Templates[i] = *entry
 	default:
 		if next.Get(entry.ID) != nil {
-			s.renderEntryForm(w, r, row, entry, []error{errors.New("This catalogue already has an entry with that id.")})
+			s.renderEntryForm(w, r, row, entry, []error{formError("This catalogue already has an entry with that id.")})
 			return
 		}
 		next.Templates = append(next.Templates, *entry)

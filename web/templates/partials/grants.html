@@ -1,0 +1,60 @@
+{{/* What a station is allowed to do on this server, as the screen somebody has
+     to actually read.
+
+     Eight sentences beginning "Read" and "Change" is a list nobody reads to the
+     end, and this is the one screen whose entire purpose is being read: it is
+     where an operator decides whether to run somebody else's program on their
+     own machine. A shape per kind — a terminal, a folder, a key, a globe — is
+     what makes it something to take in at a glance and then read the one line
+     that was a surprise.
+
+     The two that deserve a second look are marked in the warning colour rather
+     than merely in bold. Running commands in a container is root on it by
+     design, and reaching the internet is an exfiltration channel with the
+     operator's signature on it; both are worth a glance that lands on them
+     before it lands anywhere else. */}}
+{{define "grant_list"}}
+<ul class="grant-list">
+  {{range .}}
+  <li class="grant{{if .Strong}} is-strong{{end}}">
+    <span class="grant-icon" aria-hidden="true">{{template "grant_icon" .Icon}}</span>
+    <span class="min-w-0">
+      <span class="grant-title">{{.Title}}</span>
+      {{with .Detail}}<span class="faint mono block text-xs">{{.}}</span>{{end}}
+    </span>
+  </li>
+  {{end}}
+</ul>
+{{end}}
+
+{{/* The same list, for the grants a waiting revision adds to what was already
+     accepted. Those are the only lines on an update screen worth reading
+     carefully, so they are the only ones drawn. */}}
+{{define "grant_list_added"}}
+<ul class="grant-list">
+  {{range .}}{{if .Added}}
+  <li class="grant{{if .Strong}} is-strong{{end}}">
+    <span class="grant-icon" aria-hidden="true">{{template "grant_icon" .Icon}}</span>
+    <span class="min-w-0">
+      <span class="grant-title">{{.Title}}</span>
+      {{with .Detail}}<span class="faint mono block text-xs">{{.}}</span>{{end}}
+    </span>
+  </li>
+  {{end}}{{end}}
+</ul>
+{{end}}
+
+{{/* A permission's kind, as a shape. The mapping lives here rather than in the
+     station package, which has no business knowing what an SVG is. */}}
+{{define "grant_icon"}}
+{{- if eq . "exec"}}{{template "icon_terminal"}}
+{{- else if eq . "logs"}}{{template "icon_file_text"}}
+{{- else if eq . "files"}}{{template "icon_folder"}}
+{{- else if eq . "env_read"}}{{template "icon_key"}}
+{{- else if eq . "env_write"}}{{template "icon_pencil"}}
+{{- else if eq . "net_internal"}}{{template "icon_network"}}
+{{- else if eq . "net_external"}}{{template "icon_globe"}}
+{{- else if eq . "lifecycle"}}{{template "icon_restart"}}
+{{- else if eq . "notify"}}{{template "icon_bell"}}
+{{- else}}{{template "icon_box"}}{{end}}
+{{- end}}

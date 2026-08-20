@@ -46,7 +46,7 @@ func Run(database *sql.DB, k *secrets.Keyring, appsDir, dir string, dump Dump) (
 
 	// VACUUM INTO produces a consistent snapshot even while the DB is in use.
 	snap := filepath.Join(dir, ".db-snapshot.sqlite")
-	os.Remove(snap)
+	_ = os.Remove(snap) // absent is the normal case; VACUUM INTO refuses an existing file
 	if _, err := database.Exec("VACUUM INTO ?", snap); err != nil {
 		return "", fmt.Errorf("sqlite snapshot: %w", err)
 	}
@@ -61,11 +61,15 @@ func Run(database *sql.DB, k *secrets.Keyring, appsDir, dir string, dump Dump) (
 	gz := gzip.NewWriter(f)
 	tw := tar.NewWriter(gz)
 
+	// fail unwinds a half-written archive. Every close and the unlink are
+	// discarded on purpose: the error being handed back is the one that
+	// explains the failure, and a complaint about tidying up on top of it
+	// would only bury it.
 	fail := func(err error) (string, error) {
-		tw.Close()
-		gz.Close()
-		f.Close()
-		os.Remove(path)
+		_ = tw.Close()
+		_ = gz.Close()
+		_ = f.Close()
+		_ = os.Remove(path)
 		return "", err
 	}
 
@@ -151,15 +155,19 @@ func pushOffsite(database *sql.DB, k *secrets.Keyring, path, name string) {
 	if err != nil {
 		log.Printf("offsite upload of %s: %v", name, err)
 		notify.Send(database, fmt.Sprintf("Quasar: backup %s was written locally but the offsite upload FAILED: %v", name, err))
-		db.RecordAudit(database, db.AuditEntry{
+		if auditErr := db.RecordAudit(database, db.AuditEntry{
 			Actor: db.ActorSystem, Action: "offsite.failed", Target: name, Detail: err.Error(),
-		})
+		}); auditErr != nil {
+			log.Printf("audit: recording the failed offsite upload: %v", auditErr)
+		}
 		return
 	}
-	db.RecordAudit(database, db.AuditEntry{
+	if err := db.RecordAudit(database, db.AuditEntry{
 		Actor: db.ActorSystem, Action: "offsite.upload", Target: name,
 		Detail: cfg.Bucket,
-	})
+	}); err != nil {
+		log.Printf("audit: recording the offsite upload: %v", err)
+	}
 }
 
 // List returns existing backups, newest first.
@@ -223,7 +231,11 @@ func applyRetention(database *sql.DB, dir string) {
 	}
 	backups := List(dir)
 	for i := keep; i < len(backups); i++ {
-		os.Remove(filepath.Join(dir, backups[i].Name))
+		// A backup that will not delete means retention is quietly not being
+		// applied, which is how a disk fills up without anyone noticing.
+		if err := os.Remove(filepath.Join(dir, backups[i].Name)); err != nil {
+			log.Printf("backup: retiring %s: %v", backups[i].Name, err)
+		}
 	}
 }
 
@@ -263,7 +275,7 @@ func addFile(tw *tar.Writer, path, name string) error {
 func addDir(tw *tar.Writer, dir, prefix string) error {
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil // missing data dir is fine
+			return nil //nolint:nilerr // a missing data dir is not a failed backup
 		}
 		if info.IsDir() {
 			return nil

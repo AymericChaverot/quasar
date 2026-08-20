@@ -17,13 +17,37 @@
   <script src="https://unpkg.com/@tailwindcss/browser@4.3.3"></script>
   {{/* Tailwind 4 emits every utility inside @layer utilities, and an unlayered
        sheet outranks every layer no matter how weak its selectors are — loading
-       themes.css plainly would hand it every contest it used to lose, silently
+       these plainly would hand them every contest they used to lose, silently
        undoing the utility on any element where the two set the same property.
-       Declaring the order here and pulling the sheet into `components` puts
-       utilities back on top, which is where they sat under Tailwind 3. */}}
+       Declaring the order here and pulling them into `components` puts
+       utilities back on top, which is where they sat under Tailwind 3.
+
+       The order below is the cascade order. themes.css carries the variables
+       every other sheet is drawn from; after it, a sheet may only be overridden
+       by one further down the list. Moving a line moves the rules. */}}
   <style>
     @layer theme, base, components, utilities;
     @import url("/static/themes.css") layer(components);
+    @import url("/static/css/base.css") layer(components);
+    @import url("/static/css/chrome.css") layer(components);
+    @import url("/static/css/components.css") layer(components);
+    @import url("/static/css/settings.css") layer(components);
+    @import url("/static/css/tables.css") layer(components);
+    @import url("/static/css/storage.css") layer(components);
+    @import url("/static/css/logs.css") layer(components);
+    {{/* The per-theme extras come after the components they repaint, and are
+         every one of them scoped to a [data-theme], so they only ever reach
+         their own theme. They sit here, and not at the end, because a few of
+         them tie on specificity with a rule below — a disabled button that
+         must not light up on hover is the one that bites — and on a tie it
+         is this order that decides. */}}
+    @import url("/static/css/theme-extras.css") layer(components);
+    @import url("/static/css/progress.css") layer(components);
+    @import url("/static/css/updating.css") layer(components);
+    @import url("/static/css/motion.css") layer(components);
+    {{/* Last, and deliberately so: a station's sheet is the one written by
+         somebody else, and nothing in it may end up outranking the chrome. */}}
+    @import url("/static/css/stations.css") layer(components);
   </style>
 </head>
 <body class="h-full antialiased">
@@ -37,6 +61,7 @@
         <nav class="main-nav">
           <a href="/" class="nav-link {{navActive .Nav "apps"}}">Dashboard</a>
           {{if .IsAdmin}}<a href="/apps/new" class="nav-link {{navActive .Nav "new"}}">New application</a>{{end}}
+          {{if .HasStations}}<a href="/stations" class="nav-link {{navActive .Nav "stations"}}">Stations</a>{{end}}
           <a href="/logs" class="nav-link {{navActive .Nav "logs"}}">Logs</a>
           <a href="/audit" class="nav-link {{navActive .Nav "audit"}}">Audit</a>
           <a href="/system" class="nav-link {{navActive .Nav "system"}}">System</a>
@@ -58,42 +83,11 @@
   <main class="mx-auto max-w-6xl px-6 py-8">
     {{template "content" .}}
   </main>
-  {{/* Takes the shimmer off its element's clock and puts it on the document's.
-
-       A CSS animation belongs to the element running it and starts over when
-       that element does — and these words live in panels that are polled: the
-       status badge on an application page is thrown away and rebuilt every
-       three seconds, the dashboard's table every five. So the sweep restarted
-       on the poll tick, and read as an animation stuttering in time with
-       something that has nothing to do with it.
-
-       Pinning each sweep's start to the timeline origin makes it a function of
-       the document clock alone. An element replaced mid-sweep comes back at
-       exactly the phase its predecessor had — not near it — and every shimmer
-       on the page runs as one. Pinning an already pinned animation changes
-       nothing, so this can run after every swap. */}}
-  <script>
-    (function () {
-      // The animations that must survive their element being replaced, and the
-      // elements that run them. The update button is in here for the same
-      // reason: it is swapped by its own poll every minute, and a halo that
-      // started over on each swap would pulse in time with the poll.
-      var PINNED = ["shimmer", "update-glow"];
-      function pin() {
-        document.querySelectorAll(".shimmer, .btn-update").forEach(function (el) {
-          // getAnimations reports nothing for an element whose style has not
-          // been resolved yet, which a just-inserted one has not, and nothing
-          // at all where reduced motion has taken the animation away.
-          getComputedStyle(el).animationName;
-          el.getAnimations().forEach(function (a) {
-            if (PINNED.indexOf(a.animationName) >= 0) a.startTime = 0;
-          });
-        });
-      }
-      pin();
-      document.addEventListener("htmx:afterSwap", pin);
-    })();
-  </script>
+  {{/* Asks the question a data-confirm carries, for every destructive form. */}}
+  <script src="/static/js/confirm.js" defer></script>
+  {{/* Pins every shimmer to the document clock so a polled panel does not
+       restart its animation on each swap. See the file for why. */}}
+  <script src="/static/js/motion.js" defer></script>
 </body>
 </html>
 {{end}}

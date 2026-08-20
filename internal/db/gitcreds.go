@@ -233,8 +233,9 @@ func GitCredentialByID(database *sql.DB, k *secrets.Keyring, id int64) *GitCrede
 // MarkGitCredentialUsed records that a deploy actually authenticated with this
 // credential, which is the only way to tell a token that is doing work from
 // one left behind by an app that has since been deleted.
-func MarkGitCredentialUsed(database *sql.DB, id int64) {
-	database.Exec("UPDATE git_credentials SET last_used_at = ? WHERE id = ?", time.Now(), id)
+func MarkGitCredentialUsed(database *sql.DB, id int64) error {
+	_, err := database.Exec("UPDATE git_credentials SET last_used_at = ? WHERE id = ?", time.Now(), id)
+	return err
 }
 
 // gitScopeMatch reports how well scope covers target, higher being more
@@ -377,7 +378,10 @@ func MigrateGitToken(database *sql.DB, k *secrets.Keyring) (bool, error) {
 	}
 	// Cleared only once the credential is safely stored, so an interrupted
 	// migration is retried rather than losing the token. It was held in
-	// plaintext here; the credentials table seals it.
-	SetSetting(database, SettingGitToken, "")
+	// plaintext here; the credentials table seals it — and a clear that failed
+	// means the plaintext copy is still on disk, which is worth refusing over.
+	if err := SetSetting(database, SettingGitToken, ""); err != nil {
+		return false, err
+	}
 	return exists == 0, nil
 }

@@ -113,7 +113,11 @@ func TestValidateReportsWhatIsWrong(t *testing.T) {
 		"a select with no options":          "entries:\n  - {id: a, name: X, description: d, category: c, port: 80, image_ref: nginx, params: [{name: V, kind: select, default: x}]}\n",
 		"a default the parameter refuses":   "entries:\n  - {id: a, name: X, description: d, category: c, port: 80, image_ref: nginx, params: [{name: V, kind: port, default: nope}]}\n",
 		"a placeholder nothing declares":    "entries:\n  - {id: a, name: X, description: d, category: c, port: 80, image_ref: \"nginx:{{VERISON}}\"}\n",
-		"a placeholder in the card name":    "entries:\n  - {id: a, name: \"X {{V}}\", description: d, category: c, port: 80, image_ref: nginx, params: [{name: V, default: '1'}]}\n",
+		// options_from is a station's field. A catalogue entry is a
+		// description with nothing in it to ask, so a parameter that says its
+		// choices come from somewhere would offer none of them and say nothing.
+		"options from a script an entry does not have": "entries:\n  - {id: a, name: X, description: d, category: c, port: 80, image_ref: nginx, params: [{name: V, kind: select, default: x, options: [x], options_from: pick}]}\n",
+		"a placeholder in the card name":               "entries:\n  - {id: a, name: \"X {{V}}\", description: d, category: c, port: 80, image_ref: nginx, params: [{name: V, default: '1'}]}\n",
 	}
 	for name, doc := range cases {
 		c, err := Parse("x", doc)

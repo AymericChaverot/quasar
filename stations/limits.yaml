@@ -1,0 +1,188 @@
+# What happens when a station misbehaves.
+#
+# Every button here breaks something on purpose: a loop that never ends, a
+# process that allocates without pause, a result too large to send back, a
+# script that crashes its own process. Press them and watch the dashboard not
+# care.
+#
+# That is the claim worth checking on a real machine rather than in a test. A
+# station's script runs in a process of its own, holding no Docker socket, no
+# database handle, no filesystem and no network; it is bounded from outside by
+# the process that spawned it; and every one of these ends as a message in a
+# panel, with every application on the server still running.
+#
+# It asks for no permissions at all, so nothing here can do any harm even if a
+# bound failed.
+
+schema: 1
+id: limits
+name: Limits
+description: A station that breaks itself in every way it can, to show that only it breaks
+author: quasar
+version: "1.0.0"
+
+deploy:
+  deploy_type: image
+  image_ref: nginx:alpine
+  port: 80
+  app_name: "Limits demo"
+  subdomain: "limits"
+
+ui:
+  theme:
+    accent: "#f87171"
+    tint: 0.05
+    radius: 3px
+
+  tabs:
+    - id: bounds
+      name: Bounds
+      panels:
+        - id: l_ok
+          type: stat
+          title: A call that works
+          width: third
+          source: {action: fine}
+          help: For comparison. Everything else on this page fails.
+
+        - id: l_timeout
+          type: stat
+          title: A loop that never ends
+          width: third
+          help: >
+            The runtime interrupts itself at its budget, so this comes back as
+            a timeout an author can read rather than as a process being shot.
+          source: {action: never_returns}
+
+        - id: l_memory
+          type: stat
+          title: Allocating without pause
+          width: third
+          help: >
+            The parent samples the worker's resident size and kills it. The
+            watchdog is outside the process it watches, because inside it the
+            kernel would have picked a victim first — and on a server the
+            victim it picks may be the dashboard.
+          source: {action: eats_memory}
+
+        - id: l_huge
+          type: stat
+          title: Returning far too much
+          width: third
+          help: Capped at both ends; a panel is a page, not a file transfer.
+          source: {action: returns_too_much}
+
+        - id: l_crash
+          type: stat
+          title: A script that throws
+          width: third
+          help: The author's bug, in the author's own words.
+          source: {action: explodes}
+
+        - id: l_deep
+          type: stat
+          title: Recursion with no bottom
+          width: third
+          help: A stack overflow takes the worker with it and nothing else.
+          source: {action: bottomless}
+
+    - id: reach
+      name: Reach
+      panels:
+        - id: l_reach
+          type: keyvalue
+          title: What a script can see
+          help: >
+            Everything an interpreter would normally hand a program is absent
+            because it was never put there. The only global is quasar.
+          source: {action: what_is_there}
+
+        - id: l_denied
+          type: keyvalue
+          title: What it is allowed to do
+          help: This document declares no permissions, so every namespace refuses.
+          source: {action: what_is_allowed}
+
+        - id: l_memory_note
+          type: markdown
+          title: Between two calls
+          source:
+            static: |
+              Nothing survives. Every call is a new process, so a script cannot
+              keep a variable, a connection or a cached answer from one press
+              of a button to the next. Anything a station wants to remember has
+              to go through quasar.store, which is the parent's, not its own.
+        - id: l_between
+          type: stat
+          title: A counter kept in a variable
+          width: half
+          source: {action: leftover}
+          help: It reads 1 every time, because the process it lived in is gone.
+
+script: |
+  export function fine() {
+    return { data: { value: 'ok', label: 'this one comes back' } }
+  }
+
+  export function never_returns() {
+    while (true) {}
+  }
+
+  export function eats_memory() {
+    const held = []
+    while (true) {
+      // Touched, so the pages are real rather than promised.
+      const chunk = new Array(1024 * 1024)
+      for (let i = 0; i < chunk.length; i += 4096) chunk[i] = i
+      held.push(chunk)
+    }
+  }
+
+  export function returns_too_much() {
+    let s = 'x'
+    while (s.length < 12 * 1024 * 1024) s += s
+    return { data: s }
+  }
+
+  export function explodes() {
+    throw new Error('a station is allowed to be wrong; this is what it looks like')
+  }
+
+  export function bottomless() {
+    function down(n) { return down(n + 1) }
+    return { data: down(0) }
+  }
+
+  export function what_is_there() {
+    const names = ['fetch', 'require', 'process', 'setTimeout', 'setInterval',
+                   'XMLHttpRequest', 'WebSocket', 'Deno', 'Buffer', 'quasar']
+    return { data: names.map(n => ({ key: n, value: eval('typeof ' + n) })) }
+  }
+
+  export function what_is_allowed() {
+    const tries = [
+      ['quasar.exec', () => quasar.exec('web', ['id'])],
+      ['quasar.logs', () => quasar.logs('web')],
+      ['quasar.files.read', () => quasar.files.read('data/anything')],
+      ['quasar.env.get', () => quasar.env.get('PATH')],
+      ['quasar.http.get', () => quasar.http.get('https://example.com/')],
+      ['quasar.service', () => quasar.service('web', 80)],
+      ['quasar.notify', () => quasar.notify('hello')],
+    ]
+    return { data: tries.map(([name, fn]) => {
+      try {
+        fn()
+        return { key: name, value: 'ALLOWED — which it should not be' }
+      } catch (e) {
+        return { key: name, value: e.message }
+      }
+    }) }
+  }
+
+  // Deliberately in a module-level variable rather than in the store.
+  let calls = 0
+
+  export function leftover() {
+    calls += 1
+    return { data: { value: calls, label: 'calls this process has seen' } }
+  }

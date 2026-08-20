@@ -179,7 +179,7 @@ func Login(db *sql.DB, username, password string) (token string, needs2FA bool, 
 		Scan(&id, &hash, &totpEnabled)
 	if err != nil {
 		// Run bcrypt anyway so unknown users take as long as bad passwords.
-		bcrypt.CompareHashAndPassword([]byte("$2a$10$0000000000000000000000000000000000000000000000000000"), []byte(password))
+		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$0000000000000000000000000000000000000000000000000000"), []byte(password))
 		return "", false, errors.New("invalid credentials")
 	}
 	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
@@ -198,8 +198,11 @@ func Login(db *sql.DB, username, password string) (token string, needs2FA bool, 
 	return token, totpEnabled, nil
 }
 
-func Logout(db *sql.DB, token string) {
-	db.Exec("DELETE FROM sessions WHERE token = ?", token)
+// Logout invalidates a session. The error matters: a delete that did not
+// happen leaves a cookie somebody still holds working.
+func Logout(db *sql.DB, token string) error {
+	_, err := db.Exec("DELETE FROM sessions WHERE token = ?", token)
+	return err
 }
 
 // UserForSession returns the id, username and role tied to a valid session.
@@ -256,7 +259,8 @@ func Valid(db *sql.DB, token string) bool {
 		return false
 	}
 	if time.Now().After(expires) {
-		db.Exec("DELETE FROM sessions WHERE token = ?", token)
+		// Expired either way: the row is dead weight, not the answer.
+		_, _ = db.Exec("DELETE FROM sessions WHERE token = ?", token)
 		return false
 	}
 	return !pending

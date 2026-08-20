@@ -13,6 +13,14 @@
   </div>
   <div class="flex items-center gap-3">
     {{if $.IsAdmin}}<a href="/apps/{{.ID}}/terminal" class="btn">{{template "icon_terminal"}}Terminal</a>{{end}}
+    {{/* Where the tabs above come from, said out loud: this page does more
+         than an ordinary application's, and the reason is one word. */}}
+    {{with .StationID}}
+    <a href="/stations" class="chip chip-name flex items-center gap-1.5"
+       title="Deployed from the {{.}} station">
+      <span class="station-mark">{{template "icon_station"}}</span>{{.}}
+    </a>
+    {{end}}
     <span class="chip">{{.DeployType}}</span>
     {{/* A git app is two very different deployments behind one label, so the
          one it actually is belongs next to it. */}}
@@ -28,6 +36,44 @@
 {{/* Directly under the buttons that start a deploy, because it is the answer
      to having pressed one. Admin-only, like the stream behind it. */}}
 {{if $.IsAdmin}}{{template "deploy_progress" .ID}}{{end}}
+
+{{/* The station this application was deployed from, if it came from one: a
+     control surface somebody wrote for this service in particular, above the
+     machinery Quasar provides for every service. */}}
+{{with $.Station}}<div class="mt-8">{{template "station_block" .}}</div>{{end}}
+
+{{/* Everything below here is the machinery Quasar provides for every
+     application: how it is built, where it is routed, what it keeps, what is in
+     its environment. On an ordinary application that is the page. On one
+     deployed from a station it is not what the page is for — somebody installed
+     a station because they wanted its controls and its status, and the rest is
+     exactly the sort of thing that persuades them they are not qualified to run
+     their own server. So it folds away.
+
+     It folds rather than disappears: all of it is still true, an admin still
+     needs it, and moving it to a page somewhere else would be worse than
+     leaving it open. One click and the application reads like every other. */}}
+{{if $.Station}}
+<details class="advanced-block mt-8">
+  {{/* The summary is the lid of a box rather than a line of text, and what it
+       opens is inside that box: the border carries on down the sides, the
+       corners between the two square off so they read as one thing, and the
+       chevron turns over. Without that, the sections below simply appeared and
+       looked like the page continuing — the click seemed to do nothing, and
+       whatever arrived seemed unrelated to it. */}}
+  <summary>
+    {{template "icon_cog"}}
+    <span class="advanced-label">Advanced options</span>
+    <span class="advanced-note">Everything Quasar gives every application: build, routing, storage, environment, logs.</span>
+    <span class="advanced-caret" aria-hidden="true">{{template "icon_chevron_down"}}</span>
+  </summary>
+  {{/* The first section's own top margin is spacing from whatever was above it
+       on the page; in here the summary is above it, and the box's padding is
+       that spacing. It has to be taken off as a utility rather than in
+       themes.css: that sheet is imported into `layer(components)`, and a
+       utility in a later layer beats it however specific the selector. */}}
+  <div class="advanced-body [&>*:first-child]:mt-0!">
+{{end}}
 
 {{if eq .DeployType "git"}}
 <section class="mt-8">
@@ -238,49 +284,11 @@
 </section>
 {{end}}
 
-<script>
-(function () {
-  var panel = document.getElementById('status-panel');
-  var glow = document.getElementById('app-glow');
-  if (!panel || !glow) return;
+{{if $.Station}}
+  </div>
+</details>
+{{end}}
 
-  // The panel is polled every few seconds, so the state is read back out of it
-  // rather than held here: whatever it last swapped in is the truth.
-  function stateNow() {
-    var el = panel.querySelector('[data-app-state]');
-    return el ? el.getAttribute('data-app-state') : '';
-  }
-
-  // Only the two states that are a verdict get a colour. "Deploying" and
-  // "not deployed" are the middle of something, and lighting the page for
-  // them would be announcing a result that does not exist yet.
-  function tone(state) {
-    if (state === 'running') return 'is-ok';
-    if (state === 'stopped' || state === 'error') return 'is-failed';
-    return '';
-  }
-
-  function play(state, poured) {
-    var colour = tone(state);
-    glow.classList.remove('is-ok', 'is-failed', 'is-brief', 'is-burst');
-    if (!colour) return;
-    void glow.offsetWidth; // let the removal take effect, so the run restarts
-    glow.classList.add(colour, poured ? 'is-burst' : 'is-brief');
-  }
-
-  var last = stateNow();
-  play(last, false);
-
-  document.body.addEventListener('htmx:afterSwap', function (e) {
-    if (e.target !== panel) return;
-    var now = stateNow();
-    if (now === last) return;
-    // A deploy that has just finished is the one thing worth the full pour,
-    // flash and all; a state that merely changed wells up quietly.
-    play(now, last === 'deploying');
-    last = now;
-  });
-})();
-</script>
+<script src="/static/js/app-detail.js" defer></script>
 {{end}}
 {{end}}

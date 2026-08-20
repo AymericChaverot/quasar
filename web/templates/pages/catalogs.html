@@ -54,7 +54,7 @@
             <button type="submit" class="btn py-1! text-xs">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
           </form>
           <form method="post" action="/settings/catalogs/{{.ID}}/delete"
-                onsubmit="return confirm('Delete this catalogue? Its entries leave the new-application page. Applications already deployed from them are unaffected.')">
+                data-confirm="Delete this catalogue? Its entries leave the new-application page. Applications already deployed from them are unaffected.">
             <button type="submit" class="btn-danger py-1! text-xs">{{template "icon_trash"}}Delete</button>
           </form>
         </div>
@@ -192,19 +192,5 @@
   </section>
 </div>
 
-<script>
-  (function () {
-    // The example is the format's documentation, and the shortest path from
-    // reading it to having one is not retyping it.
-    const button = document.getElementById("use-example");
-    const box = document.getElementById("new-yaml");
-    const example = document.getElementById("example-doc");
-    if (!button || !box || !example) return;
-    button.addEventListener("click", function () {
-      box.value = example.textContent;
-      box.focus();
-      box.setSelectionRange(0, 0);
-    });
-  })();
-</script>
+<script src="/static/js/catalogs.js" defer></script>
 {{end}}

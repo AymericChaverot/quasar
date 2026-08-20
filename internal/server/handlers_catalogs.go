@@ -1,7 +1,6 @@
 package server
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -152,17 +151,17 @@ func readCatalogForm(r *http.Request) catalogForm {
 // every entry is labelled with and two of them would be one too many.
 func checkCatalog(f catalogForm) (catalog.Catalog, []error) {
 	if f.Name == "" {
-		return catalog.Catalog{}, []error{errors.New("A catalogue needs a name; it is what its entries are labelled with.")}
+		return catalog.Catalog{}, []error{formError("A catalogue needs a name; it is what its entries are labelled with.")}
 	}
 	if strings.TrimSpace(f.YAML) == "" {
-		return catalog.Catalog{}, []error{errors.New("There is nothing in the document.")}
+		return catalog.Catalog{}, []error{formError("There is nothing in the document.")}
 	}
 	c, err := catalog.Parse(f.Name, f.YAML)
 	if err != nil {
 		return catalog.Catalog{}, []error{err}
 	}
 	if len(c.Templates) == 0 {
-		return c, []error{errors.New("The document declares no entries.")}
+		return c, []error{formError("The document declares no entries.")}
 	}
 	return c, c.Validate()
 }
@@ -297,9 +296,17 @@ func (s *Server) handleCatalogFetch(w http.ResponseWriter, r *http.Request) {
 const maxCatalogBytes = 1 << 20
 
 func fetchCatalog(raw string) (string, error) {
+	return fetchDocument(raw, "catalogue", maxCatalogBytes)
+}
+
+// fetchDocument reads a YAML document an operator asked for by address, once,
+// now. What it is called is only for the message a document too large comes
+// back with, which is the one place the difference between a catalogue and a
+// station is worth stating.
+func fetchDocument(raw, kind string, max int) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return "", errors.New("That is not an http or https URL.")
+		return "", formError("That is not an http or https URL.")
 	}
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Get(u.String())
@@ -310,12 +317,12 @@ func fetchCatalog(raw string) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("%s answered %s", u, resp.Status)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxCatalogBytes+1))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(max)+1))
 	if err != nil {
 		return "", fmt.Errorf("reading %s: %w", u, err)
 	}
-	if len(body) > maxCatalogBytes {
-		return "", fmt.Errorf("%s is larger than a catalogue has any business being", u)
+	if len(body) > max {
+		return "", fmt.Errorf("%s is larger than a %s has any business being", u, kind)
 	}
 	return strings.ReplaceAll(string(body), "\r\n", "\n"), nil
 }

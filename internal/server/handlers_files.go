@@ -555,7 +555,7 @@ func storeUploads(root files.Root, dir string, reader *multipart.Reader) (saved,
 			return saved, failed
 		}
 		if part.FormName() != "files" || part.FileName() == "" {
-			part.Close()
+			_ = part.Close() // this part is done with either way
 			continue
 		}
 		// The filename is client-controlled, and the part is free to call
@@ -564,11 +564,11 @@ func storeUploads(root files.Root, dir string, reader *multipart.Reader) (saved,
 		name, ok := files.SafeName(part.FileName())
 		if !ok {
 			failed = append(failed, part.FileName())
-			part.Close()
+			_ = part.Close() // this part is done with either way
 			continue
 		}
 		_, err = root.Save(path.Join(dir, name), part, files.MaxUpload)
-		part.Close()
+		_ = part.Close() // this part is done with either way
 		if err != nil {
 			failed = append(failed, name)
 			continue

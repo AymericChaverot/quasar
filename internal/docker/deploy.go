@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/build"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
@@ -134,13 +134,17 @@ func (c *Client) runAsync(a *db.App, source string, plan []deployPhase, fn func(
 		tag, err := fn(ctx)
 		if err != nil {
 			log.Printf("deploy %s (%s): %v", a.Name, a.ID, err)
-			db.FinishDeployment(c.dbc, depID, "failed", err.Error(), tag)
+			if recErr := db.FinishDeployment(c.dbc, depID, "failed", err.Error(), tag); recErr != nil {
+				log.Printf("deploy %s: recording the failure: %v", a.ID, recErr)
+			}
 			notify.Send(c.dbc, fmt.Sprintf("Quasar: deploy failed for %s (%s): %v", a.Name, a.Subdomain, err))
 			c.note(a.ID, "deploy failed after %s: %v", time.Since(started).Round(time.Second), err)
 			run.finish(err.Error())
 			return
 		}
-		db.FinishDeployment(c.dbc, depID, "success", "", tag)
+		if err := db.FinishDeployment(c.dbc, depID, "success", "", tag); err != nil {
+			log.Printf("deploy %s: recording the success: %v", a.ID, err)
+		}
 		c.note(a.ID, "deployed in %s", time.Since(started).Round(time.Second))
 		run.finish("")
 	}()
@@ -253,7 +257,12 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 			}
 		}
 		for _, id := range stopped {
-			c.api.ContainerStop(ctx, id, container.StopOptions{})
+			// A container that will not stop is why the new one will fail to
+			// bind its port a moment from now, so the reason belongs in the log
+			// before that happens.
+			if err := c.api.ContainerStop(ctx, id, container.StopOptions{}); err != nil {
+				log.Printf("deploy %s: stopping the previous container %s: %v", a.ID, id[:12], err)
+			}
 		}
 	}
 
@@ -263,7 +272,12 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 	rollback := func() {
 		undo := context.WithoutCancel(ctx)
 		for _, id := range stopped {
-			c.api.ContainerStart(undo, id, container.StartOptions{})
+			// The rollback is the last thing standing between a failed deploy
+			// and an app that is simply down. If it does not work, that is the
+			// single most important line in the log.
+			if err := c.api.ContainerStart(undo, id, container.StartOptions{}); err != nil {
+				log.Printf("deploy %s: ROLLBACK FAILED, container %s is still stopped: %v", a.ID, id[:12], err)
+			}
 		}
 	}
 
@@ -383,7 +397,7 @@ func (c *Client) waitServing(ctx context.Context, a *db.App, name, id string, po
 
 		if time.Now().After(deadline) {
 			if lastErr != nil {
-				return fmt.Errorf("new container never served %s within %s (%v), previous version kept",
+				return fmt.Errorf("new container never served %s within %s (%w), previous version kept",
 					a.HealthPath, readyTimeout, lastErr)
 			}
 			return fmt.Errorf("new container did not stay up for %s, previous version kept", settleDelay)
@@ -401,7 +415,7 @@ func probeOnce(url string) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close() // the status code below is the whole answer
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("status %s", resp.Status)
 	}
@@ -425,7 +439,9 @@ func (c *Client) syncSource(ctx context.Context, a *db.App, pull bool) (string, 
 	case err != nil:
 		// No checkout to build from, so this clones whether or not an update
 		// was asked for.
-		os.RemoveAll(src)
+		// Nothing to keep, and a leftover that will not go is reported by the
+		// clone that trips over it a line later.
+		_ = os.RemoveAll(src)
 		args = []string{"clone", "--depth", "1"}
 		if a.GitBranch != "" {
 			args = append(args, "--branch", a.GitBranch)
@@ -463,7 +479,12 @@ func (c *Client) dropStoredCredential(ctx context.Context, src, plainURL string)
 	if err != nil || !strings.Contains(strings.TrimSpace(string(out)), "@") {
 		return
 	}
-	exec.CommandContext(ctx, "git", "-C", src, "remote", "set-url", "origin", plainURL).Run()
+	// A rewrite that fails leaves the token in .git/config, which is the
+	// whole thing this exists to undo — so it is said out loud rather than
+	// left to look like it worked.
+	if err := exec.CommandContext(ctx, "git", "-C", src, "remote", "set-url", "origin", plainURL).Run(); err != nil {
+		log.Printf("git: clearing the stored credential in %s: %v", src, err)
+	}
 }
 
 // deployGit clones (or updates) the repository and then runs it the way the
@@ -568,7 +589,7 @@ func (c *Client) buildImage(ctx context.Context, a *db.App, src string) (string,
 	c.stage(a.ID, phaseBuild)
 	tag := fmt.Sprintf("%s:%d", buildTagPrefix(a.ID), time.Now().Unix())
 	c.note(a.ID, "building %s from the Dockerfile", tag)
-	resp, err := c.api.ImageBuild(ctx, buildCtx, types.ImageBuildOptions{
+	resp, err := c.api.ImageBuild(ctx, buildCtx, build.ImageBuildOptions{
 		Tags:       []string{tag},
 		Dockerfile: "Dockerfile",
 		Remove:     true,
@@ -576,7 +597,7 @@ func (c *Client) buildImage(ctx context.Context, a *db.App, src string) (string,
 		// output readable: the classic builder narrates itself in "Step 3/12"
 		// lines, which is both what reaches the pane and what moves the bar.
 		// BuildKit answers the same request with a binary trace instead.
-		Version: types.BuilderV1,
+		Version: build.BuilderV1,
 	})
 	if err != nil {
 		return "", fmt.Errorf("build: %w", err)
@@ -601,7 +622,11 @@ func (c *Client) pruneBuilds(ctx context.Context, appID string) {
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].Created > list[j].Created })
 	for _, img := range list[keepBuilds:] {
-		c.api.ImageRemove(ctx, img.ID, image.RemoveOptions{Force: true, PruneChildren: true})
+		// Best effort: an image still referenced by a stopped container will
+		// not go, and the next prune will find it again.
+		if _, err := c.api.ImageRemove(ctx, img.ID, image.RemoveOptions{Force: true, PruneChildren: true}); err != nil {
+			log.Printf("prune: removing the old build %s: %v", img.ID[:12], err)
+		}
 	}
 }
 

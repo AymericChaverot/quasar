@@ -1,0 +1,98 @@
+{{/* A station's control surface: one block with its own tab strip, at the top
+     of the application's page. Everything below it — Build, Routing, Storage,
+     Environment — is the machinery Quasar provides for every application, and
+     is untouched by whatever a station does up here.
+
+     Every panel fetches itself. The action that changes something says which
+     panels are now stale, and each of those hears its own event; nothing
+     re-renders a panel it does not own. */}}
+{{define "station_block"}}
+{{$app := .App.ID}}
+{{/* The station's own tokens, on the block and nowhere else. Everything in
+     here has been through validation: colours matched against a pattern,
+     lengths against another, words against a list, and an embedded typeface
+     against the one strict shape a font may take. */}}
+{{with .Style}}<style>{{.}}</style>{{end}}
+<section id="station" class="station mb-8">
+  <div class="station-head">
+    {{/* The station's mark, on the plate the generic device already sits on
+         rather than loose beside the name. A sixteen-pixel drawing with no
+         ground under it reads as an image that failed to load into something;
+         the same drawing centred on the tile — the accent-tinted square this
+         header has drawn for stations without one since the beginning — reads
+         as a mark, at a size somebody can actually see it at. */}}
+    <span class="station-icon-plate" aria-hidden="true">
+      {{if .Doc.UI.Theme.Icon}}
+      <img src="{{.Doc.UI.Theme.IconSrc}}" alt="">
+      {{else}}
+      {{template "icon_station"}}
+      {{end}}
+    </span>
+    <div class="min-w-0 flex-1">
+      <p class="text-sm font-medium">{{.Doc.Name}}</p>
+      <p class="faint text-xs">{{.Doc.Description}}</p>
+    </div>
+    {{/* Version and refresh travel together on their own line, centred against
+         each other rather than each hanging off the top of the header — the
+         head aligns its contents to the top so that a long description pushes
+         the title up, not these two. */}}
+    <div class="station-head-end">
+      <span class="chip">{{.Doc.Version}}</span>
+      {{/* The station only. Reloading the page to see whether a mod finished
+           installing throws away the tab somebody was on, the position they had
+           scrolled to and any progress pane still running; this asks every panel
+           to fetch itself again and moves nothing else. */}}
+      <button type="button" class="station-refresh"
+              title="Refresh this station" aria-label="Refresh this station">
+        {{template "icon_restart"}}
+      </button>
+    </div>
+  </div>
+
+  <div class="station-tabs" role="tablist">
+    {{range $i, $tab := .Tabs}}
+    <button type="button" class="station-tab {{if eq $i 0}}is-on{{end}}"
+            role="tab" data-station-tab="{{$tab.ID}}"
+            aria-selected="{{if eq $i 0}}true{{else}}false{{end}}">{{$tab.Name}}</button>
+    {{end}}
+  </div>
+
+  {{/* A long action's progress pane, which belongs on the page: it is a thing
+       to watch, and it survives a reload. Actions that start one retarget
+       here. */}}
+  <div id="station-jobs" class="station-jobs"></div>
+
+  {{range $i, $tab := .Tabs}}
+  <div class="station-pane {{if ne $i 0}}hidden{{end}}" data-station-pane="{{$tab.ID}}">
+    <div class="station-grid">
+      {{range $tab.Panels}}
+      <div class="station-cell station-{{if .Width}}{{.Width}}{{else}}full{{end}}"
+           id="station-panel-{{.ID}}"
+           hx-get="/apps/{{$app}}/station/panel/{{.ID}}"
+           hx-trigger="load, {{stationRefreshAll}} from:body, {{stationRefresh .ID}} from:body{{if .Refresh.Seconds}}, every {{.Refresh.Seconds}}s{{end}}"
+           hx-swap="innerHTML">
+        <div class="card p-4"><p class="station-waiting"><span class="spinner" aria-hidden="true"></span><span>Loading…</span></p></div>
+      </div>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
+
+  {{/* Whose work this is, at the end of it rather than in the heading: the
+       station's own name and version are what somebody reads on the way in,
+       and the credit is what they look for on the way out. */}}
+  {{with .Doc.Author}}<p class="station-foot">Station Author: {{.}}</p>{{end}}
+</section>
+
+{{/* Where a toast or a refused action lands, wherever on the page it came
+     from. It floats rather than sitting at the top of the block, because the
+     button that caused it is often three screens down from there — a message
+     nobody scrolls back up to read is a message nobody reads.
+
+     Messages stack here rather than replacing one another: pressing three
+     buttons is three things worth knowing, and the third crushing the first two
+     would make all three pointless. */}}
+<div id="station-message" class="station-toasts" aria-live="polite"></div>
+
+<script src="/static/js/station-block.js" defer></script>
+{{end}}

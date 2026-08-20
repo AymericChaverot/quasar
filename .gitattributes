@@ -1,0 +1,8 @@
+# The repository stores text as LF. Windows checkouts keep LF too, so gofmt
+# and the CI linter agree on what a file looks like no matter who edited it.
+* text=auto eol=lf
+
+*.woff2 binary
+*.png    binary
+*.jpg    binary
+*.ico    binary

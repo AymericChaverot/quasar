@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,7 +70,9 @@ func (c *Client) gitRun(ctx context.Context, out func(string), repoURL string, a
 	}
 	if cred != nil {
 		// Recorded only on success, so "last used" means the token worked.
-		db.MarkGitCredentialUsed(c.dbc, cred.ID)
+		if err := db.MarkGitCredentialUsed(c.dbc, cred.ID); err != nil {
+			log.Printf("git: marking credential %d used: %v", cred.ID, err)
+		}
 	}
 	return nil
 }

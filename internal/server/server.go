@@ -11,9 +11,11 @@ import (
 
 	"quasar/internal/auth"
 	"quasar/internal/config"
+	"quasar/internal/db"
 	"quasar/internal/docker"
 	"quasar/internal/files"
 	"quasar/internal/secrets"
+	"quasar/internal/station/ui"
 	"quasar/internal/version"
 	"quasar/web"
 )
@@ -55,6 +57,15 @@ type Server struct {
 	// traefik is the edge-router update in flight, for the same reason and read
 	// the same way — by the Environment card, which polls while one is running.
 	traefik traefikRun
+
+	// jobs are the long station actions running now, and the ones somebody may
+	// still come back to read.
+	jobs stationJobRegistry
+
+	// choices are the answers stations have given to the parameters that ask
+	// them what to offer, so drawing an install form twice is not two requests
+	// to somebody else's API.
+	choices stationChoiceCache
 }
 
 func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) (*Server, error) {
@@ -87,7 +98,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.Serve
 // files read out of an embed.FS have a zero modification time, so there is no
 // Last-Modified to revalidate against and every page load would pull the fonts
 // down again. Their names are tied to their contents, so they can be pinned
-// hard; nothing else here can, since themes.css changes under a fixed name.
+// hard; nothing else here can, since the stylesheets change under fixed names.
 func staticAssets(root fs.FS) http.Handler {
 	files := http.FileServerFS(root)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -123,6 +134,12 @@ var templateFuncs = template.FuncMap{
 		return many
 	},
 	"hasPrefix": strings.HasPrefix,
+	// The event a station's panel is re-fetched by. Kept as a function so the
+	// name the template listens for and the name the action's response sends
+	// cannot drift apart.
+	"stationRefresh":    stationRefreshEvent,
+	"stationRefreshAll": stationRefreshAllEvent,
+	"stationConfirm":    ui.Interpolate,
 	// The sort of thing a filename suggests, which the listing turns into an
 	// icon so one row can be told from the next at a glance.
 	"fileKind": files.Kind,
@@ -247,6 +264,50 @@ func (s *Server) routes() {
 	s.admin("GET /settings/catalogs/{id}/entries/{entry}", s.handleCatalogEntryForm)
 	s.admin("POST /settings/catalogs/{id}/entries/{entry}", s.handleCatalogEntrySave)
 	s.admin("POST /settings/catalogs/{id}/entries/{entry}/delete", s.handleCatalogEntryDelete)
+	// The stations an operator can deploy from, on a page of their own rather
+	// than mixed into the catalogue: one is software to browse, the other is a
+	// program somebody wrote for you.
+	s.viewer("GET /stations", s.handleStationsPage)
+	// Starring one lifts it to its own list at the top. The star belongs to the
+	// install rather than to whoever is looking, so setting it is an admin's.
+	s.admin("POST /stations/{id}/favorite", s.handleStationFavorite)
+	// Installing a station is its own page, not the new-application form with
+	// a station in it: somebody else has already answered everything that form
+	// asks, and the only questions left are the station's own.
+	s.admin("GET /stations/{id}/deploy", s.handleStationDeployForm)
+	// And the last button is not the form's submit. Between the two is a recap
+	// of what is about to exist and where, with the way back to the answers
+	// that decided it: installing takes an address on the operator's domain and
+	// starts pulling an image, which is worth a dozen words of warning.
+	s.admin("POST /stations/{id}/deploy/review", s.handleStationDeployReview)
+	s.admin("POST /stations/{id}/deploy/edit", s.handleStationDeployEdit)
+	s.admin("POST /stations/{id}/deploy", s.handleStationDeploy)
+	// A station is a program somebody else wrote, and installing one is
+	// accepting what it may reach. Reading the page is an admin's business for
+	// the same reason writing a catalogue is.
+	s.admin("GET /settings/stations", s.handleStations)
+	s.admin("POST /settings/stations", s.handleStationInstall)
+	s.admin("POST /settings/stations/review", s.handleStationReview)
+	s.admin("POST /settings/stations/fetch", s.handleStationFetch)
+	s.admin("POST /settings/stations/{id}/fetch", s.handleStationRefetch)
+	s.admin("POST /settings/stations/{id}/accept", s.handleStationAccept)
+	s.admin("POST /settings/stations/{id}/discard", s.handleStationDiscard)
+	s.admin("POST /settings/stations/{id}/revert", s.handleStationRevert)
+	// A station's own panels and actions. Admin-only, because fetching a panel
+	// runs somebody else's script with whatever the document was granted —
+	// which is not a read, whatever it looks like on the page.
+	s.admin("GET /apps/{id}/station/panel/{panel}", s.handleStationPanelPartial)
+	// An embedded page is somebody else's application, proxied onto this one:
+	// it makes whatever requests it makes, so this takes every method. Where it
+	// goes is read out of the document and never out of the URL.
+	s.admin("/apps/{id}/station/embed/{panel}/{path...}", s.handleStationEmbed)
+	s.admin("POST /apps/{id}/station/action/{action}", s.handleStationAction)
+	// A file an action offered to hand over, out of the application's own
+	// folder and only where the station's files permission reaches.
+	s.admin("GET /apps/{id}/station/download", s.handleStationDownload)
+	s.admin("GET /apps/{id}/station/job/{action}", s.handleStationJob)
+	s.admin("POST /settings/stations/{id}/toggle", s.handleStationToggle)
+	s.admin("POST /settings/stations/{id}/delete", s.handleStationDelete)
 	s.admin("POST /settings/notify-test", s.handleNotifyTest)
 	s.admin("POST /settings/users", s.handleUserCreate)
 	s.admin("POST /settings/users/{id}/role", s.handleUserRole)
@@ -433,6 +494,10 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, dat
 	data["Theme"] = themeFrom(r)
 	data["Version"] = version.Version
 	data["Nav"] = navSection(r.URL.Path)
+	// The Stations entry only appears once there is a station to reach from
+	// it. An install with none has no business carrying a navigation entry for
+	// a page that would be empty.
+	data["HasStations"] = db.CountEnabledStations(s.db) > 0
 	// Injected for every page so templates can hide controls a viewer would
 	// only get a 403 from. requireAdmin is what actually enforces it; this is
 	// presentation.
@@ -468,6 +533,8 @@ func navSection(path string) string {
 		return "new"
 	case path == "/" || strings.HasPrefix(path, "/apps/"):
 		return "apps"
+	case strings.HasPrefix(path, "/stations"):
+		return "stations"
 	case strings.HasPrefix(path, "/logs"):
 		return "logs"
 	case strings.HasPrefix(path, "/audit"):

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -50,7 +51,10 @@ func (s *Server) handleTaskDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	if id, err := strconv.ParseInt(r.PathValue("task"), 10, 64); err == nil {
 		if t, err := db.GetTask(s.db, id); err == nil && t.AppID == a.ID {
-			db.DeleteTask(s.db, id)
+			if err := db.DeleteTask(s.db, id); err != nil {
+				http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
 			s.audit(r, "task.delete", a.Name, t.Command)
 		}
 	}
@@ -77,11 +81,15 @@ func (s *Server) handleTaskRun(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	out, runErr := s.dock.RunCommand(ctx, a, t.Command)
 	status := "success"
+	detail := out
 	if runErr != nil {
 		status = "failed"
-		db.RecordTaskRun(s.db, t.ID, status, out+"\n"+runErr.Error())
-	} else {
-		db.RecordTaskRun(s.db, t.ID, status, out)
+		detail = out + "\n" + runErr.Error()
+	}
+	// The run happened either way. Failing to write down how it went is worth
+	// saying out loud, but not worth withholding the result that was asked for.
+	if err := db.RecordTaskRun(s.db, t.ID, status, detail); err != nil {
+		log.Printf("task %d: recording the run: %v", t.ID, err)
 	}
 	s.audit(r, "task.run", a.Name, t.Command+" ("+status+")")
 	s.handleTasksPartial(w, r)

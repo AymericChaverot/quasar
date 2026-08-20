@@ -122,3 +122,53 @@ func TestPreloadedFontsAreEmbedded(t *testing.T) {
 		}
 	}
 }
+
+// The stylesheet is a dozen files the layout names one at a time, and a name
+// that has gone wrong fails the way a missing font does: quietly. The sheet
+// 404s, the page still renders, and one whole domain of the interface comes out
+// unstyled. So the two lists are held against each other in both directions —
+// an import with nowhere to go, and a sheet nobody imports, are both mistakes.
+func TestEverySheetIsImportedAndEveryImportResolves(t *testing.T) {
+	layout, err := web.Files.ReadFile("templates/layout.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	imported := map[string]bool{}
+	for _, m := range regexp.MustCompile(`@import url\("/static/([^"]+)"\)`).FindAllStringSubmatch(string(layout), -1) {
+		imported[m[1]] = true
+		if _, err := web.Files.ReadFile("static/" + m[1]); err != nil {
+			t.Errorf("the layout imports /static/%s, which is not in the embedded tree: %v", m[1], err)
+		}
+	}
+	if len(imported) == 0 {
+		t.Fatal("the layout imports no stylesheet at all")
+	}
+
+	sheets, err := web.Files.ReadDir("static/css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sheet := range sheets {
+		if name := "css/" + sheet.Name(); !imported[name] {
+			t.Errorf("static/%s is embedded but the layout never imports it, so none of it applies", name)
+		}
+	}
+}
+
+// Every sheet is pulled into the components layer, which is what keeps Tailwind
+// utilities above them. One plain @import would outrank every layer at once and
+// silently take the utilities out on whatever properties it happens to set.
+func TestEveryImportLandsInTheComponentsLayer(t *testing.T) {
+	layout, err := web.Files.ReadFile("templates/layout.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(layout), "\n") {
+		if !strings.Contains(line, "@import") {
+			continue
+		}
+		if !strings.Contains(line, "layer(components)") {
+			t.Errorf("unlayered import, which would outrank every layer: %s", strings.TrimSpace(line))
+		}
+	}
+}

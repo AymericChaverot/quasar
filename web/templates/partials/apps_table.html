@@ -10,7 +10,11 @@
     <thead>
       <tr>
         <th class="pr-0! w-10"></th>
-        <th>Application</th>
+        {{/* The label starts where the names start, not where the station mark
+             does. It is built out of the same two boxes the cells are, with the
+             mark's slot left empty, so the two line up by construction rather
+             than by a padding somebody would have to keep in step. */}}
+        <th><span class="app-name"><span class="station-slot"></span>Application</span></th>
         <th>URL</th>
         <th>Type</th>
         <th>Status</th>
@@ -37,7 +41,20 @@
           </div>
         </td>
         <td>
-          <a href="/apps/{{.ID}}" class="font-medium hover:underline">{{.Name}}</a>
+          {{/* An application deployed from a station has a page that does more
+               than the others', and nothing in a list of names would say so. The
+               mark goes in front of the name, in a slot every row keeps whether
+               it has one or not — so the names still line up down the column
+               instead of stepping sideways around it. */}}
+          <span class="app-name">
+            <span class="station-slot">
+              {{with .StationID}}
+              <span class="station-mark" title="Deployed from the {{.}} station"
+                    aria-label="from a station">{{template "icon_station"}}</span>
+              {{end}}
+            </span>
+            <a href="/apps/{{.ID}}" class="font-medium hover:underline">{{.Name}}</a>
+          </span>
         </td>
         <td>
           <a href="https://{{.Host}}" target="_blank" rel="noopener"

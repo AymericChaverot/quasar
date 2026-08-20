@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -61,8 +62,15 @@ func Check(ctx context.Context, database *sql.DB, repo string) (string, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
 		return "", err
 	}
-	db.SetSetting(database, SettingLatestTag, release.TagName)
-	db.SetSetting(database, SettingCheckedAt, time.Now().Format(time.RFC3339))
+	// The tag is the answer; the two settings are the cache of it. A cache
+	// that will not write means the next page re-asks GitHub, which is slower
+	// and not wrong.
+	if err := db.SetSetting(database, SettingLatestTag, release.TagName); err != nil {
+		log.Printf("updater: caching the latest tag: %v", err)
+	}
+	if err := db.SetSetting(database, SettingCheckedAt, time.Now().Format(time.RFC3339)); err != nil {
+		log.Printf("updater: caching the check time: %v", err)
+	}
 	return release.TagName, nil
 }
 

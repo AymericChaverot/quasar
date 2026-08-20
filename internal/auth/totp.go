@@ -55,7 +55,11 @@ func DisableTOTP(db *sql.DB, userID int64, password string) error {
 
 func TOTPEnabled(db *sql.DB, userID int64) bool {
 	var enabled bool
-	db.QueryRow("SELECT totp_enabled FROM users WHERE id = ?", userID).Scan(&enabled)
+	// A question that cannot be answered is answered "no", which is the same
+	// thing the caller does with a user who never set it up.
+	if err := db.QueryRow("SELECT totp_enabled FROM users WHERE id = ?", userID).Scan(&enabled); err != nil {
+		return false
+	}
 	return enabled
 }
 

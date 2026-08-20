@@ -16,8 +16,11 @@ func canWrite(dir string) bool {
 	if err != nil {
 		return false
 	}
+	// The create already answered the question. Tidying up after it is a
+	// courtesy, and a probe file left behind is not worth reporting as a
+	// directory nobody can write to.
 	name := f.Name()
-	f.Close()
-	os.Remove(name)
+	_ = f.Close()
+	_ = os.Remove(name)
 	return true
 }

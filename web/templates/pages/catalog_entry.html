@@ -188,7 +188,7 @@
 
 {{if not $new}}
 <form method="post" action="/settings/catalogs/{{$cat.ID}}/entries/{{$e.ID}}/delete" class="mt-8"
-      onsubmit="return confirm('Remove this entry from the catalogue? Applications already deployed from it are unaffected.')">
+      data-confirm="Remove this entry from the catalogue? Applications already deployed from it are unaffected.">
   <button type="submit" class="btn-danger px-4 py-2">{{template "icon_trash"}}Remove this entry</button>
 </form>
 {{end}}
@@ -199,31 +199,5 @@
   {{template "catalog_param_row" .Blank}}
 </template>
 
-<script>
-  (function () {
-    const picks = document.querySelectorAll(".deploy-pick");
-    const image = document.getElementById("image-fields");
-    const compose = document.getElementById("compose-fields");
-    for (const p of picks) {
-      p.addEventListener("change", function () {
-        image.classList.toggle("hidden", p.value !== "image");
-        compose.classList.toggle("hidden", p.value !== "compose");
-      });
-    }
-
-    const rows = document.getElementById("params");
-    const blank = document.getElementById("param-row-template");
-    document.getElementById("add-param").addEventListener("click", function () {
-      rows.appendChild(blank.content.cloneNode(true));
-      const added = rows.lastElementChild.querySelector("input");
-      if (added) added.focus();
-    });
-    // Removing a row is delegated: the rows that arrive later have to answer
-    // to it too, and they do not exist when this runs.
-    rows.addEventListener("click", function (e) {
-      const button = e.target.closest(".remove-param");
-      if (button) button.closest(".param-row").remove();
-    });
-  })();
-</script>
+<script src="/static/js/catalog-entry.js" defer></script>
 {{end}}

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -25,25 +26,29 @@ func (s *Server) audit(r *http.Request, action, target, detail string) {
 	if username == "" {
 		username = db.ActorSystem
 	}
-	db.RecordAudit(s.db, db.AuditEntry{
+	if err := db.RecordAudit(s.db, db.AuditEntry{
 		Actor:  username,
 		Action: action,
 		Target: target,
 		Detail: detail,
 		IP:     clientIP(r),
-	})
+	}); err != nil {
+		log.Printf("audit: recording %q: %v", action, err)
+	}
 }
 
 // auditAs records an action for an actor with no session, such as a deploy
 // triggered by a webhook.
 func (s *Server) auditAs(r *http.Request, actor, action, target, detail string) {
-	db.RecordAudit(s.db, db.AuditEntry{
+	if err := db.RecordAudit(s.db, db.AuditEntry{
 		Actor:  actor,
 		Action: action,
 		Target: target,
 		Detail: detail,
 		IP:     clientIP(r),
-	})
+	}); err != nil {
+		log.Printf("audit: recording %q: %v", action, err)
+	}
 }
 
 // clientIP reports the address the request came from.

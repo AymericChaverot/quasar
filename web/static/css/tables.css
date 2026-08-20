@@ -1,0 +1,31 @@
+/* --- Tables ---------------------------------------------------------------- */
+
+/* The head has a ground and the rows had none, which left the body of every
+   table showing whatever was behind it. It fills with what the table is
+   standing on, so a table on a page still reads as part of it and a table in a
+   card takes the card's own colour rather than a darker slab dropped into
+   one. */
+.table-wrap {
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--ground);
+}
+.table-wrap table { width: 100%; text-align: left; font-size: 0.875rem; }
+.table-wrap thead {
+  border-bottom: var(--border-w) solid var(--border);
+  background: var(--surface-2);
+}
+.table-wrap th {
+  padding: 0.625rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+}
+.table-wrap td { padding: 0.75rem 1rem; }
+.table-wrap tbody tr { border-top: var(--border-w) solid color-mix(in srgb, var(--border) 60%, transparent); }
+.table-wrap tbody tr:first-child { border-top: 0; }
+.table-wrap tbody tr:hover { background: var(--surface-2); }

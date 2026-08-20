@@ -79,7 +79,9 @@ func loadDotEnv(path string) {
 		key = strings.TrimSpace(key)
 		value = strings.Trim(strings.TrimSpace(value), `"'`)
 		if _, exists := os.LookupEnv(key); !exists {
-			os.Setenv(key, value)
+			// A key the environment refuses is one this process cannot use
+			// anyway; the caller reads it back through os.Getenv either way.
+			_ = os.Setenv(key, value)
 		}
 	}
 }

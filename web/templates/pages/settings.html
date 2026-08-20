@@ -116,7 +116,7 @@
             <button type="submit" class="btn py-1! text-xs">Reset</button>
           </form>
           <form method="post" action="/settings/users/{{.ID}}/delete"
-                onsubmit="return confirm('Delete the account {{.Username}}?')">
+                data-confirm="Delete the account {{.Username}}?">
             <button type="submit" class="btn-danger py-1! text-xs">Delete</button>
           </form>
           {{end}}
@@ -172,7 +172,7 @@
               {{if .LastUsedAt.Valid}}last used {{.LastUsedAt.Time.Format "2006-01-02 15:04"}}{{else}}never used{{end}}
             </span>
             <form method="post" action="/settings/tokens/{{.ID}}/delete"
-                  onsubmit="return confirm('Revoke the token {{.Name}}? Anything using it stops working immediately.')">
+                  data-confirm="Revoke the token {{.Name}}? Anything using it stops working immediately.">
               <button type="submit" class="btn-danger py-1! text-xs">Revoke</button>
             </form>
           </div>
@@ -226,6 +226,27 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
         <span class="help block mt-0!">
           The one-click entries on the new-application page. Add your own — your software, your
           categories, and entries that ask for a version before they prefill anything.
+        </span>
+      </span>
+      <span class="faint shrink-0" aria-hidden="true">→</span>
+    </a>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Stations</h2>
+    <a href="/settings/stations" class="card nav-card">
+      <span class="cred-mark" aria-hidden="true">{{template "icon_layers"}}</span>
+      <span class="min-w-0 flex-1">
+        <span class="block text-sm font-medium">
+          {{if .StationCount}}
+            {{.StationCount}} {{plural .StationCount "station" "stations"}} installed
+          {{else}}
+            No station installed
+          {{end}}
+        </span>
+        <span class="help block mt-0!">
+          Applications that arrive with a control surface of their own. A station is a program, so
+          installing one means reading what it asks to be allowed to reach, and accepting it.
         </span>
       </span>
       <span class="faint shrink-0" aria-hidden="true">→</span>

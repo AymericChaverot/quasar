@@ -32,6 +32,19 @@ type Param struct {
 	// Options are the only values accepted when Kind is "select".
 	Options []string `yaml:"options,omitempty"`
 
+	// OptionsFrom names an action that supplies more of them, and is a
+	// station's field: a catalogue entry is a description, and there is nothing
+	// in one to ask. The station's script is called before the form is drawn
+	// and what it returns is added to Options, so a list nobody can write down
+	// — every release of a game there has ever been — is a list the operator
+	// picks from rather than types into.
+	//
+	// Options stays required and stays meaningful. It is what the form offers
+	// when the answer does not arrive: a server with no route out, an API
+	// having a bad afternoon, a station whose action throws. A dropdown that
+	// empties itself when a third party is down is worse than a short one.
+	OptionsFrom string `yaml:"options_from,omitempty"`
+
 	// Help is the line under the field, for the choice that is not obvious
 	// from its name — which values a version string can take, say.
 	Help string `yaml:"help,omitempty"`

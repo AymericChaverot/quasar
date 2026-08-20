@@ -16,6 +16,11 @@ import (
 )
 
 func main() {
+	// Before anything else opens a database, a Docker connection or the master
+	// key: a worker gets none of them, and the way to be sure of that is for
+	// this process never to have had them.
+	runWorkerMode()
+
 	cfg := config.Load()
 
 	database, err := db.Open(cfg.DBPath)
@@ -63,6 +68,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("server: %v", err)
 	}
+	// A station's hooks run without anybody having pressed anything, so the
+	// loop that fires them belongs here rather than inside a request.
+	srv.StartStationHooks()
 
 	log.Printf("quasar listening on %s (domain: %s)", cfg.ListenAddr, cfg.Domain)
 	if err := http.ListenAndServe(cfg.ListenAddr, srv); err != nil {

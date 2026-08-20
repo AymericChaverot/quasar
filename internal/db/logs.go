@@ -29,19 +29,24 @@ type LogEntry struct {
 
 // AppendLogs batches a captured chunk of an app's container output into
 // storage in a single transaction.
-func AppendLogs(database *sql.DB, appID string, entries []LogEntry) {
+func AppendLogs(database *sql.DB, appID string, entries []LogEntry) error {
 	if len(entries) == 0 {
-		return
+		return nil
 	}
 	tx, err := database.Begin()
 	if err != nil {
-		return
+		return err
 	}
+	// A rollback after a successful commit is a no-op, so one deferred call
+	// covers every way out of here without asking which one was taken.
+	defer tx.Rollback()
+
 	stmt, err := tx.Prepare("INSERT INTO app_logs (app_id, ts, line) VALUES (?, ?, ?)")
 	if err != nil {
-		tx.Rollback()
-		return
+		return err
 	}
+	defer stmt.Close()
+
 	for _, e := range entries {
 		if len(e.Line) > maxLogLineLen {
 			e.Line = e.Line[:maxLogLineLen]
@@ -49,10 +54,11 @@ func AppendLogs(database *sql.DB, appID string, entries []LogEntry) {
 		if e.TS.IsZero() {
 			e.TS = time.Now()
 		}
-		stmt.Exec(appID, e.TS.UTC(), e.Line)
+		if _, err := stmt.Exec(appID, e.TS.UTC(), e.Line); err != nil {
+			return err
+		}
 	}
-	stmt.Close()
-	tx.Commit()
+	return tx.Commit()
 }
 
 // SearchLogs returns persisted log lines, newest first, optionally scoped to
@@ -84,8 +90,9 @@ func SearchLogs(database *sql.DB, appID, query string, limit int) ([]LogLine, er
 
 // DeleteAppLogs removes an app's persisted log history; called when the app
 // itself is deleted.
-func DeleteAppLogs(database *sql.DB, appID string) {
-	database.Exec("DELETE FROM app_logs WHERE app_id = ?", appID)
+func DeleteAppLogs(database *sql.DB, appID string) error {
+	_, err := database.Exec("DELETE FROM app_logs WHERE app_id = ?", appID)
+	return err
 }
 
 // MaxLogRowsPerApp caps stored output per app on top of the time-based
@@ -95,13 +102,13 @@ func DeleteAppLogs(database *sql.DB, appID string) {
 const MaxLogRowsPerApp = 50_000
 
 // PruneLogs enforces the per-app row cap, keeping the newest lines.
-func PruneLogs(database *sql.DB) {
+func PruneLogs(database *sql.DB) error {
 	// The app IDs are collected before any delete runs: the pool is limited to
 	// a single connection, so writing while a query is still open would
 	// deadlock against the reader holding it.
 	rows, err := database.Query("SELECT DISTINCT app_id FROM app_logs")
 	if err != nil {
-		return
+		return err
 	}
 	var appIDs []string
 	for rows.Next() {
@@ -110,15 +117,20 @@ func PruneLogs(database *sql.DB) {
 			appIDs = append(appIDs, id)
 		}
 	}
-	rows.Close()
+	if err := rows.Close(); err != nil {
+		return err
+	}
 
 	for _, id := range appIDs {
-		database.Exec(`
+		if _, err := database.Exec(`
 			DELETE FROM app_logs WHERE id IN (
 				SELECT id FROM app_logs
 				WHERE app_id = ?
 				ORDER BY ts DESC, id DESC
 				LIMIT -1 OFFSET ?
-			)`, id, MaxLogRowsPerApp)
+			)`, id, MaxLogRowsPerApp); err != nil {
+			return err
+		}
 	}
+	return rows.Err()
 }

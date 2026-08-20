@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log"
 	"net/http"
 
 	"quasar/internal/auth"
@@ -66,7 +67,11 @@ func (s *Server) handle2FAVerify(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if cookie, _ := r.Cookie(auth.SessionCookie); cookie != nil {
 		s.audit(r, "logout", "", "")
-		auth.Logout(s.db, cookie.Value)
+		// The cookie is cleared either way, but a session row that survives is
+		// still a working credential for anyone who kept a copy of the token.
+		if err := auth.Logout(s.db, cookie.Value); err != nil {
+			log.Printf("logout: invalidating the session: %v", err)
+		}
 	}
 	auth.ClearCookie(w, s.cfg.CookieSecure)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)

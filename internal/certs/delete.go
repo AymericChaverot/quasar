@@ -75,7 +75,7 @@ func Delete(acmeJSONPath, domain string) error {
 		return err
 	}
 	if err := os.Rename(tmp, acmeJSONPath); err != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp) // the rename failure is the one worth returning
 		return err
 	}
 	return nil

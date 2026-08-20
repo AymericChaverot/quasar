@@ -158,11 +158,11 @@ func (r Root) Save(rel string, src io.Reader, max int64) (int64, error) {
 	// file that exactly fills the cap from one that overruns it.
 	n, err := io.Copy(tmp, io.LimitReader(src, max+1))
 	if err != nil {
-		tmp.Close()
+		_ = tmp.Close() // the deferred remove is what matters here
 		return 0, err
 	}
 	if n > max {
-		tmp.Close()
+		_ = tmp.Close() // the deferred remove is what matters here
 		return 0, ErrTooLarge
 	}
 	if err := tmp.Chmod(mode); err != nil && !errors.Is(err, os.ErrInvalid) {
@@ -204,6 +204,30 @@ func (r Root) Remove(rel string) error {
 		return ErrIsDir
 	}
 	return os.Remove(target)
+}
+
+// Mkdir creates one directory, and only one: the parent has to exist already.
+//
+// It goes through resolveNew for the same reason every other write does — the
+// parent is resolved through its symlinks and checked against the root, and the
+// name that is joined onto the answer cannot itself be a path. A directory that
+// is already there is not an error, because the caller wanted it to exist and
+// it does.
+func (r Root) Mkdir(rel string) error {
+	if !r.writable {
+		return ErrReadOnly
+	}
+	target, err := r.resolveNew(rel)
+	if err != nil {
+		return err
+	}
+	if info, err := os.Lstat(target); err == nil {
+		if info.IsDir() {
+			return nil
+		}
+		return ErrNotDir
+	}
+	return os.Mkdir(target, 0o755)
 }
 
 // Editable reports whether a file can be opened in the editor: writable

@@ -1,0 +1,92 @@
+{{/* The Stations page, as the two lists it is.
+
+     Starred stations are repeated at the top rather than moved there. A list
+     that quietly loses entries as they are starred is a list nobody trusts to
+     be the whole of what is installed, and "All stations" has to mean all of
+     them. Both lists carry their count, because the answer to "how many have I
+     got" should not be something anybody has to work out by counting cards. */}}
+{{define "stations_lists"}}
+<div id="stations-lists" class="max-w-5xl space-y-10">
+  {{$admin := .IsAdmin}}
+
+  {{/* Named, and only present when there is something in it — which is what
+       lets the script tell a list that has just come into existence from one
+       that has simply gained a card, and give the first of those its height
+       rather than dropping it on the page. */}}
+  {{with .Favorites}}
+  <section id="station-favorites">
+    <h2 class="h-label mb-3">Favourites ({{len .}})</h2>
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {{range .}}{{template "station_card" dict "Card" . "IsAdmin" $admin}}{{end}}
+    </div>
+  </section>
+  {{end}}
+
+  <section>
+    <h2 class="h-label mb-3">All stations ({{len .Stations}})</h2>
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {{range .Stations}}{{template "station_card" dict "Card" . "IsAdmin" $admin}}{{end}}
+    </div>
+  </section>
+</div>
+{{end}}
+
+{{/* One station, as something to deploy and something to star.
+
+     The whole card is the link, which a button inside it cannot be: an anchor
+     may not contain one. So the anchor stretches itself over the card with a
+     pseudo-element and the star sits above that — the card reads as one target
+     and the star still takes its own click.
+
+     Starring answers with both lists, which replaces the card that was clicked.
+     Nothing waits on that: the star is stored, the lists come back, and only
+     then is the flourish played over what arrived — a favourite that took half
+     a second to become one because something was being drawn would be an
+     animation holding up the thing it is about. The script that plays it is on
+     the page itself, since this partial is what gets replaced. */}}
+{{define "station_card"}}
+{{with .Card}}
+<div class="station-card card p-4{{if .Favorite}} is-favorite{{end}}">
+  {{if $.IsAdmin}}
+  <button type="button" class="station-star" aria-pressed="{{if .Favorite}}true{{else}}false{{end}}"
+          title="{{if .Favorite}}Remove from favourites{{else}}Add to favourites{{end}}"
+          aria-label="{{if .Favorite}}Remove {{.Name}} from favourites{{else}}Add {{.Name}} to favourites{{end}}"
+          hx-post="/stations/{{.ID}}/favorite"
+          hx-target="#stations-lists" hx-swap="outerHTML">{{template "icon_star"}}</button>
+  {{end}}
+
+  {{/* The mark, once, as the card's own ground rather than a badge in front of
+       every name. On a page where every card is a station, a station icon on
+       every card says nothing that the heading above the list has not already
+       said; drawn large and faint behind the words it stops being a label and
+       becomes the surface the card is printed on.
+
+       A station that brought an icon of its own is printed on that instead of
+       on the generic device. It is the one place where the two say different
+       things — one card in a list of cards, all of which are stations, and only
+       this one is Minecraft — and it is worth more there than as a sixteen-pixel
+       tile in front of the name, where it competes with the words for the same
+       glance. */}}
+  {{if .UI.Theme.Icon}}
+  <img src="{{.UI.Theme.IconSrc}}" alt="" class="station-card-glyph station-card-mark" aria-hidden="true">
+  {{else}}
+  <span class="station-card-glyph" aria-hidden="true">{{template "icon_station"}}</span>
+  {{end}}
+
+  <a href="/stations/{{.ID}}/deploy" class="station-card-link flex items-start gap-2.5">
+    <span class="min-w-0">
+      <span class="station-card-name block text-sm font-medium">{{.Name}}</span>
+      <span class="faint mt-0.5 block text-xs">{{.Description}}</span>
+    </span>
+  </a>
+
+  <p class="faint mt-3 flex items-center gap-2 text-xs">
+    <span class="chip">{{.Version}}</span>
+    {{with .Author}}by {{.}}{{end}}
+    {{if .Deploy.Params}}
+    <span class="ml-auto">{{len .Deploy.Params}} {{plural (len .Deploy.Params) "question" "questions"}}</span>
+    {{end}}
+  </p>
+</div>
+{{end}}
+{{end}}

@@ -13,7 +13,7 @@
      hx-get="/partials/update-badge" hx-trigger="every 60s" hx-swap="outerHTML">
   {{if and .IsAdmin .UpdateAvail}}
   <form method="post" action="/system/update/apply"
-        onsubmit="return confirm('Update the dashboard to {{.Latest}}? Applications keep running; the dashboard restarts briefly.')">
+        data-confirm="Update the dashboard to {{.Latest}}? Applications keep running; the dashboard restarts briefly.">
     <button type="submit" class="btn-update"
             title="Install {{.Latest}} — applications keep running, the dashboard restarts briefly">
       {{template "icon_deploy"}}Update available

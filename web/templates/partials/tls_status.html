@@ -22,7 +22,7 @@
   {{/* No stack spacing: the note explains the button and sits against it, on the
        small margin .help carries. */}}
   <form method="post" action="/apps/{{.AppID}}/tls/retry" class="card p-4"
-        onsubmit="return confirm('Restart Traefik to request the certificate again? Every site is unavailable for a few seconds.')">
+        data-confirm="Restart Traefik to request the certificate again? Every site is unavailable for a few seconds.">
     <button type="submit" class="btn">Request the certificate again</button>
     <p class="help">
       Traefik asks Let's Encrypt once, when the route first appears, and does not retry a failed

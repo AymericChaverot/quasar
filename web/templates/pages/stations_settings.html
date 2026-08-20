@@ -1,0 +1,248 @@
+{{define "content"}}
+<div class="mb-8">
+  <a href="/settings" class="back-link">Settings</a>
+  <h1 class="page-title mt-2">Stations</h1>
+  <p class="help max-w-3xl mt-2!">
+    A station is an application that arrives with a control surface of its own — tabs, actions and
+    views somebody wrote for one service in particular. It deploys like a catalogue entry and
+    produces an ordinary application; what it adds is the page you get afterwards.
+  </p>
+  <p class="help max-w-3xl mt-2!">
+    It is also a program somebody else wrote, so what it may reach on this server is declared in
+    its own document — a list of services, paths, environment keys and addresses, each one named.
+    You are shown that list in plain words here and accept it, or you do not install the station;
+    there is nothing to configure per application afterwards. A revision that asks for anything
+    more is held, and keeps running the one you accepted until you accept the new list.
+  </p>
+</div>
+
+{{if .Saved}}
+<div class="card mb-6 max-w-3xl px-4 py-3 text-sm" style="color: var(--ok)">{{.Saved}}</div>
+{{end}}
+{{if .Errors}}
+<div class="alert-err mb-6 max-w-3xl">
+  <p class="font-medium">This station was not installed:</p>
+  <ul class="mt-2 list-disc space-y-1 pl-5">
+    {{range .Errors}}<li class="mono text-xs">{{.}}</li>{{end}}
+  </ul>
+</div>
+{{end}}
+
+<div class="max-w-3xl space-y-10">
+
+  {{/* The approval screen. Nothing has been stored at this point: what is
+       below is a document that was read, and the button is the consent. */}}
+  {{with .Review}}
+  <section class="space-y-4">
+    <h2 class="h-label">Before installing “{{.Station.Name}}”</h2>
+    <div class="card space-y-4 p-4">
+      <div>
+        <p class="text-sm font-medium">{{.Station.Name}} <span class="faint">{{.Station.Version}}</span></p>
+        <p class="help mt-0.5!">{{.Station.Description}}</p>
+        <p class="faint mt-1 text-xs">
+          <span class="mono">{{.Station.ID}}</span>
+          {{with .Station.Author}} · by {{.}}{{end}}
+          {{with .SourceURL}} · from <span class="mono">{{.}}</span>{{end}}
+        </p>
+      </div>
+
+      <div>
+        <p class="text-sm font-medium">This station will be allowed to:</p>
+        <p class="help mt-1!">
+          Its author declared these in the document; there is nothing to tick. Installing it grants
+          the list as a whole — a station is a program, and one running with half of what it asked
+          for fails in ways nobody could explain. If any of it is more than you want to give, the
+          answer is not to install it.
+        </p>
+        {{if .Grants}}
+        <div class="mt-2">{{template "grant_list" .Grants}}</div>
+        {{else}}
+        <p class="help mt-2!">
+          Nothing. It can compute and return values, and reach nothing else on this server.
+        </p>
+        {{end}}
+      </div>
+
+      {{if .Station.Permissions.Exec.Services}}
+      <p class="help mt-0!">
+        Running commands inside the container is root on it, by design. Install this station only
+        if you would give its author that.
+      </p>
+      {{end}}
+
+      <form method="post" action="/settings/stations" class="flex flex-wrap items-center gap-3">
+        <input type="hidden" name="yaml" value="{{.YAML}}">
+        <input type="hidden" name="source_url" value="{{.SourceURL}}">
+        <input type="hidden" name="accepted" value="{{.Hash}}">
+        <button type="submit" class="btn-primary px-4 py-2">Accept and install</button>
+        <a href="/settings/stations" class="btn px-4 py-2">Cancel</a>
+      </form>
+    </div>
+
+    <details class="card p-4 text-sm">
+      <summary class="cursor-pointer select-none font-medium">Read the document first</summary>
+      <pre class="mono mt-3 max-h-96 overflow-auto rounded p-3 text-xs"
+           style="background: var(--surface-2)">{{.YAML}}</pre>
+    </details>
+  </section>
+  {{end}}
+
+  {{/* Adding one comes first, and the list of what is already installed comes
+       after it.
+
+       This page is reached for one of two reasons, and only one of them is
+       common: somebody has been sent a station and wants it on their server.
+       The other — going back to a station already installed, to re-fetch it or
+       take it off — is the rarer errand, and it was the one the page opened
+       with. Scrolling past four cards to reach a text field is a small thing
+       every time and the whole of the page's job once.
+
+       Of the two ways in, a URL is a line and a document is a screenful. The
+       screenful folds: it was pushing everything else below the fold to serve
+       the case where somebody is writing a station rather than installing
+       one. */}}
+  <section class="space-y-4">
+    <h2 class="h-label">Add a station</h2>
+    <form method="post" action="/settings/stations/fetch" class="card space-y-4 p-4">
+      <div>
+        <label class="label" for="import-url">Address of the document</label>
+        <input id="import-url" name="source_url" type="url" required class="input mono"
+               placeholder="https://raw.githubusercontent.com/you/station/main/station.yaml">
+        <p class="help">
+          Fetched once, now, and shown to you before anything is stored. Nothing re-fetches on its
+          own: a station is a program this server will run.
+        </p>
+      </div>
+      <button type="submit" class="btn px-4 py-2">{{template "icon_download"}}Fetch and read</button>
+    </form>
+
+    {{$draft := .Draft}}
+    <details class="doc-edit card p-4 text-sm"{{if $draft}} open{{end}}>
+      <summary>{{template "icon_pencil"}}Write or paste one instead</summary>
+      <form method="post" action="/settings/stations/review" class="mt-4 space-y-4">
+        <div>
+          <label class="label" for="new-yaml">Document</label>
+          <textarea id="new-yaml" name="yaml" rows="24" spellcheck="false" required
+                    class="input mono text-xs"
+                    placeholder="Paste a station.">{{with $draft}}{{.YAML}}{{end}}</textarea>
+          <p class="help">
+            Read and checked before it is stored. You will be shown what it asks to be allowed to do,
+            and nothing is installed until you accept it.
+          </p>
+        </div>
+        <button type="submit" class="btn-primary px-4 py-2">Read it</button>
+      </form>
+    </details>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Installed ({{len .Stations}})</h2>
+    {{if .Stations}}
+    {{range .Stations}}
+    <div class="card p-4 space-y-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="flex flex-wrap items-center gap-2 text-sm font-medium">
+            {{.Name}}
+            <span class="faint">{{.Doc.Version}}</span>
+            {{if not .Enabled}}<span class="badge badge-muted">off</span>{{end}}
+            {{if .Problems}}<span class="badge badge-muted">needs fixing</span>{{end}}
+            {{if .Held}}<span class="badge badge-warn">revision waiting</span>{{end}}
+          </p>
+          <p class="faint mt-0.5 text-xs">
+            <span class="mono">{{.StationID}}</span>
+            {{with .Doc.Author}} · by {{.}}{{end}}
+            · {{.Apps}} {{plural .Apps "application" "applications"}}
+            {{if .SourceURL}} · fetched from <span class="mono">{{.SourceURL}}</span>{{end}}
+            · updated {{.UpdatedAt.Format "2006-01-02 15:04"}}
+          </p>
+        </div>
+        <div class="flex shrink-0 flex-wrap gap-2">
+          {{if .SourceURL}}
+          <form method="post" action="/settings/stations/{{.ID}}/fetch">
+            <button type="submit" class="btn py-1! text-xs">{{template "icon_restart"}}Re-fetch</button>
+          </form>
+          {{end}}
+          {{if .Revertible}}
+          <form method="post" action="/settings/stations/{{.ID}}/revert">
+            <button type="submit" class="btn py-1! text-xs">Back to {{.Prev.Version}}</button>
+          </form>
+          {{end}}
+          <form method="post" action="/settings/stations/{{.ID}}/toggle">
+            <button type="submit" class="btn py-1! text-xs">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
+          </form>
+          <form method="post" action="/settings/stations/{{.ID}}/delete"
+                data-confirm="Remove this station? Applications deployed from it keep running, without its tabs.">
+            <button type="submit" class="btn-danger py-1! text-xs">{{template "icon_trash"}}Remove</button>
+          </form>
+        </div>
+      </div>
+
+      {{if .Problems}}
+      <div class="alert-err">
+        <p class="text-sm font-medium">This station's document no longer reads:</p>
+        <ul class="mt-2 list-disc space-y-1 pl-5">
+          {{range .Problems}}<li class="mono text-xs">{{.}}</li>{{end}}
+        </ul>
+      </div>
+      {{end}}
+
+      {{/* A revision that was fetched and is not running, because it asks for
+           something nobody accepted. This card is where that gets decided. */}}
+      {{if .Held}}
+      <div class="card p-4" style="border-color: var(--warn)">
+        <p class="text-sm font-medium">Revision {{.Pending.Version}} is waiting</p>
+        <p class="help mt-1!">
+          It asks for more than you accepted, so it has not been applied. “{{.Name}}” is still
+          running {{.Doc.Version}}.
+        </p>
+        <p class="h-label mt-3">It would additionally be allowed to</p>
+        <div class="mt-2">{{template "grant_list_added" .PendingGrants}}</div>
+        {{with .PendingDropped}}
+        <p class="h-label mt-3">And would give up</p>
+        <ul class="mt-2 space-y-1">
+          {{range .}}<li class="faint text-xs">{{.Title}}{{with .Detail}} — {{.}}{{end}}</li>{{end}}
+        </ul>
+        {{end}}
+        <div class="mt-4 flex flex-wrap gap-2">
+          <form method="post" action="/settings/stations/{{.ID}}/accept">
+            <button type="submit" class="btn-primary px-3 py-1.5 text-xs">Accept revision {{.Pending.Version}}</button>
+          </form>
+          <form method="post" action="/settings/stations/{{.ID}}/discard">
+            <button type="submit" class="btn px-3 py-1.5 text-xs">Discard it</button>
+          </form>
+        </div>
+        <details class="mt-3 text-sm">
+          <summary class="cursor-pointer select-none">Read it</summary>
+          <pre class="mono mt-3 max-h-96 overflow-auto rounded p-3 text-xs"
+               style="background: var(--surface-2)">{{.PendingYAML}}</pre>
+        </details>
+      </div>
+      {{end}}
+
+      {{if .Grants}}
+      <div>
+        <p class="h-label">Allowed to</p>
+        <div class="mt-2">{{template "grant_list" .Grants}}</div>
+      </div>
+      {{else}}
+      <p class="help mt-0!">Allowed nothing: it can compute and return values, and reach nothing else.</p>
+      {{end}}
+
+      <details class="doc-edit text-sm">
+        <summary>{{template "icon_file_text"}}The document as installed</summary>
+        <pre class="mono mt-4 max-h-96 overflow-auto rounded p-3 text-xs"
+             style="background: var(--surface-2)">{{.YAML}}</pre>
+      </details>
+    </div>
+    {{end}}
+    {{else}}
+    <div class="empty p-6 text-center">
+      <p class="text-sm">No station installed.</p>
+      <p class="help mt-1!">Fetch one from a URL above, or write one out.</p>
+    </div>
+    {{end}}
+  </section>
+
+</div>
+{{end}}

@@ -5,12 +5,12 @@
      "/static/..." the layout asks for would resolve to the application instead
      of to Quasar, and the CDN it pulls Tailwind from may be unreachable from
      the server. So everything is inline — the variables copied from the
-     Nebula theme, the components restated from themes.css, the mark, and both
-     typefaces as data URIs — and the page renders whole on a network that can
-     reach the site and nothing else.
+     Nebula theme, the components restated from the sheets under css/, the mark,
+     and both typefaces as data URIs — and the page renders whole on a network
+     that can reach the site and nothing else.
 
      Restated, not reimagined: the values below are the dashboard's own. When
-     themes.css moves, this is the file that has to be moved with it. */}}
+     those move, this is the file that has to be moved with them. */}}
 {{define "edge_login_page"}}
 <!DOCTYPE html>
 <html lang="en">
@@ -157,7 +157,7 @@ button[disabled]:hover { background: var(--accent); border-color: var(--accent);
   padding: 0.625rem 0.75rem;
   border: var(--border-w) solid color-mix(in srgb, var(--err) 50%, transparent);
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--err) 10%, transparent);
+  background: color-mix(in srgb, var(--err) 10%, var(--bg));
   font-size: 0.8125rem;
   color: var(--err);
 }
@@ -198,7 +198,7 @@ button[disabled]:hover { background: var(--accent); border-color: var(--accent);
   <h1>{{.Name}}</h1>
   <p class="host">{{.Host}}</p>
 
-  <form id="f" method="dialog">
+  <form id="f" method="dialog" data-signin-url="{{.SignInURL}}">
     {{if .Denied}}<p class="error" id="err">Wrong username or password.</p>{{end}}
     <div>
       <label for="u">Username</label>
@@ -220,6 +220,10 @@ button[disabled]:hover { background: var(--accent); border-color: var(--accent);
 
   <p class="foot"><span class="rule"></span>Protected by Quasar<span class="rule"></span></p>
 </main>
+{{/* Inline on purpose, and the one script in the codebase that is. This page is
+     served on the application's own domain, where "/static/..." is the
+     application's to answer — an external file would be a request to somebody
+     else's server. The fonts above are inlined for the same reason. */}}
 <script>
   // The credentials are sent as an Authorization header rather than as a form
   // body: Traefik only forwards a request body to the authorisation service
@@ -233,7 +237,7 @@ button[disabled]:hover { background: var(--accent); border-color: var(--accent);
     var pass = document.getElementById("p").value;
     button.disabled = true;
     button.textContent = "Signing in…";
-    fetch({{.SignInURL}}, {
+    fetch(form.dataset.signinUrl, {
       headers: { "Authorization": "Basic " + btoa(user + ":" + pass) },
       // Success is a redirect carrying the session cookie, failure is a 401.
       // Left to follow the redirect, fetch would report whatever the page

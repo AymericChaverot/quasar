@@ -4,7 +4,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,38 +19,44 @@ import (
 // every package-level `var x = Template{...}`.
 func entryFiles(t *testing.T) map[string]string {
 	t.Helper()
-	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool {
-		return !strings.HasSuffix(fi.Name(), "_test.go")
-	}, 0)
+	// One file at a time rather than parser.ParseDir, which is deprecated for
+	// ignoring build tags. The package map it returned was never used for more
+	// than reaching the files anyway.
+	paths, err := filepath.Glob("*.go")
 	if err != nil {
-		t.Fatalf("parsing the catalogue package: %v", err)
+		t.Fatalf("listing the catalogue package: %v", err)
 	}
 
+	fset := token.NewFileSet()
 	out := map[string]string{}
-	for _, pkg := range pkgs {
-		for path, f := range pkg.Files {
-			for _, d := range f.Decls {
-				gd, ok := d.(*ast.GenDecl)
-				if !ok || gd.Tok != token.VAR {
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			t.Fatalf("parsing %s: %v", path, err)
+		}
+		for _, d := range f.Decls {
+			gd, ok := d.(*ast.GenDecl)
+			if !ok || gd.Tok != token.VAR {
+				continue
+			}
+			for _, spec := range gd.Specs {
+				vs, ok := spec.(*ast.ValueSpec)
+				if !ok || len(vs.Values) != 1 {
 					continue
 				}
-				for _, spec := range gd.Specs {
-					vs, ok := spec.(*ast.ValueSpec)
-					if !ok || len(vs.Values) != 1 {
-						continue
-					}
-					lit, ok := vs.Values[0].(*ast.CompositeLit)
-					if !ok {
-						continue
-					}
-					name, ok := lit.Type.(*ast.Ident)
-					if !ok || name.Name != "Template" {
-						continue
-					}
-					if id := litField(lit, "ID"); id != "" {
-						out[id] = filepath.Base(path)
-					}
+				lit, ok := vs.Values[0].(*ast.CompositeLit)
+				if !ok {
+					continue
+				}
+				name, ok := lit.Type.(*ast.Ident)
+				if !ok || name.Name != "Template" {
+					continue
+				}
+				if id := litField(lit, "ID"); id != "" {
+					out[id] = filepath.Base(path)
 				}
 			}
 		}

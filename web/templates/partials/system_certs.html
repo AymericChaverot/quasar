@@ -28,7 +28,7 @@
             <span class="muted text-sm">{{.UsedBy}}</span>
             {{else if and $.IsAdmin $.CertsWritable}}
             <form method="post" action="/system/certs/{{$domain}}/delete"
-                  onsubmit="return confirm('Delete the certificate for {{$domain}}? Traefik restarts, so every site is briefly unavailable.')">
+                  data-confirm="Delete the certificate for {{$domain}}? Traefik restarts, so every site is briefly unavailable.">
               <button type="submit" class="btn-danger py-1! text-xs">{{template "icon_trash"}}Delete</button>
             </form>
             {{else}}

@@ -35,9 +35,10 @@ func StartDeployment(db *sql.DB, appID, source string) int64 {
 	return id
 }
 
-func FinishDeployment(db *sql.DB, id int64, status, detail, imageTag string) {
-	db.Exec("UPDATE deployments SET status = ?, detail = ?, image_tag = ?, finished_at = ? WHERE id = ?",
+func FinishDeployment(db *sql.DB, id int64, status, detail, imageTag string) error {
+	_, err := db.Exec("UPDATE deployments SET status = ?, detail = ?, image_tag = ?, finished_at = ? WHERE id = ?",
 		status, detail, imageTag, time.Now(), id)
+	return err
 }
 
 func ListDeployments(db *sql.DB, appID string, limit int) ([]*Deployment, error) {
@@ -58,8 +59,9 @@ func ListDeployments(db *sql.DB, appID string, limit int) ([]*Deployment, error)
 	return out, rows.Err()
 }
 
-func DeleteDeployments(db *sql.DB, appID string) {
-	db.Exec("DELETE FROM deployments WHERE app_id = ?", appID)
+func DeleteDeployments(db *sql.DB, appID string) error {
+	_, err := db.Exec("DELETE FROM deployments WHERE app_id = ?", appID)
+	return err
 }
 
 // --- Registries (private image pulls) ---------------------------------------
@@ -151,7 +153,11 @@ const (
 
 func GetSetting(db *sql.DB, key string) string {
 	var v string
-	db.QueryRow("SELECT value FROM settings WHERE key = ?", key).Scan(&v)
+	// A key that was never stored and a query that will not run are the same
+	// answer here: the setting has no value.
+	if err := db.QueryRow("SELECT value FROM settings WHERE key = ?", key).Scan(&v); err != nil {
+		return ""
+	}
 	return v
 }
 

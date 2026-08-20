@@ -178,33 +178,33 @@ func (s *sgrStyle) apply(params string) {
 		if err != nil {
 			continue
 		}
-		switch {
-		case n == 0:
+		switch n {
+		case 0:
 			*s = sgrStyle{}
-		case n == 1:
+		case 1:
 			s.bold = true
-		case n == 2:
+		case 2:
 			s.dim = true
-		case n == 3:
+		case 3:
 			s.italic = true
-		case n == 4:
+		case 4:
 			s.under = true
-		case n == 22:
+		case 22:
 			s.bold, s.dim = false, false
-		case n == 23:
+		case 23:
 			s.italic = false
-		case n == 24:
+		case 24:
 			s.under = false
-		case n == 39:
+		case 39:
 			s.fgClass, s.fgHex = "", ""
-		case n == 38:
+		case 38:
 			// Extended colour, whose arguments follow in the same list.
 			consumed, hex := extendedColour(fields[i+1:])
 			if hex != "" {
 				s.fgClass, s.fgHex = "", hex
 			}
 			i += consumed
-		case n == 48:
+		case 48:
 			// A background this drops, but whose arguments must still be
 			// stepped over or they would be read as further attributes.
 			consumed, _ := extendedColour(fields[i+1:])
