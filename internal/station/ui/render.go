@@ -416,9 +416,8 @@ func fields(p Panel, data json.RawMessage) ([]FilledField, string) {
 	for _, f := range p.Fields {
 		filled := FilledField{Field: f, Options: f.Options, Value: f.Default}
 		if v, ok := values[f.Name]; ok {
-			if obj, computed := choices(v); computed {
-				filled.Options = obj.Options
-				v = obj.Value
+			if picked, options, computed := choices(v); computed {
+				filled.Options, v = options, picked
 			}
 			filled.Value = scalar(v)
 			if b, isBool := v.(bool); isBool {
@@ -446,30 +445,22 @@ func fields(p Panel, data json.RawMessage) ([]FilledField, string) {
 // A value that is not this shape is a value, including an object: only the
 // presence of options makes it a choice, so a form filled from an ordinary
 // nested object is unaffected.
-func choices(v any) (struct {
-	Value   any
-	Options []string
-}, bool) {
-	var out struct {
-		Value   any
-		Options []string
-	}
+func choices(v any) (value any, options []string, ok bool) {
 	obj, isObj := v.(map[string]any)
 	if !isObj {
-		return out, false
+		return nil, nil, false
 	}
 	list, hasOptions := obj["options"].([]any)
 	if !hasOptions {
-		return out, false
+		return nil, nil, false
 	}
-	out.Value = obj["value"]
-	out.Options = make([]string, 0, len(list))
+	options = make([]string, 0, len(list))
 	for _, item := range list {
 		if s := scalar(item); s != "" {
-			out.Options = append(out.Options, s)
+			options = append(options, s)
 		}
 	}
-	return out, true
+	return obj["value"], options, true
 }
 
 // scalar is a JSON value as one line of text. Numbers keep their shape — 20 is

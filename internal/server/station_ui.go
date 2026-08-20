@@ -428,7 +428,7 @@ func (s *Server) handleStationDownload(w http.ResponseWriter, r *http.Request) {
 func (s *Server) stationFile(a *db.App, rel string) (files.Root, error) {
 	root, err := files.NewRoot(filepath.Join(s.cfg.AppsDir, a.ID))
 	if err != nil {
-		return files.Root{}, fmt.Errorf("this application has no folder to read")
+		return files.Root{}, errors.New("this application has no folder to read")
 	}
 	info, err := root.Stat(files.Clean(rel))
 	switch {
