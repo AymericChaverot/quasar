@@ -4,7 +4,7 @@
 <div class="mb-8 max-w-3xl">
   <a href="/stations" class="back-link">Stations</a>
   <div class="mt-2 flex items-start gap-3">
-    {{if $station.UI.Theme.Icon}}<img src="{{$station.UI.Theme.Icon}}" alt="" class="station-icon-lg" aria-hidden="true">
+    {{if $station.UI.Theme.Icon}}<img src="{{$station.UI.Theme.IconSrc}}" alt="" class="station-icon-lg" aria-hidden="true">
     {{else}}<span class="station-icon-fallback station-icon-fallback-lg" aria-hidden="true">{{template "icon_station"}}</span>{{end}}
     <div class="min-w-0">
       <h1 class="page-title">{{$station.Name}}</h1>

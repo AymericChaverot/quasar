@@ -15,7 +15,7 @@
 {{with .Style}}<style>{{.}}</style>{{end}}
 <section id="station" class="station mb-8">
   <div class="station-head">
-    {{if .Doc.UI.Theme.Icon}}<img src="{{.Doc.UI.Theme.Icon}}" alt="" class="station-icon" aria-hidden="true">
+    {{if .Doc.UI.Theme.Icon}}<img src="{{.Doc.UI.Theme.IconSrc}}" alt="" class="station-icon" aria-hidden="true">
     {{else}}<span class="station-icon-fallback" aria-hidden="true">{{template "icon_station"}}</span>{{end}}
     <div class="min-w-0 flex-1">
       <p class="text-sm font-medium">{{.Doc.Name}}</p>

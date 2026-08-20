@@ -135,7 +135,7 @@
   {{else if eq $panel.Type "image"}}
   {{/* A data: URI or a path the script returned; either way it is an
        attribute, never markup. */}}
-  <img src="{{.Text}}" alt="{{$panel.Title}}" class="max-w-full rounded">
+  <img src="{{.ImageSrc}}" alt="{{$panel.Title}}" class="max-w-full rounded">
 
   {{else if eq $panel.Type "log"}}
   {{if .Stream}}{{template "log_pane" .Stream}}{{end}}

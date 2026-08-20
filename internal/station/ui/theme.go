@@ -17,6 +17,7 @@ package ui
 
 import (
 	"fmt"
+	"html/template"
 	"regexp"
 	"slices"
 	"strings"
@@ -109,6 +110,20 @@ var lengthRe = regexp.MustCompile(`^-?[0-9]+(\.[0-9]+)?(px|rem|em|%)?$`)
 // put markup on the page, which is the one thing the whole interface design
 // exists to prevent.
 var dataURIRe = regexp.MustCompile(`^data:[a-zA-Z0-9!#$&^_.+-]+/[a-zA-Z0-9!#$&^_.+-]+;base64,[A-Za-z0-9+/]+={0,2}$`)
+
+// IconSrc is the icon as a src attribute, marked safe to be one.
+//
+// html/template writes #ZgotmplZ over a data: URI in a src, which is the right
+// default for a value nobody looked at and the wrong answer for the one field
+// whose whole content is a data: URI. Without this, every station that brought
+// an icon draws a broken image instead of it.
+//
+// It is safe to mark for the reason Tokens hands back template.CSS: the value
+// has been through Validate, which holds it to dataURIRe — an image media type
+// and base64, carrying no quote, no space and no angle bracket — and to the
+// size cap. A theme that was never validated has an empty icon and reaches
+// this with nothing to hand over.
+func (t Theme) IconSrc() template.URL { return template.URL(t.Icon) }
 
 // SizeScale is the type scale to render at, clamped.
 func (t Theme) SizeScale() float64 {

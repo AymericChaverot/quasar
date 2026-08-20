@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -162,5 +163,37 @@ func TestConfirmInterpolatesTheRow(t *testing.T) {
 	got := Interpolate("Remove {{name}}?", map[string]string{"name": "Sodium", "file": "sodium.jar"})
 	if got != "Remove Sodium?" {
 		t.Errorf("confirm = %q", got)
+	}
+}
+
+// html/template writes #ZgotmplZ over a data: URI in a src, which would leave
+// the one component whose whole job is to carry a picture drawing nothing. The
+// panel marks its own, after deciding it is one — the string came back from a
+// station's script, and a script is not a document that was validated.
+func TestAnImagePanelDrawsOnlyWhatAnImageCanBe(t *testing.T) {
+	panel := Panel{ID: "chart", Type: "image"}
+
+	for _, src := range []string{
+		"https://example.com/chart.png",
+		"data:image/png;base64,iVBORw0KGgo=",
+		"data:image/svg+xml;charset=utf-8,%3Csvg%3E%3C%2Fsvg%3E",
+	} {
+		v := Render("x", panel, json.RawMessage(strconv.Quote(src)))
+		if string(v.ImageSrc()) != src {
+			t.Errorf("%q came back as %q", src, v.ImageSrc())
+		}
+	}
+
+	for _, src := range []string{
+		"http://example.com/chart.png",               // never plain http
+		"file:///etc/passwd",                         // never off the disk
+		"data:text/html;base64,PHNjcmlwdD4=",         // an image, or nothing
+		`data:image/svg+xml,<svg onload="alert(1)">`, // nothing that ends an attribute
+		"javascript:alert(1)",
+	} {
+		v := Render("x", panel, json.RawMessage(strconv.Quote(src)))
+		if v.ImageSrc() != "" {
+			t.Errorf("%q was accepted as an image, as %q", src, v.ImageSrc())
+		}
 	}
 }

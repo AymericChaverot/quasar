@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"html/template"
 	"strings"
 	"testing"
 )
@@ -149,5 +150,25 @@ func TestAnEmbeddedFontHasToBeBase64(t *testing.T) {
 	}
 	if errs := (Theme{FontDisplay: Font{Family: "X", Src: "data:font/woff2;base64,AAAA=="}}).Validate(); len(errs) > 0 {
 		t.Errorf("a well-formed font was refused: %v", errs)
+	}
+}
+
+// A station that brought an icon has to see it drawn. html/template refuses a
+// data: URI in a src by default — right for a value nobody looked at, wrong
+// for the one field Validate has already held to a base64 image.
+func TestAnIconSurvivesBeingPutInASrc(t *testing.T) {
+	const icon = "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="
+	theme := Theme{Icon: icon}
+	if errs := theme.Validate(); len(errs) > 0 {
+		t.Fatalf("a well-formed icon was refused: %v", errs)
+	}
+
+	var out strings.Builder
+	tmpl := template.Must(template.New("x").Parse(`<img src="{{.IconSrc}}">`))
+	if err := tmpl.Execute(&out, theme); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "ZgotmplZ") {
+		t.Errorf("the icon was filtered out of its own attribute: %s", out.String())
 	}
 }

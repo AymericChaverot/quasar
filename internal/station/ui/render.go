@@ -17,6 +17,8 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
+	"html/template"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -198,6 +200,32 @@ func Streaming(appID string, p Panel, url string) PanelView {
 // Embedded is an iframe, pointed at the address the parent will proxy.
 func Embedded(appID string, p Panel, url string) PanelView {
 	return PanelView{Panel: p, AppID: appID, Embed: url}
+}
+
+// imageSrcRe is what an image panel may point at when it points at a data:
+// URI: an image media type, and a payload with nothing in it that could end an
+// attribute. Percent-encoded and base64 are both here, because a script
+// drawing its own chart writes the first and one embedding a picture writes
+// the second, and neither is more trustworthy than the other.
+var imageSrcRe = regexp.MustCompile(`^data:image/[a-zA-Z0-9.+-]+(;[a-zA-Z0-9.+=-]+)*,[^\s"'<>]+$`)
+
+// ImageSrc is what an image panel draws, as a src attribute.
+//
+// Unlike the theme's icon, this string came back from a station's script, so
+// it is checked here rather than trusted: an https address, or an image as a
+// data: URI, and nothing else. Anything else draws nothing — a station cannot
+// point the page at plain http, at a file: URL, or at a media type that is not
+// an image.
+//
+// Marking it is what makes the component work at all. html/template rewrites
+// every data: URI in a src to #ZgotmplZ, so the case this panel exists for —
+// a script that computed a picture — is exactly the case that was broken.
+func (v PanelView) ImageSrc() template.URL {
+	s := strings.TrimSpace(v.Text)
+	if strings.HasPrefix(s, "https://") || imageSrcRe.MatchString(s) {
+		return template.URL(s)
+	}
+	return ""
 }
 
 // EmbedHeight is how tall an embedded page is drawn, with a workable default
