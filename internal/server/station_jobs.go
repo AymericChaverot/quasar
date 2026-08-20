@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"path"
 	"sync"
 	"time"
 
@@ -54,6 +55,14 @@ type stationJobView struct {
 	Toast   string
 	Problem string
 	Elapsed string
+
+	// Download is the file the finished job offered, as a link. A long action
+	// is the one that produces something worth downloading — an archive of a
+	// world takes minutes — and nobody is holding a request open for it, so the
+	// file is offered in the pane rather than started for them. It is also the
+	// only place it could be offered that survives a reload.
+	Download     string
+	DownloadName string
 }
 
 // Log receives one line while the call is still running. It is what makes this
@@ -85,6 +94,12 @@ func (j *stationJob) view(appID, action string) stationJobView {
 	}
 	if v.Problem == "" {
 		v.Problem = j.result.Error
+	}
+	// Held to the files permission when the job finished, so this is a path
+	// the station was allowed to hand over rather than one it asked to.
+	if j.result.Download != "" {
+		v.Download = stationDownloadURL(appID, j.result.Download)
+		v.DownloadName = path.Base(j.result.Download)
 	}
 	return v
 }
@@ -165,7 +180,7 @@ func (s *Server) startLongAction(a *db.App, doc station.Station, action string, 
 			job.finish(ui.Result{}, stationProblem(action, err))
 			return
 		}
-		job.finish(ui.ParseResult(out.Value), "")
+		job.finish(s.allowDownload(a, doc, ui.ParseResult(out.Value)), "")
 	}()
 	return job, true
 }

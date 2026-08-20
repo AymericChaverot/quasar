@@ -402,6 +402,7 @@ export function add_mod({ url }) {
 | `error` | Rendered like any Quasar error, and the action counts as failed: red, with a crossed circle |
 | `refresh` | Panel ids to re-fetch |
 | `navigate` | Switch to a tab |
+| `download` | A file in the application's folder to hand over, see below |
 | `progress` | Run as a background job, see below |
 
 **Waiting is not failing.** A panel that reads a service cannot read it while
@@ -418,6 +419,26 @@ replacing the one before it, because three actions in a row are three things
 worth knowing and the third crushing the first two makes all of them pointless.
 A `toast` and a `warn` go on their own after a few seconds; an `error` waits to
 be dismissed, since why something failed is what the operator came to read.
+
+**Handing over a file.** An action may end with `{download: 'data/backups/…'}`,
+which offers one file out of the application's own folder to whoever pressed the
+button. A path rather than the bytes: a script that had to carry a two-gigabyte
+archive through a JavaScript string to give it away would be a script that
+cannot, and the file is already sitting in a folder Quasar can read.
+
+```js
+export function download_backup({ name }) {
+  return { download: 'data/backups/' + name }
+}
+```
+
+It is held to the `files` permission, exactly as `quasar.files.read` is: a
+station hands over what it was allowed to touch and nothing else, and offering
+anything outside its globs comes back as the same refusal reading a file would
+have produced. From an ordinary action the browser starts fetching it as the
+action returns; from a `long` one it appears as a link in the progress pane,
+since nobody is waiting on that request and a download beginning by itself four
+minutes later would be a surprise.
 
 **Long actions.** Upgrading a server or downloading forty mods does not fit in
 an HTTP request. Declaring `long: true` on the action runs it as a background

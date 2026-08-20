@@ -34,6 +34,22 @@
     });
   }
 
+  // An action may hand over a file, which arrives as an address in the event
+  // rather than as anything on the page: the response to a button press is a
+  // toast, and a toast cannot also be a download. The anchor is clicked instead
+  // of setting location, so a browser that decides to render the file rather
+  // than save it still leaves this page where it was.
+  document.body.addEventListener("quasar:station-download", (e) => {
+    const url = e.detail && e.detail.url;
+    if (!url) return;
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  });
+
   // Each message that lands is given its lifetime once. Arming happens here
   // rather than in a script travelling with the message, because a fragment
   // that is appended rather than swapped would leave one dead script tag in

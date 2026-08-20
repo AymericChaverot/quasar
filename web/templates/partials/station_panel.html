@@ -256,6 +256,17 @@
   {{else if .Toast}}
   <p class="mt-3 text-sm" style="color: var(--ok)">{{.Toast}}</p>
   {{end}}
+
+  {{/* What the job produced, if it produced a file. Offered rather than
+       started: nobody was waiting on this request, and a download that began by
+       itself minutes after somebody pressed a button would be a surprise. */}}
+  {{with .Download}}
+  <p class="mt-3">
+    <a href="{{.}}" class="btn px-3 py-1.5 text-xs" download>
+      {{template "icon_download"}}Download {{$.DownloadName}}
+    </a>
+  </p>
+  {{end}}
 </div>
 {{end}}
 

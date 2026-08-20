@@ -9,11 +9,14 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"path"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 
 	"quasar/internal/db"
+	"quasar/internal/files"
 	"quasar/internal/station"
 	"quasar/internal/station/ui"
 	"quasar/internal/station/worker"
@@ -343,11 +346,103 @@ func (s *Server) handleStationAction(w http.ResponseWriter, r *http.Request) {
 	}
 	result := ui.ParseResult(out.Value)
 	if result.Error == "" {
-		if events := refreshEvents(result); events != "" {
+		result = s.allowDownload(a, doc, result)
+	}
+	if result.Error == "" {
+		if events := stationTriggers(a, result); events != "" {
 			w.Header().Set("HX-Trigger", events)
 		}
 	}
 	s.renderPartial(w, "station_message", result)
+}
+
+// allowDownload holds a file an action offered to the permission that would
+// have let the script read it, and takes the offer away when it does not cover
+// it.
+//
+// The check is here rather than only on the route because this is where the
+// author finds out: a station handing over a path it may not read should say so
+// at the moment the action returns, in the same words every other refusal uses,
+// rather than producing a link that fails when somebody clicks it.
+func (s *Server) allowDownload(a *db.App, doc station.Station, result ui.Result) ui.Result {
+	if result.Download == "" {
+		return result
+	}
+	if !doc.Permissions.AllowsPath(result.Download) {
+		return ui.Result{Error: denied("handing over "+result.Download, "files").Error()}
+	}
+	if _, err := s.stationFile(a, result.Download); err != nil {
+		return ui.Result{Error: err.Error()}
+	}
+	return result
+}
+
+// handleStationDownload hands over one file out of the application's own
+// folder, if the station that asked for it may read it.
+//
+// The path arrives in the URL rather than being remembered from the action that
+// offered it, and the permission is what makes that safe: this is the same
+// check quasar.files.read goes through, so a URL somebody typed reaches exactly
+// what the station could have read for itself and nothing else. The route is
+// admin-only like the storage explorer, for the same reason — what lives in
+// these folders is the application's data.
+func (s *Server) handleStationDownload(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	doc, ok := s.stationFor(a)
+	if !ok {
+		http.Error(w, "this application has no station", http.StatusNotFound)
+		return
+	}
+	rel := r.URL.Query().Get("path")
+	if !doc.Permissions.AllowsPath(rel) {
+		http.Error(w, denied("handing over "+rel, "files").Error(), http.StatusForbidden)
+		return
+	}
+
+	root, err := s.stationFile(a, rel)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	f, info, err := root.Open(files.Clean(rel))
+	if err != nil {
+		http.Error(w, listingError(err), http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+
+	name := path.Base(rel)
+	s.audit(r, "station.download", doc.ID+" on "+a.Name, rel)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(name))
+	http.ServeContent(w, r, name, info.ModTime(), f)
+}
+
+// stationFile is the application's folder, once it is known that rel names a
+// file inside it that can be read. What it reports is what the toast says, so
+// it is worded for whoever pressed the button rather than for a log.
+func (s *Server) stationFile(a *db.App, rel string) (files.Root, error) {
+	root, err := files.NewRoot(filepath.Join(s.cfg.AppsDir, a.ID))
+	if err != nil {
+		return files.Root{}, fmt.Errorf("this application has no folder to read")
+	}
+	info, err := root.Stat(files.Clean(rel))
+	switch {
+	case err != nil:
+		return files.Root{}, fmt.Errorf("%s: there is no such file to hand over", rel)
+	case info.IsDir():
+		return files.Root{}, fmt.Errorf("%s is a folder; a download is one file", rel)
+	}
+	return root, nil
+}
+
+// stationDownloadURL is where the browser fetches a file an action offered.
+func stationDownloadURL(appID, rel string) string {
+	return "/apps/" + appID + "/station/download?path=" + url.QueryEscape(rel)
 }
 
 // handleStationJob draws a long action's pane: what it has written so far, and
@@ -382,6 +477,38 @@ func stationOffers(doc station.Station, name string) bool {
 	}
 	return false
 }
+
+// stationTriggers is the whole HX-Trigger header for one result: the panels to
+// re-fetch, the tab to switch to, and the file to fetch if the action offered
+// one.
+//
+// A download carries an address, so the header has to be the JSON form htmx
+// also reads. Only then: the plain list is what almost every action produces
+// and it is the readable one in a response somebody is looking at in devtools.
+func stationTriggers(a *db.App, result ui.Result) string {
+	events := refreshEvents(result)
+	if result.Download == "" {
+		return events
+	}
+
+	trigger := map[string]any{
+		stationDownloadEvent(): map[string]string{"url": stationDownloadURL(a.ID, result.Download)},
+	}
+	for _, name := range strings.Split(events, ", ") {
+		if name != "" {
+			trigger[name] = nil
+		}
+	}
+	out, err := json.Marshal(trigger)
+	if err != nil {
+		return events
+	}
+	return string(out)
+}
+
+// stationDownloadEvent is what the block's script listens for to start a
+// download, in one place so the header and the script cannot disagree.
+func stationDownloadEvent() string { return "quasar:station-download" }
 
 // refreshEvents is the header a panel listens for. One event per panel named,
 // so a table refreshes and the form beside it does not flicker.

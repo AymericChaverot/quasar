@@ -25,6 +25,17 @@ func renderPanelPartial(t *testing.T, v ui.PanelView) string {
 	return html.UnescapeString(buf.String())
 }
 
+// renderJobPane draws a long action's pane the way the page does.
+func renderJobPane(t *testing.T, v stationJobView) string {
+	t.Helper()
+	s := testServer(t)
+	var buf bytes.Buffer
+	if err := s.pages["app_detail"].ExecuteTemplate(&buf, "station_job", v); err != nil {
+		t.Fatalf("rendering the pane: %v", err)
+	}
+	return html.UnescapeString(buf.String())
+}
+
 var testModTable = ui.Panel{
 	ID: "mod_list", Type: "table", Title: "Installed mods",
 	Empty: "No mods installed yet.",

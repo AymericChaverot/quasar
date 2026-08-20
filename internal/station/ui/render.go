@@ -50,6 +50,17 @@ type Result struct {
 	// Refresh names panels to re-fetch, Navigate a tab to switch to.
 	Refresh  []string `json:"refresh,omitempty"`
 	Navigate string   `json:"navigate,omitempty"`
+
+	// Download is a file in the application's own folder to hand to whoever
+	// pressed the button — a world archive, an exported configuration, a log
+	// somebody wants to send on.
+	//
+	// A path rather than the bytes: a script that had to carry a two-gigabyte
+	// archive through a JavaScript string to give it away would be a script
+	// that cannot, and the file is already sitting in a folder Quasar can
+	// read. It is held to the same files permission every other read is, so a
+	// station hands over what it was allowed to touch and nothing else.
+	Download string `json:"download,omitempty"`
 }
 
 // ParseResult reads what came back from a call. A script returning something
@@ -63,7 +74,7 @@ func ParseResult(raw json.RawMessage) Result {
 	var r Result
 	if err := json.Unmarshal(raw, &r); err == nil {
 		if r.Data != nil || r.Toast != "" || r.Warn != "" || r.Error != "" ||
-			r.Waiting != "" || r.Refresh != nil || r.Navigate != "" {
+			r.Waiting != "" || r.Refresh != nil || r.Navigate != "" || r.Download != "" {
 			return r
 		}
 	}

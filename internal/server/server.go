@@ -302,6 +302,9 @@ func (s *Server) routes() {
 	// goes is read out of the document and never out of the URL.
 	s.admin("/apps/{id}/station/embed/{panel}/{path...}", s.handleStationEmbed)
 	s.admin("POST /apps/{id}/station/action/{action}", s.handleStationAction)
+	// A file an action offered to hand over, out of the application's own
+	// folder and only where the station's files permission reaches.
+	s.admin("GET /apps/{id}/station/download", s.handleStationDownload)
 	s.admin("GET /apps/{id}/station/job/{action}", s.handleStationJob)
 	s.admin("POST /settings/stations/{id}/toggle", s.handleStationToggle)
 	s.admin("POST /settings/stations/{id}/delete", s.handleStationDelete)

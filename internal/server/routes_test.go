@@ -31,6 +31,10 @@ var privilegedReads = []string{
 	"GET /apps/{id}/terminal/ws", //
 	"GET /apps/new",              // leads only to a mutation
 	"GET /apps/{id}/deploy-log",  // build output, which echoes build args and env
+
+	// A file out of an application's own folder, which is the same material
+	// the storage explorer hands over and is gated the same way.
+	"GET /apps/{id}/station/download",
 }
 
 // newTestServer registers the real route table so the guards map reflects
