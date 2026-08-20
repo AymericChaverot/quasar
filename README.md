@@ -370,8 +370,12 @@ few seconds; applications are untouched.
   bounded, so a runaway station is a failed panel rather than a dead dashboard.
 
   See [`docs/stations.md`](docs/stations.md) for the format in full, and
-  [`stations/`](stations/) for ready-made ones — held to the same
-  parse-and-validate test as `catalogs/`, for the same reason.
+  [`stations/`](stations/) for ready-made ones: a Minecraft server, a Postgres
+  server and a Gitea forge, each complete enough to run, beside three written
+  to be read — one of every component, one of every permission, and one that
+  breaks itself in every documented way. All six are held to what a pasted
+  document is held to, and to loading in the runtime that will be asked for
+  them.
 - **Tasks**: commands run inside the container (`docker exec`), on demand or
   scheduled (every N minutes), with output and status kept.
 - **Web terminal**: an interactive shell in the container (xterm.js +
