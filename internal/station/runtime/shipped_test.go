@@ -384,3 +384,76 @@ func TestTheMinecraftStationDrawsItsOwnGraph(t *testing.T) {
 		t.Errorf("the SVG did not survive being made into a URI: %.120q", src)
 	}
 }
+
+// The version dropdowns, run.
+//
+// Three things have to agree for the Settings tab to offer every release
+// Mojang has: the script has to read the manifest, it has to hand the form a
+// value and a list rather than a value, and the form has to prefer that list to
+// the one the document wrote. None of the three is visible from reading the
+// YAML, and the failure if any of them is wrong is a dropdown holding one
+// version — which looks like a server with nothing to upgrade to.
+func TestTheMinecraftStationOffersEveryRelease(t *testing.T) {
+	s := loadStation(t, "minecraft.yaml")
+
+	const manifest = `{"latest":{"release":"1.21.4"},"versions":[
+		{"id":"25w03a","type":"snapshot"},
+		{"id":"1.21.4","type":"release"},
+		{"id":"1.21.1","type":"release"},
+		{"id":"b1.7.3","type":"old_beta"}]}`
+
+	broker := &asked{answer: func(capability string, args json.RawMessage) (json.RawMessage, error) {
+		switch capability {
+		case "http.get":
+			if !strings.Contains(string(args), "piston-meta.mojang.com") {
+				return nil, errors.New("this station has not been granted that host")
+			}
+			return json.Marshal(map[string]any{"status": 200, "body": manifest})
+		case "env.get":
+			return json.Marshal("1.21.1")
+		}
+		return nil, errors.New("this station has not been granted " + capability)
+	}}
+
+	// What the install form asks for, before there is an application at all.
+	out, _, err := callWith(t, s.Script, "official_versions", broker)
+	if err != nil {
+		t.Fatalf("the install form's options did not come back: %v", err)
+	}
+	if got := string(ui.ParseResult(out.Value).Data); got != `["1.21.4","1.21.1"]` {
+		t.Errorf("it offers %s, want the releases and only the releases", got)
+	}
+
+	// And the same list on the Settings tab, with this server's own version
+	// selected — which is the half the renderer has to agree about.
+	out, _, err = callWith(t, s.Script, "version_form", broker)
+	if err != nil {
+		t.Fatalf("the version form did not come back: %v", err)
+	}
+	view := ui.Render("abcd1234", findPanel(s, "mc_version"), ui.ParseResult(out.Value).Data)
+	if view.Problem != "" {
+		t.Fatalf("the form got: %s", view.Problem)
+	}
+	field := view.Fields[0]
+	if field.Value != "1.21.1" {
+		t.Errorf("the version selected is %q, want the one this server runs", field.Value)
+	}
+	if strings.Join(field.Options, ",") != "1.21.4,1.21.1" {
+		t.Errorf("the dropdown holds %v", field.Options)
+	}
+}
+
+// loadStation parses one of the shipped documents.
+func loadStation(t *testing.T, name string) station.Station {
+	t.Helper()
+	path := filepath.Join("..", "..", "..", "stations", name)
+	doc, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := station.Parse(string(doc))
+	if err != nil {
+		t.Fatalf("%s no longer parses: %v", path, err)
+	}
+	return s
+}

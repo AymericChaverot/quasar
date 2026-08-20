@@ -605,7 +605,8 @@ deploy:
   params:
     - {name: TYPE, label: Mod loader, kind: select, default: FABRIC,
        options: [FABRIC, FORGE, NEOFORGE]}
-    - {name: VERSION, label: Version, default: "1.20.1"}
+    - {name: VERSION, label: Version, kind: select, default: "1.20.1",
+       options: ["1.20.1"], options_from: official_versions}
     - {name: HOST_PORT, label: Port, kind: port, default: "25565"}
     - {name: MEMORY, label: RAM, kind: select, default: "4G",
        options: ["2G", "4G", "8G"]}
@@ -636,7 +637,7 @@ permissions:
   exec:         {services: [minecraft]}
   files:        {paths: ["data/mods/**", "data/server.properties", "data/ops.json"]}
   env:          {read: [MINECRAFT_VERSION, TYPE], write: [MINECRAFT_VERSION]}
-  net.external: {allow: ["api.modrinth.com", "cdn.modrinth.com"]}
+  net.external: {allow: ["api.modrinth.com", "cdn.modrinth.com", "piston-meta.mojang.com"]}
   lifecycle:    [restart, redeploy]
 
 ui:
@@ -719,6 +720,13 @@ script: |
       { key: 'Version', value: quasar.env.get('MINECRAFT_VERSION') },
       { key: 'Status',  value: quasar.app.status },
     ]}
+  }
+
+  // What the install form offers for VERSION. It runs before this application
+  // exists, so it reaches the network and nothing else.
+  export function official_versions() {
+    return quasar.http.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json')
+      .json().versions.filter(v => v.type === 'release').map(v => v.id)
   }
 
   export function rcon({ cmd }) {

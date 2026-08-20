@@ -19,7 +19,7 @@ id: minecraft-station
 name: Minecraft
 description: A server with a console, player administration, world backups, mod management and a day of player history
 author: quasar
-version: "2.0.0"
+version: "2.1.0"
 
 # ---------------------------------------------------------------- deploy ----
 # This block is a catalogue entry, unchanged: the same parameters, the same
@@ -40,9 +40,18 @@ deploy:
       default: PAPER
       options: [PAPER, FABRIC, FORGE, NEOFORGE, VANILLA]
       help: Paper for plugins, Fabric or Forge for mods, Vanilla for neither.
+    # The choices come from Mojang, not from this file. A version written into
+    # a document is out of date by the next release, and the alternative it was
+    # written as instead — a text box — takes "1.21.9" happily and hands back a
+    # container that will not start, with nothing on the page to say why. The
+    # list below is what the form offers when Mojang cannot be reached.
     - name: VERSION
       label: Minecraft version
+      kind: select
       default: "1.21.4"
+      options: ["1.21.4", "1.21.1", "1.20.6", "1.20.4", "1.20.1", "1.19.4", "1.18.2", "1.16.5", "1.12.2"]
+      options_from: official_versions
+      help: Every official release. What a loader supports is a shorter list — Paper and Fabric follow the recent ones.
     - name: HOST_PORT
       label: Port
       kind: port
@@ -114,8 +123,10 @@ deploy:
 #   env          — the version, the type and the memory. Not RCON_PASSWORD:
 #                  the console goes through rcon-cli inside the container,
 #                  which reads it for itself.
-#   net.external — two hosts, named. "May reach the internet" tells an operator
-#                  nothing; "may reach api.modrinth.com" is real information.
+#   net.external — three hosts, named. "May reach the internet" tells an
+#                  operator nothing; "may reach api.modrinth.com" is real
+#                  information. The third is Mojang's own list of releases,
+#                  which is where the version dropdowns come from.
 #   lifecycle    — restart and redeploy. Not stop: a station has no business
 #                  being able to take a server off the network for good.
 permissions:
@@ -132,7 +143,7 @@ permissions:
       - "data/banned-players.json"
       - "data/usercache.json"
   env: {read: [MINECRAFT_VERSION, TYPE, MEMORY], write: [MINECRAFT_VERSION]}
-  net.external: {allow: ["api.modrinth.com", "cdn.modrinth.com"]}
+  net.external: {allow: ["api.modrinth.com", "cdn.modrinth.com", "piston-meta.mojang.com"]}
   lifecycle: [restart, redeploy]
   notify: true
 
@@ -306,6 +317,21 @@ ui:
                help: "Sets doDaylightCycle and doWeatherCycle off."}
           submit: {label: Set it, action: set_sky}
 
+        # The world itself, to keep. It is the same archive the Backups tab
+        # takes and the same action behind it, offered here as well because
+        # this is the tab somebody looking for their world opens: nothing is
+        # made twice, and what comes out appears in Archives like any other.
+        - id: mc_world_download
+          type: button
+          title: Take the world away
+          label: Archive and download the world
+          long: true
+          action: back_up
+          help: >
+            Saves and flushes first, so what you get is a world nobody was
+            half-way through writing. It runs in a pane below, and offers the
+            archive when it is finished.
+
         - id: mc_graph
           type: image
           title: Players, over the last day
@@ -421,6 +447,7 @@ ui:
             - {key: size, label: Size, align: right}
             - {key: taken, label: Taken}
           row_actions:
+            - {label: Download, action: download_backup, tone: accent}
             - {label: Restore, action: restore_backup, tone: err, long: true,
                confirm: "Replace the live world with {{name}}? Everything built since it was taken is gone."}
             - {label: Delete, action: delete_backup, tone: err, confirm: "Delete {{name}}?"}
@@ -439,6 +466,30 @@ ui:
     - id: settings
       name: Settings
       panels:
+        # The same list the install form offered, asked for again here, because
+        # the answer given once at deploy is not an answer for ever: a version
+        # comes out, a mod needs a newer one, a plugin has not caught up with
+        # the newest. The select is empty in this document on purpose — a form
+        # whose source fills its options has no list to write down.
+        - id: mc_version
+          type: form
+          title: Server version
+          source: {action: version_form}
+          help: >
+            Every official release, as Mojang lists them. Changing it rewrites
+            the version in this application's environment and redeploys: the new
+            server is downloaded and started on the same world. Take an archive
+            first — a world a newer server has opened does not open again in an
+            older one, and mods built for the version you are leaving will not
+            load in the one you are going to.
+          fields:
+            - {name: version, label: Version, type: select}
+          submit:
+            label: Change and redeploy
+            action: set_version
+            tone: warn
+            confirm: "Redeploy this server on another version? Everyone online is disconnected, and the world is opened by the new version."
+
         - id: mc_props
           type: form
           title: server.properties
@@ -468,7 +519,7 @@ ui:
               - {key: "Commands in", value: "the minecraft container"}
               - {key: "Files under", value: "mods, plugins, backups, four .json, server.properties"}
               - {key: "Environment", value: "version, type, memory, max players"}
-              - {key: "Addresses", value: "api.modrinth.com, cdn.modrinth.com"}
+              - {key: "Addresses", value: "api.modrinth.com, cdn.modrinth.com, piston-meta.mojang.com"}
               - {key: "May also", value: "restart, redeploy, send one notification"}
               - {key: "Never", value: "the world folder, the RCON password, any other application"}
 
@@ -1206,9 +1257,26 @@ script: |
   }
 
   // Long: an archive of a world worth archiving takes a while.
-  export function back_up() { return runBackup('by hand') }
+  // Taken by hand, and offered when it is done: somebody who pressed this
+  // usually wants the world rather than another file on the server. It is a
+  // long action, so the offer arrives as a link in its pane — which is also
+  // where it can still be found after a reload.
+  //
+  // The nightly one is the same archive and no offer: nobody is at the page.
+  export function back_up() {
+    const done = runBackup('by hand')
+    if (done.archive) done.download = BACKUPS + '/' + done.archive
+    return done
+  }
 
   export function nightly_backup() { return runBackup('on the schedule') }
+
+  // One that was taken earlier, handed over as it stands. Quasar holds the
+  // path to this station's own files permission, so what can be offered here
+  // is what could have been read here.
+  export function download_backup({ name }) {
+    return { download: BACKUPS + '/' + name }
+  }
 
   function runBackup(how) {
     const world = worldName()
@@ -1250,8 +1318,10 @@ script: |
     const removed = prune()
     quasar.progress(100, 'done')
     note('archived the world ' + how + (removed ? ', deleted ' + removed + ' old' : ''))
+    // archive is not one of the keys Quasar reads; it is here for back_up,
+    // which is the caller that turns it into something to download.
     return { toast: name + ' written' + (removed ? ', ' + removed + ' old archive(s) deleted' : '') + '.',
-             refresh: ['mc_backups', 'mc_events'] }
+             archive: name, refresh: ['mc_backups', 'mc_events'] }
   }
 
   function prune() {
@@ -1336,6 +1406,88 @@ script: |
   // =====================================================================
   // Settings
   // =====================================================================
+
+  // Mojang's own list of every version there has ever been. It is the only
+  // authority on what exists, which is the whole point of asking it: a version
+  // typed into a box is a guess, and a wrong guess is a container that pulls a
+  // server jar that is not there and dies in a way nobody on the page can read.
+  const MANIFEST = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json'
+
+  // Releases only, newest first, which is the order Mojang lists them in.
+  // Snapshots are left out: they are named 24w14a and there are several a
+  // month, and a dropdown that buries every release under six hundred of them
+  // is a dropdown nobody can use.
+  function releases() {
+    const manifest = quasar.http.get(MANIFEST).json()
+    return (manifest.versions || [])
+      .filter(function (v) { return v.type === 'release' })
+      .map(function (v) { return v.id })
+  }
+
+  // What the install form offers, before this application exists.
+  //
+  // It is the one action here that runs with nothing to act on: no container,
+  // no folder, no environment — only the way out, which is all it needs. A
+  // failure is not this action's business to dress up: Quasar falls back to
+  // the versions written in the document and says so in its log.
+  export function official_versions() {
+    return { data: releases() }
+  }
+
+  // And the same list again on the Settings tab, with the version this server
+  // is on selected.
+  export function version_form() {
+    const now = quasar.env.get('MINECRAFT_VERSION')
+    let options
+    try {
+      options = releases()
+    } catch (e) {
+      // The form still draws, offering the one version it is certain of. A
+      // select that came back empty because Mojang was slow would read as a
+      // server with no version at all.
+      quasar.log('could not reach Mojang for the version list: ' + e.message)
+      options = []
+    }
+    if (options.indexOf(now) < 0) options.unshift(now)
+    return { data: { version: { value: now, options: options } } }
+  }
+
+  export function set_version({ version }) {
+    const want = String(version || '').trim()
+    const now = quasar.env.get('MINECRAFT_VERSION')
+    if (!want) return { error: 'Pick a version.' }
+    if (want === now) return { warn: 'That is the version it is already running.' }
+
+    // Checked against Mojang rather than against a pattern, and the change is
+    // refused outright when Mojang cannot be reached. A version that only
+    // looks right is what this whole panel exists to stop being possible, and
+    // a server that redeploys onto one is a server that is now down.
+    let known
+    try {
+      known = releases()
+    } catch (e) {
+      return { error: 'Mojang could not be reached, so nothing was changed: ' + String(e.message || e) }
+    }
+    if (known.indexOf(want) < 0) {
+      return { error: want + ' is not an official release.' }
+    }
+
+    // Told and saved, if there is anybody listening. The redeploy goes ahead
+    // either way, and a world that was flushed a second ago is a world the new
+    // server opens cleanly.
+    try {
+      rconRaw('say Server is changing version — back shortly.')
+      rconRaw('save-all flush')
+    } catch (e) {
+      quasar.log('the server did not answer before the change: ' + e.message)
+    }
+
+    quasar.env.set('MINECRAFT_VERSION', want)
+    quasar.app.redeploy()
+    note('changed the version from ' + now + ' to ' + want)
+    return { warn: 'Redeploying on ' + want + '. The new server is downloaded on the way up, which takes a minute.',
+             refresh: ['mc_version', 'mc_build', 'mc_events'] }
+  }
 
   export function read_props() {
     const p = props()
