@@ -119,6 +119,24 @@ export function official_versions() {
 }
 ```
 
+**Which one to start on.** A list is the whole of it in the ordinary case. Where
+the source also knows what is current, the action can say so, and the form
+starts there instead of on the document's `default`:
+
+```js
+export function official_versions() {
+  const m = quasar.http.get(MANIFEST).json()
+  return { options: releases(m), default: m.latest.release }
+}
+```
+
+That is worth the second shape because the alternative goes stale by itself: a
+`default` written into a document is the version its author was running, and a
+form proposing it a year later is proposing last year's server to somebody who
+came to install a new one. A default the action is not also offering is ignored,
+since a form that proposed a value it would then refuse is worse than one
+proposing the document's.
+
 This is the only time a station's script runs with no application, and it has
 correspondingly little to run with: `quasar.app` is empty, no answers have been
 given yet so the action receives none, and every capability that would need an
@@ -132,6 +150,11 @@ route out, an API having a bad afternoon, an action that throws — and a dropdo
 that empties itself because somebody else is down is worse than a short one. A
 failed ask is a line in Quasar's log rather than an error on the page: nothing
 the operator did caused it and there is nothing they can do about it.
+
+The answer leads the dropdown and the written values follow, because an answer
+is the source speaking and it knows the order — newest first, for a list of
+releases — while the written ones are a fallback and a home for values the
+source has no concept of.
 
 The answer is cached for an hour per station and action, and the same expanded
 list is what the deployment accepts the value against — so a version the form
@@ -725,8 +748,11 @@ script: |
   // What the install form offers for VERSION. It runs before this application
   // exists, so it reaches the network and nothing else.
   export function official_versions() {
-    return quasar.http.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json')
-      .json().versions.filter(v => v.type === 'release').map(v => v.id)
+    const m = quasar.http.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json').json()
+    return {
+      options: m.versions.filter(v => v.type === 'release').map(v => v.id),
+      default: m.latest.release,          // a new server starts on the newest
+    }
   }
 
   export function rcon({ cmd }) {

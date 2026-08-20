@@ -60,7 +60,15 @@ const CallChoices = CallSource
 // stationChoice is one answer, and when it arrived.
 type stationChoice struct {
 	options []string
-	at      time.Time
+
+	// picked is the one to start on, when the action named one. It is how a
+	// form defaults to the newest release rather than to whatever the document
+	// was written around — and it comes from the action rather than from the
+	// order of the list, because "the newest" is something the source says and
+	// not something a position in an array means.
+	picked string
+
+	at time.Time
 }
 
 // stationChoiceCache holds the last answer per station and action.
@@ -87,13 +95,14 @@ func (c *stationChoiceCache) get(stationID, action string) (stationChoice, bool)
 	return held, ok
 }
 
-func (c *stationChoiceCache) put(stationID, action string, options []string) {
+func (c *stationChoiceCache) put(stationID, action string, answer stationChoice) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.by == nil {
 		c.by = map[string]stationChoice{}
 	}
-	c.by[c.key(stationID, action)] = stationChoice{options: options, at: time.Now()}
+	answer.at = time.Now()
+	c.by[c.key(stationID, action)] = answer
 }
 
 // stationTemplate is a station's deploy block as the form and the deployment
@@ -115,18 +124,32 @@ func (s *Server) stationTemplate(ctx context.Context, r *http.Request, st statio
 		if p.OptionsFrom == "" {
 			continue
 		}
-		params[i].Options = merge(p.Options, s.stationChoices(ctx, r, st, p.OptionsFrom))
+		answer := s.stationChoices(ctx, r, st, p.OptionsFrom)
+		params[i].Options = merge(answer.options, p.Options)
+
+		// The action's own default, where it named one it is also offering. A
+		// form that proposed a value it would then refuse would be worse than
+		// one that proposed the document's, which is what stands otherwise —
+		// and what stands when nothing came back at all.
+		if slices.Contains(params[i].Options, answer.picked) {
+			params[i].Default = answer.picked
+		}
 	}
 	t.Params = params
 	return t
 }
 
-// merge adds what the script offered to what the document wrote, in that
-// order and without duplicates: the document's own values first, because those
-// are the ones its author thought were worth having at the top of a list.
-func merge(written, fetched []string) []string {
-	out := slices.Clone(written)
-	for _, v := range fetched {
+// merge is the offered list, followed by anything the document wrote that the
+// answer did not mention.
+//
+// This way round because an answer is the source speaking: it knows what
+// exists and in what order — newest first, for a list of releases — while the
+// written list is the offline fallback and a place for values the source has no
+// concept of. Ordering the document's first would put a version somebody typed
+// out a year ago above the one that came out on Tuesday.
+func merge(offered, written []string) []string {
+	out := make([]string, 0, len(offered)+len(written))
+	for _, v := range slices.Concat(offered, written) {
 		if v != "" && !slices.Contains(out, v) {
 			out = append(out, v)
 		}
@@ -134,16 +157,16 @@ func merge(written, fetched []string) []string {
 	return out
 }
 
-// stationChoices is one parameter's fetched options: the cached answer while it
-// is fresh, otherwise a new ask — and, when that fails, whatever was cached
+// stationChoices is one parameter's fetched answer: the cached one while it is
+// fresh, otherwise a new ask — and, when that fails, whatever was cached
 // however old, or nothing at all.
-func (s *Server) stationChoices(ctx context.Context, r *http.Request, st station.Station, action string) []string {
+func (s *Server) stationChoices(ctx context.Context, r *http.Request, st station.Station, action string) stationChoice {
 	held, known := s.choices.get(st.ID, action)
 	if known && time.Since(held.at) < stationChoicesTTL {
-		return held.options
+		return held
 	}
 
-	options, err := s.askStationChoices(ctx, r, st, action)
+	answer, err := s.askStationChoices(ctx, r, st, action)
 	if err != nil {
 		// Not an error on the page. Nothing the operator did caused it and
 		// there is nothing they can do about it; what they get is the list the
@@ -151,22 +174,22 @@ func (s *Server) stationChoices(ctx context.Context, r *http.Request, st station
 		// one. The author is the one who needs to know, and the log is where
 		// they look.
 		log.Printf("station %s: %s could not fill in the options: %v", st.ID, action, err)
-		return held.options
+		return held
 	}
-	s.choices.put(st.ID, action, options)
-	return options
+	s.choices.put(st.ID, action, answer)
+	return answer
 }
 
-// askStationChoices runs one options action and reads the list out of it.
+// askStationChoices runs one options action and reads the answer out of it.
 func (s *Server) askStationChoices(ctx context.Context, r *http.Request,
-	st station.Station, action string) ([]string, error) {
+	st station.Station, action string) (stationChoice, error) {
 
 	if !slices.Contains(st.ChoiceActions(), action) {
-		return nil, errors.New("no parameter of this station takes its options from " + action)
+		return stationChoice{}, errors.New("no parameter of this station takes its options from " + action)
 	}
 	sp, err := worker.Self()
 	if err != nil {
-		return nil, err
+		return stationChoice{}, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, stationChoicesBudget)
 	defer cancel()
@@ -178,38 +201,76 @@ func (s *Server) askStationChoices(ctx context.Context, r *http.Request,
 	call := worker.Call{Script: st.Script, Action: action, Input: json.RawMessage(`{}`)}
 	out, err := worker.Run(ctx, sp, call, stationLimits(CallChoices), &stationCall{srv: s, doc: st, r: r})
 	if err != nil {
-		return nil, errors.New(stationProblem(action, err))
+		return stationChoice{}, errors.New(stationProblem(action, err))
 	}
 
 	result := ui.ParseResult(out.Value)
 	if result.Error != "" {
-		return nil, errors.New(result.Error)
+		return stationChoice{}, errors.New(result.Error)
 	}
 	return optionList(result.Data)
 }
 
-// optionList reads what an options action returned: a list of values, as
-// strings or as numbers, since "1.21" written in a script is a string and 20 is
-// not.
-func optionList(data json.RawMessage) ([]string, error) {
+// optionList reads what an options action returned.
+//
+// A list of values is the whole of it in the ordinary case. The other shape —
+// `{options: [...], default: 'x'}` — is for the source that also knows which
+// one to start on: Mojang publishes the newest release beside the list of every
+// release, and a form defaulting to whatever version the document was written
+// around is a form that proposes last year's server to somebody who wanted a
+// new one.
+//
+// Both are accepted because both are the same intent written at different
+// lengths, which is the rule the rest of the format already follows: a stat
+// takes a number or an object with one in it.
+func optionList(data json.RawMessage) (stationChoice, error) {
 	if len(data) == 0 {
-		return nil, errors.New("it returned nothing; an options action returns a list of values")
+		return stationChoice{}, errors.New("it returned nothing; an options action returns a list of values")
 	}
+
+	if bare, err := values(data); err == nil {
+		return stationChoice{options: bare}, nil
+	}
+	var full struct {
+		Options json.RawMessage `json:"options"`
+		Default any             `json:"default"`
+	}
+	if err := json.Unmarshal(data, &full); err != nil || len(full.Options) == 0 {
+		return stationChoice{}, errors.New("it did not return a list of values, or an object with options in it")
+	}
+	options, err := values(full.Options)
+	if err != nil {
+		return stationChoice{}, err
+	}
+	return stationChoice{options: options, picked: value(full.Default)}, nil
+}
+
+// values reads a list of values, as strings or as numbers, since "1.21"
+// written in a script is a string and 20 is not.
+func values(data json.RawMessage) ([]string, error) {
 	var raw []any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, errors.New("it did not return a list of values")
 	}
-
 	out := make([]string, 0, len(raw))
 	for _, v := range raw {
-		switch value := v.(type) {
-		case string:
-			out = append(out, value)
-		case float64:
-			out = append(out, strconv.FormatFloat(value, 'f', -1, 64))
-		default:
-			return nil, errors.New("one of the values it returned is not a value a form could offer")
+		if s := value(v); s != "" {
+			out = append(out, s)
+			continue
 		}
+		return nil, errors.New("one of the values it returned is not a value a form could offer")
 	}
 	return out, nil
+}
+
+// value is one option as a form would carry it, empty for anything a form
+// could not.
+func value(v any) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	}
+	return ""
 }

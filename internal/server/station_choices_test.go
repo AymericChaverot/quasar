@@ -62,7 +62,7 @@ func TestAParameterOffersWhatTheStationAnswered(t *testing.T) {
 	// The answer as if it had just been asked for. Seeded rather than run,
 	// because running it means spawning a worker out of a test binary; what is
 	// under test here is what the form and the deployment do with the answer.
-	s.choices.put("demo", "sizes", []string{"small", "enormous"})
+	s.choices.put("demo", "sizes", stationChoice{options: []string{"small", "enormous"}})
 
 	r := httptest.NewRequest("GET", "/stations/demo/deploy", nil)
 	r.SetPathValue("id", "demo")
@@ -88,14 +88,16 @@ func TestAParameterOffersWhatTheStationAnswered(t *testing.T) {
 	}
 }
 
-// What the document wrote is never lost: it is what the form falls back to when
-// nothing comes back, and it comes first because its author put it first.
-func TestWrittenOptionsComeFirstAndSurvive(t *testing.T) {
-	got := merge([]string{"small", "large"}, []string{"large", "enormous"})
-	if strings.Join(got, ",") != "small,large,enormous" {
+// The answer leads, because it is the source speaking and it knows the order —
+// newest first, for a list of releases. What the document wrote is never lost:
+// it is what the form falls back to when nothing comes back, and the values in
+// it the answer never mentioned are still offered.
+func TestTheAnsweredOptionsLeadAndTheWrittenOnesSurvive(t *testing.T) {
+	got := merge([]string{"1.21.9", "1.21.4"}, []string{"1.21.4", "LATEST"})
+	if strings.Join(got, ",") != "1.21.9,1.21.4,LATEST" {
 		t.Errorf("options = %v", got)
 	}
-	if got := merge([]string{"small"}, nil); strings.Join(got, ",") != "small" {
+	if got := merge(nil, []string{"small"}); strings.Join(got, ",") != "small" {
 		t.Errorf("with no answer, options = %v", got)
 	}
 }
@@ -105,16 +107,53 @@ func TestAnOptionsActionReturnsAListOfValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a list of values was refused: %v", err)
 	}
-	if strings.Join(got, ",") != "1.21.4,20,1.20.1" {
-		t.Errorf("options = %v", got)
+	if strings.Join(got.options, ",") != "1.21.4,20,1.20.1" {
+		t.Errorf("options = %v", got.options)
+	}
+	if got.picked != "" {
+		t.Errorf("a bare list named a default: %q", got.picked)
+	}
+
+	// The longer shape, for a source that also says which one to start on.
+	full, err := optionList(json.RawMessage(`{"options":["1.21.9","1.21.4"],"default":"1.21.9"}`))
+	if err != nil {
+		t.Fatalf("an answer with a default was refused: %v", err)
+	}
+	if full.picked != "1.21.9" || strings.Join(full.options, ",") != "1.21.9,1.21.4" {
+		t.Errorf("answer = %+v", full)
 	}
 
 	// Anything else is the author's mistake, and says so rather than drawing an
 	// empty dropdown.
-	for _, bad := range []string{`{"versions":["1.21.4"]}`, `[{"id":"1.21.4"}]`, ``} {
+	for _, bad := range []string{`{"versions":["1.21.4"]}`, `[{"id":"1.21.4"}]`, `{"options":"1.21.4"}`, ``} {
 		if _, err := optionList(json.RawMessage(bad)); err == nil {
 			t.Errorf("%s was accepted as a list of options", bad)
 		}
+	}
+}
+
+// The form starts on what the station said is current, rather than on the
+// version its document happened to be written around — and only where the
+// station is also offering it, since a form proposing a value it would then
+// refuse is worse than one proposing the document's.
+func TestTheAnswerCanSayWhichOptionToStartOn(t *testing.T) {
+	s, _ := catalogTestServer(t)
+	install(t, s, testStationWithChoices, "")
+	st, ok := s.station("demo")
+	if !ok {
+		t.Fatal("the station is not installed")
+	}
+
+	r := httptest.NewRequest("GET", "/stations/demo/deploy", nil)
+	s.choices.put("demo", "sizes", stationChoice{options: []string{"enormous", "small"}, picked: "enormous"})
+	if got := s.stationTemplate(r.Context(), r, st).Resolve(nil)["SIZE"]; got != "enormous" {
+		t.Errorf("the form starts on %q, want the one the station named", got)
+	}
+
+	// A default nobody is offering is not a default.
+	s.choices.put("demo", "sizes", stationChoice{options: []string{"small"}, picked: "colossal"})
+	if got := s.stationTemplate(r.Context(), r, st).Resolve(nil)["SIZE"]; got != "small" {
+		t.Errorf("the form starts on %q, want the document's own default", got)
 	}
 }
 

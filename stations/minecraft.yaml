@@ -1417,9 +1417,12 @@ script: |
   // Snapshots are left out: they are named 24w14a and there are several a
   // month, and a dropdown that buries every release under six hundred of them
   // is a dropdown nobody can use.
-  function releases() {
-    const manifest = quasar.http.get(MANIFEST).json()
-    return (manifest.versions || [])
+  function manifest() {
+    return quasar.http.get(MANIFEST).json()
+  }
+
+  function releases(m) {
+    return ((m || manifest()).versions || [])
       .filter(function (v) { return v.type === 'release' })
       .map(function (v) { return v.id })
   }
@@ -1430,8 +1433,14 @@ script: |
   // no folder, no environment — only the way out, which is all it needs. A
   // failure is not this action's business to dress up: Quasar falls back to
   // the versions written in the document and says so in its log.
+  //
+  // The default is Mojang's own latest, not the first line of the list and not
+  // a version written into this file: a new server should be a new server, and
+  // the version this document happened to be written around is nobody's answer
+  // six months from now.
   export function official_versions() {
-    return { data: releases() }
+    const m = manifest()
+    return { data: { options: releases(m), default: (m.latest || {}).release } }
   }
 
   // And the same list again on the Settings tab, with the version this server

@@ -415,13 +415,16 @@ func TestTheMinecraftStationOffersEveryRelease(t *testing.T) {
 		return nil, errors.New("this station has not been granted " + capability)
 	}}
 
-	// What the install form asks for, before there is an application at all.
+	// What the install form asks for, before there is an application at all:
+	// every release, and Mojang's own idea of which one is current — which is
+	// what a new server should start on rather than whatever version this
+	// document was written around.
 	out, _, err := callWith(t, s.Script, "official_versions", broker)
 	if err != nil {
 		t.Fatalf("the install form's options did not come back: %v", err)
 	}
-	if got := string(ui.ParseResult(out.Value).Data); got != `["1.21.4","1.21.1"]` {
-		t.Errorf("it offers %s, want the releases and only the releases", got)
+	if got := string(ui.ParseResult(out.Value).Data); got != `{"default":"1.21.4","options":["1.21.4","1.21.1"]}` {
+		t.Errorf("it offers %s, want the releases and the latest of them", got)
 	}
 
 	// And the same list on the Settings tab, with this server's own version
