@@ -6,12 +6,17 @@
    whatever hx-indicator names — here, the button itself; .is-working is the
    same state set by hand, for a plain form whose submit navigates the page and
    so has no htmx request to be indicated. */
+/* Round, always, and not from --radius-badge: this is a ring turning on its own
+   centre, and a square one does not read as motion — it reads as a box that has
+   started rotating. The token is a matter of taste for a badge, a bar and a
+   checkbox, and two shipped themes set it to 0; a station may set it too. None
+   of them meant the spinner. */
 .spinner {
   display: inline-block;
   width: 0.875rem;
   height: 0.875rem;
   flex-shrink: 0;
-  border-radius: var(--radius-badge);
+  border-radius: 50%;
   border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
   border-top-color: currentColor;
   animation: spin 620ms linear infinite;
