@@ -55,6 +55,19 @@ func TestValidateNamesWhatIsWrong(t *testing.T) {
 		new:   "action: list_thing",
 		wants: []string{"list_thing", "is not exported by the script"},
 	}, {
+		// The form is drawn by asking the script, so a parameter naming a
+		// function nobody wrote is a dropdown with one value in it and no sign
+		// of why.
+		name:  "options from an action the script never exports",
+		old:   `- {name: VERSION, label: Version, default: "1.0"}`,
+		new:   `- {name: VERSION, label: Version, kind: select, default: "1.0", options: ["1.0"], options_from: releases}`,
+		wants: []string{"releases", "is not exported by the script"},
+	}, {
+		name:  "options from an action on a field that offers no choice",
+		old:   `- {name: VERSION, label: Version, default: "1.0"}`,
+		new:   `- {name: VERSION, label: Version, default: "1.0", options_from: list_things}`,
+		wants: []string{"only a select offers options"},
+	}, {
 		name:  "a permission on a service the compose file does not define",
 		old:   "exec: {services: [app]}",
 		new:   "exec: {services: [ap]}",

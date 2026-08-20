@@ -142,13 +142,30 @@ func (s Station) Template() catalog.Template {
 	return t
 }
 
-// Actions is every action the document reaches, from its interface and from
-// its hooks.
+// Actions is every action the document reaches, from its interface, from its
+// hooks and from the deploy form.
 func (s Station) Actions() []string {
 	out := s.UI.Actions()
-	for _, name := range s.Hooks.Actions() {
+	for _, name := range slices.Concat(s.Hooks.Actions(), s.ChoiceActions()) {
 		if !slices.Contains(out, name) {
 			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// ChoiceActions are the ones that fill a deploy parameter's options, in the
+// order the parameters declare them.
+//
+// They are the only actions that run before the application exists, so they
+// are the only ones with nothing to act on: no container, no folder, no
+// environment, no store. What is left is the way out, which is what a list of
+// versions comes from.
+func (s Station) ChoiceActions() []string {
+	var out []string
+	for _, p := range s.Deploy.Params {
+		if p.OptionsFrom != "" && !slices.Contains(out, p.OptionsFrom) {
+			out = append(out, p.OptionsFrom)
 		}
 	}
 	return out

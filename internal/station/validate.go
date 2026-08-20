@@ -91,7 +91,7 @@ func (s Station) validateDeploy() []error {
 		}
 	}
 
-	single := catalog.Catalog{Templates: []catalog.Template{s.Template()}}
+	single := catalog.Catalog{Templates: []catalog.Template{s.Template()}, Scripted: true}
 	for _, err := range single.Validate() {
 		// The catalogue files its complaints under the entry id, which here is
 		// the station's own and says nothing; what the reader needs to know is

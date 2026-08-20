@@ -61,6 +61,11 @@ type Server struct {
 	// jobs are the long station actions running now, and the ones somebody may
 	// still come back to read.
 	jobs stationJobRegistry
+
+	// choices are the answers stations have given to the parameters that ask
+	// them what to offer, so drawing an install form twice is not two requests
+	// to somebody else's API.
+	choices stationChoiceCache
 }
 
 func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) (*Server, error) {

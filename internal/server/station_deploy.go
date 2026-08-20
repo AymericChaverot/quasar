@@ -31,6 +31,13 @@ type StationDeploy struct {
 	Station station.Station
 	Grants  []station.Grant
 
+	// Form is the station's deploy block as the questions it is about to ask:
+	// the document's own, with the options of any parameter that takes them
+	// from the script filled in. Kept beside the station rather than read off
+	// it, because what the page offers and what the deployment accepts have to
+	// be the same list.
+	Form catalog.Template
+
 	// Values are the answers so far, so a form that comes back with a problem
 	// comes back with what was typed in it.
 	Values catalog.Values
@@ -97,7 +104,7 @@ func readStationAdvanced(r *http.Request) StationAdvanced {
 
 // Params are the questions the station asks, which is the whole of what this
 // page is for.
-func (d StationDeploy) Params() []catalog.Param { return d.Station.Deploy.Params }
+func (d StationDeploy) Params() []catalog.Param { return d.Form.Params }
 
 // Value is what a parameter is currently set to.
 func (d StationDeploy) Value(p catalog.Param) string {
@@ -185,7 +192,7 @@ func (s *Server) handleStationDeployEdit(w http.ResponseWriter, r *http.Request)
 func (s *Server) renderStationDeploy(w http.ResponseWriter, r *http.Request,
 	st station.Station, picked catalog.Values, advanced StationAdvanced, recap bool, problem string) {
 
-	t := st.Template()
+	t := s.stationTemplate(r.Context(), r, st)
 	values := t.Resolve(picked)
 	proposed, _ := s.fillFrom(t, values)
 
@@ -193,7 +200,7 @@ func (s *Server) renderStationDeploy(w http.ResponseWriter, r *http.Request,
 		"Title":  "Install " + st.Name,
 		"Domain": s.cfg.Domain,
 		"Deploy": StationDeploy{
-			Station: st, Grants: st.Permissions.Summary(),
+			Station: st, Grants: st.Permissions.Summary(), Form: t,
 			Values: values, Advanced: advanced, Proposed: proposed,
 			Recap: recap, Error: problem,
 		},
@@ -244,7 +251,10 @@ func (s *Server) handleStationDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t := st.Template()
+	// The same template the form was drawn from, dynamic options and all: a
+	// value Resolve does not recognise falls back to the default, so a version
+	// the station itself offered a moment ago must be one it still accepts.
+	t := s.stationTemplate(r.Context(), r, st)
 	values := t.Resolve(pickedParams(r.Form))
 	app, kept := s.fillFrom(t, values)
 

@@ -35,7 +35,7 @@ func (c *stationCall) fetcher(ctx context.Context) *station.Fetcher {
 		return c.net
 	}
 	internal := map[string]string{}
-	if dock, err := c.containers(); err == nil {
+	if dock, err := c.containers(); err == nil && c.app != nil {
 		for _, service := range c.doc.Permissions.InternalServices() {
 			if host, err := dock.ServiceHost(ctx, c.app, service); err == nil {
 				internal[service] = host

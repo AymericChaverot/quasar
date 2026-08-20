@@ -89,6 +89,19 @@ func (c *stationCall) Log(line string) {
 
 // Do performs one capability on the worker's behalf.
 func (c *stationCall) Do(ctx context.Context, capability string, args json.RawMessage) (json.RawMessage, error) {
+	// A call that fills in the install form runs before there is an
+	// application, so almost nothing here has a subject: no container to run a
+	// command in, no folder to read, no environment, no store of its own. Only
+	// the way out is left, which is what a list of versions comes from.
+	//
+	// Said rather than crashed: the author of a station whose options action
+	// reaches for a file should read why it cannot, and a nil dereference
+	// somewhere below here would tell them nothing.
+	if c.app == nil && capability != "http.get" && capability != "http.post" {
+		return nil, fmt.Errorf("%s: this call is filling in an install form and there is no application yet; "+
+			"only http.get and http.post can be reached from one", capability)
+	}
+
 	switch capability {
 	case "store.get", "store.set", "store.delete", "store.keys":
 		return c.store(capability, args)
@@ -156,7 +169,12 @@ func (c *stationCall) notify(raw json.RawMessage) (json.RawMessage, error) {
 // station do to my server" has an answer that is not "look at the logs and
 // guess".
 func (c *stationCall) audit(action, detail string) {
-	target := c.doc.ID + " on " + c.app.Name
+	// A call filling in the install form is about the station and nothing else:
+	// there is no application to name it against yet.
+	target := c.doc.ID
+	if c.app != nil {
+		target += " on " + c.app.Name
+	}
 	if c.r != nil {
 		c.srv.audit(c.r, action, target, detail)
 		return

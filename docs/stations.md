@@ -92,6 +92,52 @@ entry: the parameter form, then the prefilled new-application form, then the
 live deploy panel. The only difference is what the application's page looks like
 once it is up.
 
+### Options the station supplies
+
+A `select` normally offers what the document wrote, which is right for the lists
+that are short and stay still — a mod loader, a difficulty. It is wrong for the
+ones that are neither. Every release of Minecraft there has ever been is a list
+that grows without the station being touched, and the alternative a document
+reaches for instead — a free text box — accepts `1.21.9` happily and hands the
+operator a container that will not start.
+
+So a parameter may name an action of the station's own:
+
+```yaml
+    - name: VERSION
+      label: Minecraft version
+      kind: select
+      default: "1.21.4"
+      options: ["1.21.4", "1.21.1", "1.20.6"]   # what the form falls back to
+      options_from: official_versions           # what it offers when this answers
+```
+
+```js
+export function official_versions() {
+  return quasar.http.get(MANIFEST).json().versions
+    .filter(v => v.type === 'release').map(v => v.id)
+}
+```
+
+This is the only time a station's script runs with no application, and it has
+correspondingly little to run with: `quasar.app` is empty, no answers have been
+given yet so the action receives none, and every capability that would need an
+application — `files`, `exec`, `env`, `store`, `logs`, the lifecycle verbs —
+refuses in those words. What is left is `http.get` and `http.post`, against the
+hosts `net.external` names, checked exactly as they are everywhere else.
+
+What comes back is **added to** `options`, never substituted for it. The written
+list is what the form offers when the answer does not arrive — a server with no
+route out, an API having a bad afternoon, an action that throws — and a dropdown
+that empties itself because somebody else is down is worse than a short one. A
+failed ask is a line in Quasar's log rather than an error on the page: nothing
+the operator did caused it and there is nothing they can do about it.
+
+The answer is cached for an hour per station and action, and the same expanded
+list is what the deployment accepts the value against — so a version the form
+offered is a version the deploy takes, rather than one silently replaced by the
+default at the moment somebody pressed the button.
+
 ## Permissions
 
 Every privileged thing a script can do sits behind a permission the document

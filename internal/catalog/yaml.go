@@ -183,7 +183,7 @@ func (c Catalog) Validate() []error {
 			add("deploy_type %q is neither image nor compose", t.DeployType)
 		}
 
-		errs = append(errs, validateParams(t, where)...)
+		errs = append(errs, validateParams(t, where, c.Scripted)...)
 	}
 
 	for _, cat := range c.Categories {
@@ -220,7 +220,7 @@ func validateCompose(t Template) error {
 // the entry writes is one it declares. A misspelled placeholder is otherwise
 // invisible: it survives substitution untouched and reaches the app's .env as
 // the literal text "{{VERISON}}".
-func validateParams(t Template, where string) []error {
+func validateParams(t Template, where string, scripted bool) []error {
 	var errs []error
 	add := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf("%s: %s", where, fmt.Sprintf(format, args...)))
@@ -248,6 +248,16 @@ func validateParams(t Template, where string) []error {
 			}
 		case !slices.Contains(ParamKinds, p.Type()):
 			add("parameter %q has kind %q; use one of %s", p.Name, p.Kind, strings.Join(ParamKinds, ", "))
+		}
+
+		switch {
+		case p.OptionsFrom == "":
+		case !scripted:
+			add("parameter %q takes its options from %q, and a catalogue entry has nothing to ask; that is a station's field",
+				p.Name, p.OptionsFrom)
+		case p.Type() != "select":
+			add("parameter %q takes its options from %q and is a %s; only a select offers options",
+				p.Name, p.OptionsFrom, p.Type())
 		}
 
 		// A default that the parameter itself would reject leaves the form

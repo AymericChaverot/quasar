@@ -270,6 +270,12 @@ type Catalog struct {
 	Name       string
 	Categories []string
 	Templates  []Template
+
+	// Scripted marks the one entry a station document carries, held to these
+	// rules by being run through them. It is not a catalogue anybody browses,
+	// and the difference that matters here is that something can be asked at
+	// the moment the form is drawn: see Param.OptionsFrom.
+	Scripted bool
 }
 
 // Builtin is the catalogue Quasar ships, compiled from the files beside this.
