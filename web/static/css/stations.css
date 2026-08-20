@@ -26,6 +26,38 @@
   border-bottom: var(--border-w) solid var(--border);
 }
 
+/* The plate at the head of a station's block, carrying either the generic
+   device or the mark the station brought. One tile in both cases: a station
+   with an icon and a station without should differ by what is printed on the
+   plate, not by whether the header has one, or the block's title jumps sideways
+   between two stations that are otherwise identical.
+
+   The mark is contained rather than cropped, and square rather than tilted:
+   somebody drew it, it has a right way up, and a corner of it cut off by a tile
+   is a mark the tile has damaged. */
+.station-icon-plate {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0.25rem;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
+  color: var(--accent);
+}
+.station-icon-plate svg { width: 1.25rem; height: 1.25rem; }
+.station-icon-plate img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* One size up, for the page about a single station. */
+.station-icon-plate-lg { width: 2.75rem; height: 2.75rem; }
+.station-icon-plate-lg svg { width: 1.5rem; height: 1.5rem; }
+
 .station-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -187,6 +219,24 @@
   width: 9rem;
   height: 9rem;
   stroke-width: 1;
+}
+
+/* A station that brought a mark of its own takes the same place and is drawn
+   differently, because it is a different kind of thing. The generic device is a
+   stroked outline and a repetition — every card has one — so it is tilted and
+   run off the edge, where it reads as the surface the card is printed on. A
+   station's own mark is the one thing on the card that is only true of that
+   card, and a mark somebody drew has a right way up and edges that were meant:
+   so it sits square, whole, and inside the card, larger than a label and
+   fainter than the words. */
+.station-card-mark {
+  right: 0.875rem;
+  width: 5rem;
+  height: 5rem;
+  max-height: calc(100% - 1.75rem);
+  object-fit: contain;
+  opacity: 0.14;
+  transform: translateY(-50%);
 }
 
 /* Out of the way until it is wanted, and permanent once it has been used. A
@@ -653,14 +703,6 @@
   font-family: var(--station-display, var(--font-body));
 }
 
-.station-icon {
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: var(--radius);
-  object-fit: cover;
-  flex-shrink: 0;
-}
-
 /* A station table's header. It reads like h-label and is not one: h-label is a
    flex box with an accent rule in front of it, which is right for a section
    heading and collapses a table's header row. */
@@ -786,28 +828,3 @@
   width: 0.875rem;
 }
 
-/* The default mark, for a station whose document brought no icon of its own.
-   Drawn at the size the document's icon would have been so the two are
-   interchangeable wherever a station is named. */
-.station-icon-fallback {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
-  color: var(--accent);
-}
-.station-icon-fallback svg { width: 1rem; height: 1rem; }
-.station-icon-fallback-lg { width: 2.25rem; height: 2.25rem; }
-.station-icon-fallback-lg svg { width: 1.5rem; height: 1.5rem; }
-
-.station-icon-lg {
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: var(--radius);
-  object-fit: cover;
-  flex-shrink: 0;
-}

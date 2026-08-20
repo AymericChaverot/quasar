@@ -15,8 +15,19 @@
 {{with .Style}}<style>{{.}}</style>{{end}}
 <section id="station" class="station mb-8">
   <div class="station-head">
-    {{if .Doc.UI.Theme.Icon}}<img src="{{.Doc.UI.Theme.IconSrc}}" alt="" class="station-icon" aria-hidden="true">
-    {{else}}<span class="station-icon-fallback" aria-hidden="true">{{template "icon_station"}}</span>{{end}}
+    {{/* The station's mark, on the plate the generic device already sits on
+         rather than loose beside the name. A sixteen-pixel drawing with no
+         ground under it reads as an image that failed to load into something;
+         the same drawing centred on the tile — the accent-tinted square this
+         header has drawn for stations without one since the beginning — reads
+         as a mark, at a size somebody can actually see it at. */}}
+    <span class="station-icon-plate" aria-hidden="true">
+      {{if .Doc.UI.Theme.Icon}}
+      <img src="{{.Doc.UI.Theme.IconSrc}}" alt="">
+      {{else}}
+      {{template "icon_station"}}
+      {{end}}
+    </span>
     <div class="min-w-0 flex-1">
       <p class="text-sm font-medium">{{.Doc.Name}}</p>
       <p class="faint text-xs">{{.Doc.Description}}</p>

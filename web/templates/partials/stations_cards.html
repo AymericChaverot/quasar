@@ -59,13 +59,21 @@
        every name. On a page where every card is a station, a station icon on
        every card says nothing that the heading above the list has not already
        said; drawn large and faint behind the words it stops being a label and
-       becomes the surface the card is printed on. */}}
+       becomes the surface the card is printed on.
+
+       A station that brought an icon of its own is printed on that instead of
+       on the generic device. It is the one place where the two say different
+       things — one card in a list of cards, all of which are stations, and only
+       this one is Minecraft — and it is worth more there than as a sixteen-pixel
+       tile in front of the name, where it competes with the words for the same
+       glance. */}}
+  {{if .UI.Theme.Icon}}
+  <img src="{{.UI.Theme.IconSrc}}" alt="" class="station-card-glyph station-card-mark" aria-hidden="true">
+  {{else}}
   <span class="station-card-glyph" aria-hidden="true">{{template "icon_station"}}</span>
+  {{end}}
 
   <a href="/stations/{{.ID}}/deploy" class="station-card-link flex items-start gap-2.5">
-    {{/* A station that brought an icon of its own keeps it: that one is
-         identity rather than repetition, and no two of them are alike. */}}
-    {{if .UI.Theme.Icon}}<img src="{{.UI.Theme.IconSrc}}" alt="" class="station-icon" aria-hidden="true">{{end}}
     <span class="min-w-0">
       <span class="station-card-name block text-sm font-medium">{{.Name}}</span>
       <span class="faint mt-0.5 block text-xs">{{.Description}}</span>
