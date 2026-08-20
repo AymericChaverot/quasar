@@ -315,6 +315,25 @@ viewer is one line and no port has to be published to the world.
 A panel's `source` is either `{action: name}` — the script is called, its return
 value renders the panel — or `{static: ...}` for content that never changes.
 
+A form's source fills its fields: `{motd: 'A server', pvp: true}` puts a value
+in each field it names, and leaves the declared default in the ones it does not.
+A `select` can be filled with its choices as well as its value, for the lists
+that are not knowable when the document is written:
+
+```js
+export function version_form() {
+  const releases = quasar.http.get(MANIFEST).json().versions
+    .filter(v => v.type === 'release').map(v => v.id)
+  return { data: { version: { value: quasar.env.get('MINECRAFT_VERSION'), options: releases } } }
+}
+```
+
+The field then offers exactly those, in that order. `options` in the document is
+what it falls back to when the action says nothing about it — the offline case,
+and the reason a `select` filled this way should still declare a few. Only the
+presence of `options` makes a value a choice, so a form filled from an object
+that happens to hold another object is unaffected.
+
 ### Actions
 
 An action is an exported function. Its return value drives the interface:

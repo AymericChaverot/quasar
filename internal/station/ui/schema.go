@@ -435,8 +435,13 @@ func validatePanel(p Panel, seen map[string]bool) []error {
 			if f.Type != "" && !slices.Contains(FieldTypes, f.Type) {
 				add("field %q: type %q is not %s", f.Name, f.Type, strings.Join(FieldTypes, ", "))
 			}
-			if f.Type == "select" && len(f.Options) == 0 {
-				add("field %q offers a choice with no options", f.Name)
+			// A select may leave its options out when the form is filled by an
+			// action, which is then the thing that supplies them — a list of
+			// versions, of worlds, of anything that is not knowable when the
+			// document is written. With no action there is nothing that could
+			// ever fill it, and it is an empty dropdown for good.
+			if f.Type == "select" && len(f.Options) == 0 && p.Source.Action == "" {
+				add("field %q offers a choice with no options, and no source action to fill them in", f.Name)
 			}
 		}
 	case "button", "confirm", "search":

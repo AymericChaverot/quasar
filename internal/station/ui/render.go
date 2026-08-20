@@ -156,6 +156,13 @@ type Item struct {
 // FilledField is a form field with whatever the source action put in it.
 type FilledField struct {
 	Field
+
+	// Options shadows the declared ones on purpose: a select whose choices the
+	// script computed is the same component drawing a different list, not a
+	// second kind of field. It starts as what the document wrote, which is
+	// what a form whose action said nothing about it still offers.
+	Options []string
+
 	Value   string
 	Checked bool
 }
@@ -396,8 +403,12 @@ func fields(p Panel, data json.RawMessage) ([]FilledField, string) {
 
 	out := make([]FilledField, 0, len(p.Fields))
 	for _, f := range p.Fields {
-		filled := FilledField{Field: f, Value: f.Default}
+		filled := FilledField{Field: f, Options: f.Options, Value: f.Default}
 		if v, ok := values[f.Name]; ok {
+			if obj, computed := choices(v); computed {
+				filled.Options = obj.Options
+				v = obj.Value
+			}
 			filled.Value = scalar(v)
 			if b, isBool := v.(bool); isBool {
 				filled.Checked = b
@@ -409,6 +420,45 @@ func fields(p Panel, data json.RawMessage) ([]FilledField, string) {
 		out = append(out, filled)
 	}
 	return out, ""
+}
+
+// choices reads a field that came back as its own list of options rather than
+// as a bare value: `{version: {value: '1.21.4', options: [...]}}`.
+//
+// It exists because the interesting lists are not knowable when the document is
+// written. Every release of Minecraft there has ever been is a list that grows
+// without the station being touched, and a select over a list somebody typed
+// out by hand a year ago is a select that is now wrong — while a free text box,
+// which is what the alternative comes down to, accepts a version that does not
+// exist and turns a typo into a container that will not start.
+//
+// A value that is not this shape is a value, including an object: only the
+// presence of options makes it a choice, so a form filled from an ordinary
+// nested object is unaffected.
+func choices(v any) (struct {
+	Value   any
+	Options []string
+}, bool) {
+	var out struct {
+		Value   any
+		Options []string
+	}
+	obj, isObj := v.(map[string]any)
+	if !isObj {
+		return out, false
+	}
+	list, hasOptions := obj["options"].([]any)
+	if !hasOptions {
+		return out, false
+	}
+	out.Value = obj["value"]
+	out.Options = make([]string, 0, len(list))
+	for _, item := range list {
+		if s := scalar(item); s != "" {
+			out.Options = append(out.Options, s)
+		}
+	}
+	return out, true
 }
 
 // scalar is a JSON value as one line of text. Numbers keep their shape — 20 is

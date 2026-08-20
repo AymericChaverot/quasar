@@ -144,6 +144,49 @@ func TestAFormIsFilledFromItsSource(t *testing.T) {
 	}
 }
 
+// A select whose choices are not knowable when the document is written is
+// filled by the action that fills the rest of the form.
+func TestAFormsSelectTakesItsOptionsFromTheAction(t *testing.T) {
+	panel := Panel{ID: "version", Type: "form",
+		Source: Source{Action: "version_form"},
+		Fields: []Field{
+			{Name: "version", Type: "select", Options: []string{"1.21.4"}},
+			{Name: "note", Label: "Note"},
+		}}
+	v := Render("x", panel, json.RawMessage(
+		`{"version":{"value":"1.21.1","options":["1.21.4","1.21.1","1.20.6"]},"note":"careful"}`))
+
+	if v.Problem != "" {
+		t.Fatal(v.Problem)
+	}
+	if got := v.Fields[0].Value; got != "1.21.1" {
+		t.Errorf("value = %q, want the one the action picked", got)
+	}
+	if got := strings.Join(v.Fields[0].Options, ","); got != "1.21.4,1.21.1,1.20.6" {
+		t.Errorf("options = %q, want the ones the action returned", got)
+	}
+	// An ordinary value is still an ordinary value, and a field the action
+	// said nothing about keeps what the document declared.
+	if v.Fields[1].Value != "careful" {
+		t.Errorf("note = %q", v.Fields[1].Value)
+	}
+}
+
+// Only options make a choice: a form filled from an object that happens to
+// hold another object is not one, and reading it as one would empty the field.
+func TestAnObjectWithoutOptionsIsStillAValue(t *testing.T) {
+	panel := Panel{ID: "f", Type: "form", Source: Source{Action: "fill"},
+		Fields: []Field{{Name: "where", Type: "select", Options: []string{"a", "b"}}}}
+	v := Render("x", panel, json.RawMessage(`{"where":{"value":"a"}}`))
+
+	if got := strings.Join(v.Fields[0].Options, ","); got != "a,b" {
+		t.Errorf("options = %q, want the declared ones", got)
+	}
+	if v.Fields[0].Value == "" {
+		t.Error("the field came back empty")
+	}
+}
+
 // `return { data: … }` and `return …` are the same intent, and refusing the
 // second would only teach the ceremony.
 func TestParseResultAcceptsBareData(t *testing.T) {
