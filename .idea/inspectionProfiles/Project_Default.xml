@@ -1,16 +1,6 @@
 <component name="InspectionProjectProfileManager">
   <profile version="1.0">
     <option name="myName" value="Project Default" />
-
-    <!-- The Go side is judged by .golangci.yml, which CI runs too, so the IDE
-         and the pipeline cannot disagree about what a problem is. -->
     <inspection_tool class="GoLinter" enabled="true" level="WARNING" enabled_by_default="true" />
-
-    <!-- The six --station-* tokens are written at runtime, one set per station,
-         by internal/station/ui/style.go, and every rule that reads them supplies
-         a fallback. They are unresolvable on purpose: declaring them here would
-         mean the fallback never fires. See the comment above the station-token
-         rules in web/static/css/stations.css. -->
-    <inspection_tool class="CssUnresolvedCustomProperty" enabled="false" level="WARNING" enabled_by_default="false" />
   </profile>
 </component>
