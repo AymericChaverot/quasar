@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"testing"
+	"time"
 )
 
 // Time-based retention alone lets a chatty container fill the disk well inside
@@ -93,4 +94,35 @@ func countLogs(t *testing.T, database *sql.DB, appID string) int {
 		t.Fatal(err)
 	}
 	return n
+}
+
+// The samples are written in UTC, by SQLite's own CURRENT_TIMESTAMP, and the
+// callers all ask for "the last day" in whatever zone the server is set to.
+// The two agree on a machine running UTC, which is what a VPS usually is and
+// why this held for as long as it did; east of UTC the window ends before the
+// newest sample and the graph is simply empty, with nothing anywhere saying
+// so.
+func TestAWindowInAnotherZoneStillFindsTheSamples(t *testing.T) {
+	database := openTestDB(t)
+
+	if err := RecordAppMetric(database, "app1", 12, 340); err != nil {
+		t.Fatal(err)
+	}
+
+	// Far enough east that a local clock reads hours ahead of the samples.
+	east := time.FixedZone("UTC+9", 9*60*60)
+	since := time.Now().In(east).Add(-time.Hour)
+
+	if pts, err := AppMetrics(database, "app1", since); err != nil || len(pts) != 1 {
+		t.Errorf("AppMetrics found %d samples in the last hour (%v)", len(pts), err)
+	}
+
+	// And the sweep does not take an hour of samples with it because the clock
+	// it was handed reads ahead of them.
+	if err := PruneTimeSeries(database, time.Now().In(east).Add(-7*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if pts, _ := AppMetrics(database, "app1", since); len(pts) != 1 {
+		t.Error("a fresh sample was pruned by a window expressed in another zone")
+	}
 }

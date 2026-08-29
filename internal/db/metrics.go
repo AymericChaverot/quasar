@@ -50,12 +50,21 @@ func RecordAppMetric(db *sql.DB, appID string, cpu, memMB float64) error {
 	return err
 }
 
+// A window is moved to UTC before it is asked about, because that is the zone
+// the samples are written in: every ts here comes from SQLite's own
+// CURRENT_TIMESTAMP. A caller that says "the last 24 hours" in local time is
+// asking a question about a different 24 hours — two hours short of them in
+// Paris in summer, and on a server far enough east of UTC, a window that ended
+// before the newest sample was taken and a graph that is simply empty. The
+// callers are all "the last day of it" and none of them means anything by the
+// zone, so the correction belongs here rather than at each of them.
+
 func ServerMetrics(db *sql.DB, since time.Time) ([]MetricPoint, error) {
-	return queryPoints(db, "SELECT ts, cpu, mem FROM metrics WHERE ts >= ? ORDER BY ts", since)
+	return queryPoints(db, "SELECT ts, cpu, mem FROM metrics WHERE ts >= ? ORDER BY ts", since.UTC())
 }
 
 func AppMetrics(db *sql.DB, appID string, since time.Time) ([]MetricPoint, error) {
-	return queryPoints(db, "SELECT ts, cpu, mem_mb FROM app_metrics WHERE app_id = ? AND ts >= ? ORDER BY ts", appID, since)
+	return queryPoints(db, "SELECT ts, cpu, mem_mb FROM app_metrics WHERE app_id = ? AND ts >= ? ORDER BY ts", appID, since.UTC())
 }
 
 func queryPoints(db *sql.DB, query string, args ...any) ([]MetricPoint, error) {
@@ -79,11 +88,12 @@ func queryPoints(db *sql.DB, query string, args ...any) ([]MetricPoint, error) {
 // first table it could not trim: one locked database fails all four the same
 // way, and four copies of that in the log say nothing the first did not.
 func PruneTimeSeries(db *sql.DB, olderThan time.Time) error {
+	cut := olderThan.UTC()
 	return firstError(
-		exec(db, "DELETE FROM metrics WHERE ts < ?", olderThan),
-		exec(db, "DELETE FROM app_metrics WHERE ts < ?", olderThan),
-		exec(db, "DELETE FROM health_history WHERE ts < ?", olderThan),
-		exec(db, "DELETE FROM app_logs WHERE ts < ?", olderThan),
+		exec(db, "DELETE FROM metrics WHERE ts < ?", cut),
+		exec(db, "DELETE FROM app_metrics WHERE ts < ?", cut),
+		exec(db, "DELETE FROM health_history WHERE ts < ?", cut),
+		exec(db, "DELETE FROM app_logs WHERE ts < ?", cut),
 	)
 }
 
