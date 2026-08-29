@@ -63,6 +63,14 @@ func installBridge(vm *goja.Runtime, call worker.Call, req worker.Requester) err
 		return err
 	}
 
+	// The same again for what a station measures rather than works out. It is
+	// scoped the same way and reaches as little, and it is separate because
+	// the store answers "what did I decide last time" while this answers "what
+	// was it on Tuesday" — which no key–value space of 256 KB can.
+	if err := q.Set("series", b.series()); err != nil {
+		return err
+	}
+
 	// Behind a permission, and therefore behind the parent: the worker holds
 	// no disk, no socket and no database, so each of these is a question
 	// rather than an action.
@@ -203,6 +211,32 @@ func (b *bridge) store() *goja.Object {
 	set(obj, "keys", func() goja.Value {
 		return b.ask("store.keys", map[string]any{})
 	})
+	return obj
+}
+
+// series is what this station has measured about this application over time,
+// over the pipe because the clock and the disk are both up there.
+//
+// record is the whole of what a station usually needs: a scheduled hook takes
+// a sample, a chart panel reads the history back without a script running at
+// all. read is here for the actions that want to look at their own history —
+// deciding whether something is climbing rather than merely high — and names
+// for one that wants to know what it has been keeping.
+func (b *bridge) series() *goja.Object {
+	obj := b.vm.NewObject()
+	set(obj, "record", func(name string, value float64) goja.Value {
+		return b.ask("series.record", map[string]any{"name": name, "value": value})
+	})
+	set(obj, "read", func(name string, opts goja.Value) goja.Value {
+		args := map[string]any{"name": name}
+		if o, ok := opts.(*goja.Object); ok && o != nil {
+			if v := o.Get("hours"); v != nil && !goja.IsUndefined(v) {
+				args["hours"] = v.ToInteger()
+			}
+		}
+		return b.ask("series.read", args)
+	})
+	set(obj, "names", func() goja.Value { return b.ask("series.names", map[string]any{}) })
 	return obj
 }
 

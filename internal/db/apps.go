@@ -250,6 +250,9 @@ func DeleteApp(db *sql.DB, id string) error {
 	if err := DeleteAppStore(db, id); err != nil {
 		return err
 	}
+	if err := DeleteAppSeries(db, id); err != nil {
+		return err
+	}
 	_, err := db.Exec("DELETE FROM apps WHERE id = ?", id)
 	return err
 }

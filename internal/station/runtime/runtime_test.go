@@ -179,6 +179,7 @@ func TestEveryDocumentedNamespaceIsThere(t *testing.T) {
 			const names = [
 				'quasar.app', 'quasar.app.restart', 'quasar.log', 'quasar.progress',
 				'quasar.store.get', 'quasar.store.set', 'quasar.store.delete', 'quasar.store.keys',
+				'quasar.series.record', 'quasar.series.read', 'quasar.series.names',
 				'quasar.exec', 'quasar.logs',
 				'quasar.files.list', 'quasar.files.read', 'quasar.files.readBytes',
 				'quasar.files.write', 'quasar.files.delete', 'quasar.files.mkdir',

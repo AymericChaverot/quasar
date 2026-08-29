@@ -190,13 +190,36 @@ permissions:
 | `lifecycle` | start / stop / restart / redeploy / set image | Listed verbs only. |
 | `notify` | Sending to the configured webhook | Rate-limited. |
 
-`quasar.store` needs no permission: it is a small key–value space scoped to one
-application and one station, and it can reach nothing else. It lives exactly as
-long as that pair does: deleting the application clears what every station kept
-for it, and removing the station clears what it kept for every application. The
-applications carry on either way — a removed station leaves them running, as it
-always did — but nothing is left behind that would be read back if the same
-station id were installed again.
+`quasar.store` and `quasar.series` need no permission: both are scoped to one
+application and one station, and neither can reach anything else. The store is
+a small key–value space; the series are what the station has measured about
+its application over time. Both live exactly as long as that pair does:
+deleting the application clears what every station kept for it, and removing
+the station clears what it kept for every application. The applications carry
+on either way — a removed station leaves them running, as it always did — but
+nothing is left behind that would be read back if the same station id were
+installed again.
+
+**A series is what the store cannot hold.** A store answers "what did I work
+out last time"; a series answers "what was it on Tuesday", which is what a
+chart is drawn from. A station keeping its own history under a store key would
+fill its 256 KB in a few days, lose the lot on one failed write, and re-marshal
+the whole list on every sample. So Quasar keeps it instead: a station records a
+value from a scheduled hook, and a `chart` panel reads the history back without
+the script running at all. One station may keep 8 series per application, named
+in lowercase like identifiers, and samples are pruned on the same seven-day
+window as every other time series on the server.
+
+```yaml
+hooks:
+  every:
+    - {minutes: 5, action: sample}
+```
+```js
+export function sample() {
+  quasar.series.record('players', online().length)
+}
+```
 
 **`net.external` must name its hosts.** A permission that reads "may reach the
 internet" tells the operator nothing and is an exfiltration channel with their
@@ -288,6 +311,10 @@ quasar.service(name, port)              // -> a base URL on the internal network
 
 quasar.store.get(k) / .set(k, v) / .delete(k) / .keys()
 
+quasar.series.record(name, value)       // one sample, from a scheduled hook
+quasar.series.read(name, {hours})       // -> [{at, value}], oldest first
+quasar.series.names()                   // -> what this station is keeping
+
 quasar.notify(message)
 quasar.log(...args)                     // to the station's own log, readable in the UI
 quasar.progress(percent, message)       // long actions only, see § Actions
@@ -316,6 +343,7 @@ hands back the same `Uint8Array` on the way out.
 | `quasar.exec` output | 1 MB per call | | |
 | `quasar.http` response | 8 MB per call | | |
 | `quasar.store` | 256 KB per application | | |
+| `quasar.series` | 8 series per application, kept 7 days | | |
 | `quasar.files.read` | 4 MB | | |
 | Worker memory | 128 MB resident | | |
 

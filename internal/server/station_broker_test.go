@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"quasar/internal/config"
 	"quasar/internal/db"
@@ -284,5 +285,65 @@ func TestAnUnknownCapabilityIsRefused(t *testing.T) {
 	c, _ := brokerFor(t, station.Permissions{}, "")
 	if _, err := ask(t, c, "docker.socket", nil); err == nil {
 		t.Error("an invented capability was performed")
+	}
+}
+
+// A series crosses the boundary the way everything else does, and needs no
+// permission for the reason the store needs none: it is scoped to this
+// application and this station and reaches nothing else. What it does need is
+// an application — there is nothing to have measured before one exists — and
+// the install form is the call that has none.
+func TestSeriesRecordAndReadBack(t *testing.T) {
+	c, _ := brokerFor(t, station.Permissions{}, "")
+
+	for _, v := range []float64{4, 7} {
+		if _, err := ask(t, c, "series.record", map[string]any{"name": "players", "value": v}); err != nil {
+			t.Fatalf("recording: %v", err)
+		}
+	}
+
+	read, err := ask(t, c, "series.read", map[string]any{"name": "players"})
+	if err != nil {
+		t.Fatalf("reading: %v", err)
+	}
+	var points []struct {
+		At    string  `json:"at"`
+		Value float64 `json:"value"`
+	}
+	if err := json.Unmarshal(read, &points); err != nil {
+		t.Fatal(err)
+	}
+	if len(points) != 2 || points[0].Value != 4 || points[1].Value != 7 {
+		t.Errorf("read back %s, want two samples of 4 then 7", read)
+	}
+	// The time is what new Date() takes, because a script that plots this is
+	// going to want one.
+	if _, err := time.Parse(time.RFC3339, points[0].At); err != nil {
+		t.Errorf("the sample time %q is not a date a script can parse: %v", points[0].At, err)
+	}
+
+	names, err := ask(t, c, "series.names", map[string]any{})
+	if err != nil || string(names) != `["players"]` {
+		t.Errorf("names = %s (%v)", names, err)
+	}
+
+	// And a name the document mistyped comes back as a refusal an author can
+	// read, rather than as a ninth empty chart.
+	if _, err := ask(t, c, "series.record", map[string]any{"name": "Players Online", "value": 1}); err == nil {
+		t.Error("a series name with spaces was accepted")
+	}
+}
+
+// Filling in an install form runs before there is an application, so a station
+// that samples from an action reachable both ways should read why rather than
+// find a nil dereference.
+func TestSeriesAreRefusedWithNoApplication(t *testing.T) {
+	c, _ := brokerFor(t, station.Permissions{}, "")
+	c.app = nil
+
+	if _, err := ask(t, c, "series.record", map[string]any{"name": "players", "value": 1}); err == nil {
+		t.Error("a sample was recorded with no application to record it about")
+	} else if !strings.Contains(err.Error(), "install form") {
+		t.Errorf("the refusal does not say why: %v", err)
 	}
 }

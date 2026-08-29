@@ -189,6 +189,21 @@ CREATE TABLE IF NOT EXISTS station_store (
 	PRIMARY KEY (app_id, station_id, key)
 );
 
+-- What a station measured about its own application, over time. The store is
+-- for what an action worked out and needs next time; this is for the one thing
+-- the store cannot hold, which is a value on Tuesday and the same value on
+-- Wednesday. A station samples it from a scheduled hook and a chart panel
+-- reads it back, so the history belongs to Quasar rather than to a script that
+-- gets 256 KB and no clock.
+CREATE TABLE IF NOT EXISTS station_series (
+	app_id     TEXT NOT NULL,
+	station_id TEXT NOT NULL,
+	name       TEXT NOT NULL,
+	ts         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	value      REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_station_series ON station_series(app_id, station_id, name, ts);
+
 CREATE TABLE IF NOT EXISTS api_tokens (
 	id           INTEGER PRIMARY KEY AUTOINCREMENT,
 	name         TEXT NOT NULL,

@@ -105,6 +105,8 @@ func (c *stationCall) Do(ctx context.Context, capability string, args json.RawMe
 	switch capability {
 	case "store.get", "store.set", "store.delete", "store.keys":
 		return c.store(capability, args)
+	case "series.record", "series.read", "series.names":
+		return c.series(capability, args)
 	case "files.list", "files.read", "files.readBytes", "files.write", "files.delete", "files.mkdir":
 		return c.files(capability, args)
 	case "env.get", "env.set":

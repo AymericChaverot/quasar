@@ -116,6 +116,12 @@ func TestAWindowInAnotherZoneStillFindsTheSamples(t *testing.T) {
 	if pts, err := AppMetrics(database, "app1", since); err != nil || len(pts) != 1 {
 		t.Errorf("AppMetrics found %d samples in the last hour (%v)", len(pts), err)
 	}
+	if err := RecordStationSeries(database, "app1", "minecraft", "players", 4); err != nil {
+		t.Fatal(err)
+	}
+	if pts, err := StationSeries(database, "app1", "minecraft", "players", since); err != nil || len(pts) != 1 {
+		t.Errorf("StationSeries found %d samples in the last hour (%v)", len(pts), err)
+	}
 
 	// And the sweep does not take an hour of samples with it because the clock
 	// it was handed reads ahead of them.

@@ -190,6 +190,9 @@ func DeleteStation(db *sql.DB, id int64) error {
 		if err := DeleteStationStore(db, row.StationID); err != nil {
 			return err
 		}
+		if err := DeleteStationSeries(db, row.StationID); err != nil {
+			return err
+		}
 	}
 	_, err := db.Exec("DELETE FROM stations WHERE id = ?", id)
 	return err
