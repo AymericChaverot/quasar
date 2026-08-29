@@ -25,6 +25,13 @@ const (
 	metricsInterval = 60 * time.Second
 	taskInterval    = 60 * time.Second
 	retention       = 7 * 24 * time.Hour
+
+	// seriesRetention is how long a station's own series are kept once folded
+	// into hours. Longer than everything else because they cost so much less
+	// once they are: a year of hourly rows for eight series is a few hundred
+	// thousand of them, against the fourteen hundred a day per series the
+	// samples themselves run to.
+	seriesRetention = 365 * 24 * time.Hour
 	failThreshold   = 3 // consecutive health failures before auto-restart
 
 	logRescanInterval = stateInterval
@@ -165,6 +172,15 @@ func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyri
 		if time.Since(lastPrune) > time.Hour {
 			if err := db.PruneTimeSeries(database, time.Now().Add(-retention)); err != nil {
 				log.Printf("monitor: trimming the time series: %v", err)
+			}
+			// A station's series are folded rather than dropped: the same
+			// seven days at full resolution, then one row an hour for a year.
+			// A graph of a database growing, or of how many people were on a
+			// server last month, is worth more than the samples it was drawn
+			// from and costs a fraction of them.
+			if err := db.FoldStationSeries(database,
+				time.Now().Add(-retention), time.Now().Add(-seriesRetention)); err != nil {
+				log.Printf("monitor: folding the stations' series: %v", err)
 			}
 			if err := db.PruneLogs(database); err != nil {
 				log.Printf("monitor: trimming stored output: %v", err)

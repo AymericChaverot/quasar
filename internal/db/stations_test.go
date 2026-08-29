@@ -180,22 +180,79 @@ func TestASeriesIsBoundedAndScopedToItsPair(t *testing.T) {
 	}
 }
 
-// Nothing a station measures outlives the retention window the rest of the
-// platform keeps, and it is pruned by the same sweep rather than by a second
-// one somebody has to remember to run.
-func TestSeriesArePrunedWithEverythingElse(t *testing.T) {
+// A series does not end when it ages out of the window the rest of the
+// platform keeps: it is folded into one row an hour and kept far longer. The
+// fold has to survive being run twice — on a restart, on a clock that moved —
+// because the way it fails otherwise is a graph that quietly doubles.
+func TestSeriesAreFoldedIntoHoursRatherThanDropped(t *testing.T) {
 	database := openTestDB(t)
 
-	if err := RecordStationSeries(database, "app1", "minecraft", "players", 4); err != nil {
+	for _, v := range []float64{2, 8, 5} {
+		if err := RecordStationSeries(database, "app1", "minecraft", "players", v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Two of them in one hour and the third in the next, both far enough back
+	// to be past the fold.
+	old := time.Now().UTC().Add(-8 * 24 * time.Hour).Truncate(time.Hour)
+	// Written in the format the column really holds, which is SQLite's own
+	// CURRENT_TIMESTAMP: that is where every real row here gets its time, and
+	// the fold reads the hour back out of it with strftime.
+	stamp := func(t time.Time) string { return t.Format("2006-01-02 15:04:05") }
+	if _, err := database.Exec(`UPDATE station_series SET ts = ?`, stamp(old.Add(10*time.Minute))); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.Exec(`UPDATE station_series SET ts = ?`, time.Now().Add(-8*24*time.Hour)); err != nil {
+	if _, err := database.Exec(`UPDATE station_series SET ts = ? WHERE value = 5`, stamp(old.Add(90*time.Minute))); err != nil {
 		t.Fatal(err)
 	}
-	if err := PruneTimeSeries(database, time.Now().Add(-7*24*time.Hour)); err != nil {
+
+	fold := func() {
+		t.Helper()
+		if err := FoldStationSeries(database, time.Now().Add(-7*24*time.Hour), time.Now().Add(-365*24*time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fold()
+	fold() // and again, which must change nothing
+
+	var raw int
+	database.QueryRow(`SELECT COUNT(*) FROM station_series`).Scan(&raw)
+	if raw != 0 {
+		t.Errorf("%d samples were left behind by the fold", raw)
+	}
+
+	hours, err := StationSeriesHourly(database, "app1", "minecraft", "players", old.Add(-time.Hour))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if names, _ := StationSeriesNames(database, "app1", "minecraft"); len(names) != 0 {
-		t.Errorf("samples older than the retention window survived it: %v", names)
+	if len(hours) != 2 {
+		t.Fatalf("%d folded hours, want 2: %v", len(hours), hours)
+	}
+	// The mean, and the least and the most it reached — which is the half an
+	// average throws away and the half nobody can recover afterwards.
+	if h := hours[0]; h.Avg != 5 || h.Min != 2 || h.Max != 8 || h.Samples != 2 {
+		t.Errorf("the first hour folded to %+v, want avg 5 min 2 max 8 over 2 samples", h)
+	}
+
+	// And a read spanning both halves of the series finds it, without being
+	// told where the seam is.
+	points, err := StationSeries(database, "app1", "minecraft", "players", time.Now().Add(-30*24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(points) != 2 || points[0].Value != 5 {
+		t.Errorf("reading across the fold gave %v", points)
+	}
+	if names, _ := StationSeriesNames(database, "app1", "minecraft"); len(names) != 1 || names[0] != "players" {
+		t.Errorf("a folded series is no longer one this station keeps: %v", names)
+	}
+
+	// Folded hours have a window of their own, and it is the fold that applies
+	// it.
+	if err := FoldStationSeries(database, time.Now(), time.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if hours, _ := StationSeriesHourly(database, "app1", "minecraft", "players", old.Add(-time.Hour)); len(hours) != 0 {
+		t.Errorf("folded hours older than their own window survived: %v", hours)
 	}
 }

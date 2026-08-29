@@ -207,8 +207,16 @@ fill its 256 KB in a few days, lose the lot on one failed write, and re-marshal
 the whole list on every sample. So Quasar keeps it instead: a station records a
 value from a scheduled hook, and a `chart` panel reads the history back without
 the script running at all. One station may keep 8 series per application, named
-in lowercase like identifiers, and samples are pruned on the same seven-day
-window as every other time series on the server.
+in lowercase like identifiers.
+
+**Kept at full resolution for a week, and by the hour for a year.** Every other
+time series on the server is dropped at seven days; a station's is folded
+instead — each hour older than that becomes one row holding the mean, the least
+and the most it reached. It costs a fraction of the samples it replaces, which
+is what makes a year of it affordable, and the least and the most are kept
+because an average hour hides the spike that was the reason anybody opened the
+graph. Reading a series never has to know where the seam is: ask for thirty
+days and the recent part comes back as samples and the rest as hours.
 
 ```yaml
 hooks:
@@ -343,7 +351,7 @@ hands back the same `Uint8Array` on the way out.
 | `quasar.exec` output | 1 MB per call | | |
 | `quasar.http` response | 8 MB per call | | |
 | `quasar.store` | 256 KB per application | | |
-| `quasar.series` | 8 series per application, kept 7 days | | |
+| `quasar.series` | 8 series per application; 7 days of samples, then a year by the hour | | |
 | `quasar.files.read` | 4 MB | | |
 | Worker memory | 128 MB resident | | |
 

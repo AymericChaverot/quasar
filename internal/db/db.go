@@ -204,6 +204,23 @@ CREATE TABLE IF NOT EXISTS station_series (
 );
 CREATE INDEX IF NOT EXISTS idx_station_series ON station_series(app_id, station_id, name, ts);
 
+-- The same series once they are too old to keep a sample a minute of. An hour
+-- becomes one row, and the row keeps the least, the most and the mean rather
+-- than the mean alone: an average hour hides the spike that was the reason
+-- anybody opened the graph, and once the samples are folded there is no
+-- getting it back.
+CREATE TABLE IF NOT EXISTS station_series_hourly (
+	app_id     TEXT NOT NULL,
+	station_id TEXT NOT NULL,
+	name       TEXT NOT NULL,
+	hour       DATETIME NOT NULL,
+	avg_value  REAL NOT NULL,
+	min_value  REAL NOT NULL,
+	max_value  REAL NOT NULL,
+	samples    INTEGER NOT NULL,
+	PRIMARY KEY (app_id, station_id, name, hour)
+);
+
 CREATE TABLE IF NOT EXISTS api_tokens (
 	id           INTEGER PRIMARY KEY AUTOINCREMENT,
 	name         TEXT NOT NULL,

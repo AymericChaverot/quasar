@@ -85,9 +85,11 @@ func queryPoints(db *sql.DB, query string, args ...any) ([]MetricPoint, error) {
 }
 
 // PruneTimeSeries drops samples older than the retention window, reporting the
-// first table it could not trim: one locked database fails every one of them
-// the same way, and five copies of that in the log say nothing the first did
-// not.
+// first table it could not trim: one locked database fails all four the same
+// way, and four copies of that in the log say nothing the first did not.
+//
+// A station's own series are not here. They are not dropped when they age out,
+// they are folded into hours first, and that is FoldStationSeries' job.
 func PruneTimeSeries(db *sql.DB, olderThan time.Time) error {
 	cut := olderThan.UTC()
 	return firstError(
@@ -95,7 +97,6 @@ func PruneTimeSeries(db *sql.DB, olderThan time.Time) error {
 		exec(db, "DELETE FROM app_metrics WHERE ts < ?", cut),
 		exec(db, "DELETE FROM health_history WHERE ts < ?", cut),
 		exec(db, "DELETE FROM app_logs WHERE ts < ?", cut),
-		exec(db, "DELETE FROM station_series WHERE ts < ?", cut),
 	)
 }
 
