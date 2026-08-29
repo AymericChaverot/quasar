@@ -117,6 +117,11 @@ type PanelView struct {
 	// in a browser and a station never gets to write one.
 	Stream string
 	Embed  string
+
+	// Chart is a positioned chart. Like the two above it is filled in by the
+	// parent rather than decoded from what a script returned, because what a
+	// chart reads is Quasar's own record of what this station measured.
+	Chart ChartView
 }
 
 // Row is one line of a table.
@@ -218,6 +223,12 @@ func Streaming(appID string, p Panel, url string) PanelView {
 // Embedded is an iframe, pointed at the address the parent will proxy.
 func Embedded(appID string, p Panel, url string) PanelView {
 	return PanelView{Panel: p, AppID: appID, Embed: url}
+}
+
+// Charted is a chart, already positioned by the parent from the series it
+// read.
+func Charted(appID string, p Panel, chart ChartView) PanelView {
+	return PanelView{Panel: p, AppID: appID, Chart: chart}
 }
 
 // imageSrcRe is what an image panel may point at when it points at a data:

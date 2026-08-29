@@ -53,8 +53,19 @@ func (t Theme) Tokens(scope string) template.CSS {
 		fmt.Fprintf(&b, "--accent-hover:color-mix(in srgb, %s 85%%, %s);", t.Accent, hoverTowards(t.Accent))
 		fmt.Fprintf(&b, "--accent-text:%s;", ReadableOn(t.Accent))
 	}
+	// The first colour is --chart, which every single-series component in
+	// Quasar already reads. The rest are numbered from it, which is what a
+	// chart of several series cycles through — and a station that named fewer
+	// than it draws falls back to --chart rather than to nothing, so a line
+	// with no colour of its own is still a line somebody can see.
 	if len(t.Chart) > 0 {
 		fmt.Fprintf(&b, "--chart:%s;", t.Chart[0])
+	}
+	for i, c := range t.Chart {
+		if i >= MaxChartColours {
+			break
+		}
+		fmt.Fprintf(&b, "--chart-%d:%s;", i+1, c)
 	}
 
 	// The tinted surfaces are separate properties rather than a redefinition

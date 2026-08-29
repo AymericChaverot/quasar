@@ -63,6 +63,13 @@ ui:
           row_actions:
             - {label: Remove, action: remove_thing, tone: err, confirm: "Remove {{name}}?"}
           empty: "Nothing here yet."
+        - id: activity
+          type: chart
+          title: Things over time
+          kind: area
+          range: 7d
+          unit: " things"
+          source: {series: [things_seen]}
         - id: add
           type: form
           title: Add one
@@ -114,11 +121,17 @@ func TestParseReadsAStation(t *testing.T) {
 	if !s.Permissions.AllowsLifecycle("restart") || s.Permissions.AllowsLifecycle("stop") {
 		t.Errorf("lifecycle covers %v", s.Permissions.Lifecycle)
 	}
-	if len(s.UI.Tabs) != 1 || len(s.UI.Tabs[0].Panels) != 2 {
+	if len(s.UI.Tabs) != 1 || len(s.UI.Tabs[0].Panels) != 3 {
 		t.Fatalf("the tabs did not survive parsing: %+v", s.UI.Tabs)
 	}
 	if p := s.UI.Tabs[0].Panels[0]; p.Source.Action != "list_things" || p.Refresh.Seconds != 30 || len(p.Columns) != 2 {
 		t.Errorf("the table did not survive parsing: %+v", p)
+	}
+	// A chart's source is not an action: it names what the station recorded,
+	// and Quasar reads that out of its own tables without a script running.
+	if p := s.UI.Tabs[0].Panels[1]; p.Kind != "area" || p.Range != "7d" ||
+		len(p.Source.Series) != 1 || p.Source.Series[0] != "things_seen" {
+		t.Errorf("the chart did not survive parsing: %+v", p)
 	}
 	if s.Hooks.AfterDeploy.Action != "sweep" || len(s.Hooks.Every) != 1 {
 		t.Errorf("the hooks did not survive parsing: %+v", s.Hooks)

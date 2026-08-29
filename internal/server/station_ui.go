@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"quasar/internal/db"
 	"quasar/internal/files"
@@ -121,6 +122,14 @@ func (s *Server) handleStationPanelPartial(w http.ResponseWriter, r *http.Reques
 	case "iframe":
 		s.renderPartial(w, "station_panel", s.embedPanel(r, a, panel))
 		return
+	case "chart":
+		// A chart reading series reads Quasar's own record of what this
+		// station measured, so nothing runs: no worker starts, no script is
+		// loaded, and a panel refreshing every thirty seconds costs a query.
+		if len(panel.Source.Series) > 0 {
+			s.renderPartial(w, "station_panel", s.chartPanel(a, doc, panel))
+			return
+		}
 	}
 
 	// Static content never runs anything, which is the point of having it:
@@ -210,6 +219,35 @@ func (s *Server) logPanel(r *http.Request, a *db.App, doc station.Station, panel
 		return s.panelFailed(r, a, panel, err.Error())
 	}
 	return ui.Streaming(a.ID, panel, fmt.Sprintf("/apps/%s/containers/%s/logs", a.ID, name))
+}
+
+// chartPanel draws what this station has recorded about this application.
+//
+// It needs no permission and asks the station nothing: a series belongs to the
+// pair of them, Quasar wrote every point in it, and reading it back is reading
+// its own table. A series the station has not recorded yet is an empty chart
+// rather than a failure — that is what every series looks like for its first
+// few minutes, and a red card would be wrong about it.
+func (s *Server) chartPanel(a *db.App, doc station.Station, panel ui.Panel) ui.PanelView {
+	window, err := ui.ParseRange(panel.Range)
+	if err != nil {
+		return ui.Failed(a.ID, panel, err.Error())
+	}
+	since := time.Now().Add(-window)
+
+	series := make([]ui.Series, 0, len(panel.Source.Series))
+	for _, name := range panel.Source.Series {
+		points, err := db.StationSeries(s.db, a.ID, doc.ID, name, since)
+		if err != nil {
+			return ui.Failed(a.ID, panel, fmt.Sprintf("reading the series %q: %v", name, err))
+		}
+		out := make([]ui.Point, 0, len(points))
+		for _, p := range points {
+			out = append(out, ui.Point{At: p.TS, Value: p.Value})
+		}
+		series = append(series, ui.Series{Label: name, Points: out})
+	}
+	return ui.Charted(a.ID, panel, ui.Chart(panel.Kind, series, panel.Unit, panel.Max))
 }
 
 // embedPanel points an iframe at this application's own service, through

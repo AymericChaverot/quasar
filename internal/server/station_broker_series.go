@@ -3,9 +3,11 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"quasar/internal/db"
+	"quasar/internal/station/ui"
 )
 
 // The series capabilities: what a station has measured about its application,
@@ -36,8 +38,17 @@ func (c *stationCall) series(capability string, raw json.RawMessage) (json.RawMe
 	if err := json.Unmarshal(raw, &a); err != nil {
 		return nil, err
 	}
-	if capability != "series.names" && a.Name == "" {
-		return nil, errors.New("quasar.series needs the name of a series")
+	if capability != "series.names" {
+		if a.Name == "" {
+			return nil, errors.New("quasar.series needs the name of a series")
+		}
+		// The same shape a chart panel's source is held to at import, checked
+		// here because this is the side a script is on. A document and a
+		// script that disagreed about what a series is called would leave a
+		// chart permanently empty and nothing anywhere saying why.
+		if !ui.SeriesName.MatchString(a.Name) {
+			return nil, fmt.Errorf("%q is not a series name: lowercase letters, digits and underscores, starting with a letter", a.Name)
+		}
 	}
 
 	switch capability {

@@ -33,7 +33,9 @@ type Theme struct {
 	// Tint is how much of the accent is mixed into the surfaces, 0 to 0.2.
 	Tint float64 `yaml:"tint,omitempty"`
 
-	// Chart are the series colours, for the components that draw data.
+	// Chart are the series colours, for the components that draw data. The
+	// first is what a single-series component uses; the rest are what a chart
+	// of several cycles through, in order.
 	Chart []string `yaml:"chart,omitempty"`
 
 	// FontDisplay is the typeface for headings, embedded rather than fetched.
@@ -148,6 +150,9 @@ func (t Theme) Validate() []error {
 
 	if t.Accent != "" && !hexRe.MatchString(t.Accent) {
 		add("accent %q is not a hex colour like #3ba55d", t.Accent)
+	}
+	if len(t.Chart) > MaxChartColours {
+		add("a theme may name %d chart colours; this one names %d", MaxChartColours, len(t.Chart))
 	}
 	for _, c := range t.Chart {
 		if !hexRe.MatchString(c) {

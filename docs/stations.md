@@ -419,7 +419,7 @@ ui:
 | Family | Types |
 |---|---|
 | Structure | `section`, `grid`, `divider`, `banner` |
-| Data | `table`, `stat`, `list`, `keyvalue`, `markdown`, `code`, `log`, `gauge`, `timeline`, `image` |
+| Data | `table`, `stat`, `list`, `keyvalue`, `markdown`, `code`, `log`, `gauge`, `timeline`, `image`, `chart` |
 | Input | `form`, `button`, `search`, `confirm` |
 | Embedding | `iframe` |
 
@@ -433,7 +433,37 @@ resolves `{{service}}` to the internal address of a named service, so a map
 viewer is one line and no port has to be published to the world.
 
 A panel's `source` is either `{action: name}` — the script is called, its return
-value renders the panel — or `{static: ...}` for content that never changes.
+value renders the panel — `{static: ...}` for content that never changes, or
+`{series: [...]}` for a chart of what the station has recorded.
+
+### Charts
+
+```yaml
+        - id: activity
+          type: chart
+          title: Players online
+          kind: area              # line | area | bar | stacked
+          range: 7d               # how far back; hours or days, a day by default
+          unit: " online"         # appended to every value shown
+          max: 20                 # pins the top of the scale; omitted, it fits the data
+          source: {series: [players]}
+          refresh: {seconds: 60}
+```
+
+A chart is drawn on the server as SVG, with native `<title>` tooltips and no
+client JavaScript, which is what the dashboard's own sparklines already are.
+Naming more than one series draws them together, each in the next of the
+theme's `chart` colours, with a legend.
+
+**A chart on `{series: ...}` runs nothing.** No worker starts, no script is
+loaded: the points are in Quasar's own tables and the panel is a query. It is
+the only panel on the page that can sit on a thirty-second refresh without
+costing a process each time, which is why a station that wants a live graph
+should sample from a hook and chart the series rather than ask its script on
+every draw.
+
+A series nobody has recorded yet draws as an empty chart saying so, not as an
+error: that is what every series looks like for its first few minutes.
 
 A form's source fills its fields: `{motd: 'A server', pvp: true}` puts a value
 in each field it names, and leaves the declared default in the ones it does not.

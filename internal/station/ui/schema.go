@@ -76,6 +76,12 @@ type Panel struct {
 	// Action.Long.
 	Long bool `yaml:"long,omitempty"`
 
+	// chart
+	Kind  string  `yaml:"kind,omitempty"`  // line | area | bar | stacked
+	Range string  `yaml:"range,omitempty"` // 24h, 7d, 30d — how far back it draws
+	Unit  string  `yaml:"unit,omitempty"`  // appended to every value shown
+	Max   float64 `yaml:"max,omitempty"`   // pins the top of the scale
+
 	// log
 	Service string `yaml:"service,omitempty"`
 	Tail    int    `yaml:"tail,omitempty"`
@@ -87,15 +93,23 @@ type Panel struct {
 }
 
 // Source is a panel's data: `{action: name}` calls the script, `{static: ...}`
-// is content written into the document and never fetched.
+// is content written into the document and never fetched, `{series: [...]}`
+// names what the station has been recording.
 type Source struct {
 	Action string `yaml:"action,omitempty"`
 	Static any    `yaml:"static,omitempty"`
+
+	// Series names series the station recorded, which Quasar reads out of its
+	// own tables. Nothing runs: no worker starts, no script is loaded, and a
+	// chart refreshing every thirty seconds costs one query. It is the only
+	// source that draws a history rather than a moment, because it is the only
+	// one that is not asking somebody what is true right now.
+	Series []string `yaml:"series,omitempty"`
 }
 
 // Empty reports a panel that declared no source at all, which is what the
 // structural components do.
-func (s Source) Empty() bool { return s.Action == "" && s.Static == nil }
+func (s Source) Empty() bool { return s.Action == "" && s.Static == nil && len(s.Series) == 0 }
 
 // Refresh re-fetches a panel on a timer.
 type Refresh struct {
@@ -146,7 +160,7 @@ var (
 	StructurePanels = []string{"section", "grid", "divider", "banner"}
 
 	// DataPanels render what an action returned.
-	DataPanels = []string{"table", "stat", "list", "keyvalue", "markdown", "code", "log", "gauge", "timeline", "image"}
+	DataPanels = []string{"table", "stat", "list", "keyvalue", "markdown", "code", "log", "gauge", "timeline", "image", "chart"}
 
 	// InputPanels send something back.
 	InputPanels = []string{"form", "button", "search", "confirm"}
@@ -397,7 +411,26 @@ func validatePanel(p Panel, seen map[string]bool) []error {
 		}
 	}
 
+	if len(p.Source.Series) > 0 && p.Type != "chart" {
+		add("a %s panel cannot read a series; only a chart can", p.Type)
+	}
+
 	switch p.Type {
+	case "chart":
+		if p.Kind != "" && !slices.Contains(ChartKinds, p.Kind) {
+			add("kind %q is not %s", p.Kind, strings.Join(ChartKinds, ", "))
+		}
+		if _, err := ParseRange(p.Range); err != nil {
+			add("%s", err)
+		}
+		for _, name := range p.Source.Series {
+			if !SeriesName.MatchString(name) {
+				add("series %q: lowercase letters, digits and underscores, starting with a letter", name)
+			}
+		}
+		if p.Max < 0 {
+			add("max is %v; a scale cannot end below where it starts", p.Max)
+		}
 	case "table":
 		if len(p.Columns) == 0 {
 			add("a table needs columns")

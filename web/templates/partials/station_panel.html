@@ -137,6 +137,46 @@
        attribute, never markup. */}}
   <img src="{{.ImageSrc}}" alt="{{$panel.Title}}" class="max-w-full rounded">
 
+  {{else if eq $panel.Type "chart"}}
+  {{/* Positioned in Go and drawn here, the way the dashboard's own sparklines
+       are: no charting library, no client script, and a tooltip layer that is
+       nothing but native <title> elements. */}}
+  {{with .Chart}}
+  {{if .Empty}}
+  <p class="faint py-6 text-center text-sm">Nothing measured yet — the first points appear once the station has sampled a few.</p>
+  {{else}}
+  <svg viewBox="0 0 {{.W}} {{.H}}" class="station-chart" role="img"
+       aria-label="{{if $panel.Title}}{{$panel.Title}}{{else}}Chart{{end}}">
+    {{range .Grid}}
+    <line x1="46" y1="{{.Y}}" x2="{{$.Chart.W}}" y2="{{.Y}}" class="station-chart-grid"/>
+    <text x="40" y="{{.Y}}" class="station-chart-label" text-anchor="end" dominant-baseline="middle">{{.Label}}</text>
+    {{end}}
+    {{range .Plots}}
+    {{$colour := .Colour}}
+    {{if .Area}}<polygon points="{{.Area}}" fill="{{$colour}}" fill-opacity="0.14"/>{{end}}
+    {{if .Line}}<polyline points="{{.Line}}" fill="none" stroke="{{$colour}}" stroke-width="2"
+                          stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>{{end}}
+    {{range .Bars}}<rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" fill="{{$colour}}" rx="1"><title>{{.Title}}</title></rect>{{end}}
+    {{range .Dots}}<circle cx="{{.X}}" cy="{{.Y}}" r="6" fill="transparent"><title>{{.Title}}</title></circle>{{end}}
+    {{end}}
+    {{range .Times}}
+    <text x="{{.X}}" y="{{$.Chart.H}}" class="station-chart-label" text-anchor="{{.Anchor}}">{{.Label}}</text>
+    {{end}}
+  </svg>
+  {{if .Legend}}
+  <ul class="station-chart-legend">
+    {{range .Plots}}
+    {{/* The key is drawn rather than styled: a colour is a fill attribute
+         everywhere else on this chart, and a style attribute would be the one
+         place a value took a different road to the page. */}}
+    <li><svg viewBox="0 0 8 8" class="station-chart-key" aria-hidden="true"><rect width="8" height="8" rx="2" fill="{{.Colour}}"/></svg>{{.Label}}
+      {{with .Latest}}<span class="mono faint">{{.}}</span>{{end}}</li>
+    {{end}}
+  </ul>
+  {{end}}
+  {{end}}
+  {{end}}
+
   {{else if eq $panel.Type "log"}}
   {{if .Stream}}{{template "log_pane" .Stream}}{{end}}
 

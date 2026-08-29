@@ -141,13 +141,15 @@ func TestASeriesIsBoundedAndScopedToItsPair(t *testing.T) {
 		t.Errorf("another application's first series was refused: %v", err)
 	}
 
-	// What a name may be, and what a value may be. Both are checked here
-	// rather than at the caller: the caller is a script.
-	if err := RecordStationSeries(database, "app1", "minecraft", "Players Online", 1); err == nil {
-		t.Error("a series name with spaces and capitals was accepted")
-	}
+	// What a value may be is checked here, because it is what this table
+	// cannot survive: SQLite stores a NaN as NULL and an infinity as a number
+	// nothing can chart. What a series may be *called* belongs to the document
+	// format and is checked where a name crosses the worker boundary.
 	if err := RecordStationSeries(database, "app1", "minecraft", "s0", math.Inf(1)); err == nil {
 		t.Error("an infinite value was accepted")
+	}
+	if err := RecordStationSeries(database, "app1", "minecraft", "s0", math.NaN()); err == nil {
+		t.Error("a NaN was accepted")
 	}
 
 	// Read back in order, and only what the window covers.

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -36,11 +35,6 @@ import (
 // the author finds last.
 const MaxSeriesNames = 8
 
-// seriesName is what a series may be called: the shape of an identifier, so
-// that a name reads the same in the document that charts it as in the script
-// that records it.
-var seriesName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
-
 // SeriesPoint is one sample of one series.
 type SeriesPoint struct {
 	TS    time.Time
@@ -49,13 +43,11 @@ type SeriesPoint struct {
 
 // RecordStationSeries appends one sample.
 //
-// Every check a series has is here rather than at the caller, because this is
-// the privileged side of the worker boundary and a script is what is on the
-// other one.
+// What a series may be *called* is the document format's business and is
+// checked where a name crosses the worker boundary. What is checked here is
+// what this table cannot survive: a value it cannot store, and a station
+// quietly turning a bounded space into an unbounded one.
 func RecordStationSeries(db *sql.DB, appID, stationID, name string, value float64) error {
-	if !seriesName.MatchString(name) {
-		return fmt.Errorf("%q is not a series name: lowercase letters, digits and underscores, starting with a letter", name)
-	}
 	// SQLite stores a NaN as NULL and an infinity as a number nothing can
 	// chart. A station dividing by zero should read that back rather than find
 	// a gap it cannot explain.

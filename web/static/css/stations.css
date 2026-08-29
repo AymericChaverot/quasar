@@ -828,3 +828,40 @@
   width: 0.875rem;
 }
 
+
+/* A chart, drawn on the server. Everything about it that varies — the points,
+   the bars, the colours — arrives as attributes; what is here is only the
+   things that are the same on every chart, so that a station theming its own
+   series does it by naming colours rather than by writing CSS. */
+.station-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.station-chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.station-chart-label {
+  fill: var(--text-faint);
+  font-size: 10px;
+}
+.station-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-top: 0.625rem;
+  font-size: 0.8125rem;
+}
+.station-chart-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.station-chart-key {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+}

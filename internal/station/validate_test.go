@@ -128,6 +128,29 @@ func TestValidateNamesWhatIsWrong(t *testing.T) {
 		new:   "type: tabel",
 		wants: []string{"tabel", "is not a component"},
 	}, {
+		name:  "a chart shape that does not exist",
+		old:   "kind: area",
+		new:   "kind: zigzag",
+		wants: []string{"zigzag", "line, area, bar, stacked"},
+	}, {
+		name:  "a window nobody can read",
+		old:   "range: 7d",
+		new:   "range: 7 weeks",
+		wants: []string{"7 weeks", "24h or 30d"},
+	}, {
+		// The name is what the script records under. A document and a script
+		// that disagree about it leave a chart permanently empty, so the
+		// disagreement is caught at import rather than discovered later.
+		name:  "a series named something a script could not record",
+		old:   "source: {series: [things_seen]}",
+		new:   "source: {series: [Things Seen]}",
+		wants: []string{"Things Seen", "lowercase letters"},
+	}, {
+		name:  "a series on a component that cannot draw one",
+		old:   "source: {action: list_things}",
+		new:   "source: {series: [things_seen]}",
+		wants: []string{"only a chart can"},
+	}, {
 		name:  "a column with no key",
 		old:   "{key: name, label: Name}",
 		new:   "{label: Name}",

@@ -6,6 +6,7 @@ import (
 	"html"
 	"strings"
 	"testing"
+	"time"
 
 	"quasar/internal/db"
 	"quasar/internal/station"
@@ -191,6 +192,15 @@ func TestEveryComponentDraws(t *testing.T) {
 		}
 		if kind == "iframe" {
 			v = ui.Embedded("abcd1234", panel, "/apps/abcd1234/station/embed/p/")
+		}
+		if kind == "chart" {
+			// With points, so that the drawn chart is what gets rendered
+			// rather than the "nothing measured yet" card every series shows
+			// for its first few minutes.
+			now := time.Now()
+			v = ui.Charted("abcd1234", panel, ui.Chart("area", []ui.Series{{Label: "players", Points: []ui.Point{
+				{At: now.Add(-time.Hour), Value: 3}, {At: now, Value: 7},
+			}}}, "", 0))
 		}
 
 		page := renderPanelPartial(t, v)
@@ -547,5 +557,49 @@ func TestTheBlockDrawsItsTabStrip(t *testing.T) {
 	// The first tab is the one open, and the second is not.
 	if !strings.Contains(page, `data-station-pane="mods"`) || !strings.Contains(page, "hidden") {
 		t.Error("the panes are not drawn one at a time")
+	}
+}
+
+// A chart reading series reads Quasar's own record of what this station
+// measured: no worker starts, no script is loaded, and the panel is drawn from
+// a query. It is the only panel on the page that can refresh every thirty
+// seconds without costing a process.
+func TestAChartPanelDrawsWhatTheStationRecorded(t *testing.T) {
+	c, _ := brokerFor(t, station.Permissions{}, "")
+
+	for _, v := range []float64{3, 9, 6} {
+		if err := db.RecordStationSeries(c.srv.db, c.app.ID, c.doc.ID, "players", v); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	panel := ui.Panel{ID: "activity", Type: "chart", Title: "Players", Kind: "area",
+		Range: "24h", Unit: " online", Source: ui.Source{Series: []string{"players"}}}
+	page := renderPanelPartial(t, c.srv.chartPanel(c.app, c.doc, panel))
+
+	for _, want := range []string{
+		"<svg",          // drawn, not described
+		"<polyline",     // the line itself
+		"<polygon",      // and the area under it, because kind is area
+		"9 online",      // a hover label, carrying the unit
+		"var(--chart-1", // in the station's own first series colour
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the chart does not draw %q:\n%s", want, page)
+		}
+	}
+	if strings.Contains(page, "<script") {
+		t.Error("the chart brought JavaScript with it")
+	}
+
+	// A series nobody has recorded yet is an empty chart, not a red card:
+	// that is what every series looks like for its first few minutes.
+	panel.Source.Series = []string{"nothing_yet"}
+	empty := renderPanelPartial(t, c.srv.chartPanel(c.app, c.doc, panel))
+	if !strings.Contains(empty, "Nothing measured yet") {
+		t.Errorf("an unrecorded series does not say it has nothing yet:\n%s", empty)
+	}
+	if strings.Contains(empty, "nothing to show") {
+		t.Error("an unrecorded series was drawn as a failure")
 	}
 }
