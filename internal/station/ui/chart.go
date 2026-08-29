@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -11,11 +13,14 @@ import (
 
 // The chart component: a station's own measurements, drawn.
 //
-// Server-rendered SVG with native <title> tooltips and no client JavaScript,
-// which is what the dashboard's sparklines already are. That is not only
-// consistency: a chart whose points come from Quasar's own tables is drawn
-// without a worker ever starting, so a panel refreshing every thirty seconds
-// costs a query rather than a process.
+// Server-rendered SVG, the way the dashboard's own sparklines are. That is not
+// only consistency: a chart whose points come from Quasar's own tables is
+// drawn without a worker ever starting, so a panel refreshing every thirty
+// seconds costs a query rather than a process.
+//
+// The one thing the browser does is follow the pointer, and even that is
+// arranging what is written here rather than working anything out — see
+// ChartCursor.
 //
 // This file is geometry and nothing else — no database, no HTTP, no template.
 // What it takes is series of points; what it hands back is the coordinates to
@@ -103,6 +108,11 @@ type ChartView struct {
 	Times  []ChartTime
 	Legend bool
 
+	// Cursor is what a hover reads out: every column of the chart, already
+	// worded, so that following the pointer is arranging strings rather than
+	// deciding what they say.
+	Cursor ChartCursor
+
 	// Empty is a chart with nothing to draw yet, which is what a series looks
 	// like for the first few minutes of its life and is not a failure.
 	Empty bool
@@ -122,24 +132,64 @@ type ChartPlot struct {
 	Area string
 	Bars []ChartBar
 
-	// Dots are the hover targets: transparent circles carrying a <title>,
-	// which is the whole tooltip layer and costs no script.
-	Dots []ChartDot
-
 	// Latest is the most recent value, for the legend.
 	Latest string
+}
+
+// ChartCursor is everything the pointer needs to read a chart back to
+// somebody: where the plot is, where each column of it sits, and what each
+// series was worth at that column.
+//
+// It is here, worded and positioned, rather than worked out in the browser,
+// because the wording is the same wording the rest of the chart uses — the
+// same rounding, the same unit, the same clock — and two implementations of
+// that would eventually disagree about what a number is. What the browser does
+// is find the nearest column and move three elements to it.
+//
+// A native <title> was what the sparklines used and what this started as. It
+// is the wrong tool at this size: it appears after a second, in the operating
+// system's own box, only over the exact pixel of a point, and it can say what
+// one series was doing and never what the others were.
+type ChartCursor struct {
+	// The plot's own bounds, in viewBox units.
+	Left   float64 `json:"left"`
+	Right  float64 `json:"right"`
+	Top    float64 `json:"top"`
+	Bottom float64 `json:"bottom"`
+
+	// At is the moment of each column, worded for reading. X is where that
+	// column sits.
+	At []string  `json:"at"`
+	X  []float64 `json:"x"`
+
+	Series []ChartCursorSeries `json:"series"`
+}
+
+// ChartCursorSeries is one series' side of the readout: where its point sits
+// in each column and what it read there. A column a series has no point for is
+// null in both, which is what a series that started later looks like.
+type ChartCursorSeries struct {
+	Label  string     `json:"label"`
+	Colour string     `json:"colour"`
+	Y      []*float64 `json:"y"`
+	Value  []string   `json:"value"`
+}
+
+// CursorJSON is the readout as the page carries it. An empty object rather
+// than an error: a chart whose cursor could not be marshalled is a chart that
+// draws and does not follow the pointer, which is worth far more than a panel
+// that refuses to render.
+func (v ChartView) CursorJSON() string {
+	out, err := json.Marshal(v.Cursor)
+	if err != nil {
+		return "{}"
+	}
+	return string(out)
 }
 
 // ChartBar is one bar, in viewBox units.
 type ChartBar struct {
 	X, Y, W, H float64
-	Title      string
-}
-
-// ChartDot is one hover target on a line.
-type ChartDot struct {
-	X, Y  float64
-	Title string
 }
 
 // ChartGrid is one horizontal rule and the value it stands for.
@@ -212,10 +262,32 @@ func Chart(kind string, series []Series, unit string, fixedMax float64) ChartVie
 	// is what makes them stacked rather than merely drawn over each other.
 	stacked := make(map[time.Time]float64)
 
+	// The columns the cursor snaps to: every moment any series has a point
+	// for, in order. Series normally share them — they are sampled by the same
+	// hook — but one that started later has fewer, and a cursor built from any
+	// single series would then be reading the wrong column for the others.
+	cols, at := columns(series), momentLabel(from, to)
+	v.Cursor = ChartCursor{
+		Left: chartPadL, Right: chartW - chartPadR,
+		Top: chartPadT, Bottom: chartH - chartPadB,
+	}
+	column := make(map[time.Time]int, len(cols))
+	for i, when := range cols {
+		column[when] = i
+		v.Cursor.At = append(v.Cursor.At, at(when))
+		v.Cursor.X = append(v.Cursor.X, x(when))
+	}
+
 	for i, s := range series {
 		p := ChartPlot{Label: s.Label, Colour: chartColour(i)}
 		if n := len(s.Points); n > 0 {
 			p.Latest = amount(s.Points[n-1].Value, unit)
+		}
+		read := ChartCursorSeries{Label: s.Label, Colour: p.Colour,
+			Y: make([]*float64, len(cols)), Value: make([]string, len(cols))}
+		mark := func(pt Point, top float64) {
+			j := column[pt.At]
+			read.Y[j], read.Value[j] = &top, amount(pt.Value, unit)
 		}
 
 		switch kind {
@@ -229,10 +301,8 @@ func Chart(kind string, series []Series, unit string, fixedMax float64) ChartVie
 					// are both visible.
 					left = x(pt.At) - bar*float64(len(series))/2 + bar*float64(i)
 				}
-				p.Bars = append(p.Bars, ChartBar{
-					X: left, Y: topY, W: bar, H: math.Max(baseY-topY, 1),
-					Title: title(pt, s.Label, unit),
-				})
+				p.Bars = append(p.Bars, ChartBar{X: left, Y: topY, W: bar, H: math.Max(baseY-topY, 1)})
+				mark(pt, topY)
 				if kind == "stacked" {
 					stacked[pt.At] = base + pt.Value
 				}
@@ -243,7 +313,7 @@ func Chart(kind string, series []Series, unit string, fixedMax float64) ChartVie
 			for _, pt := range s.Points {
 				px, py := x(pt.At), y(pt.Value)
 				fmt.Fprintf(&line, "%.1f,%.1f ", px, py)
-				p.Dots = append(p.Dots, ChartDot{X: px, Y: py, Title: title(pt, s.Label, unit)})
+				mark(pt, py)
 			}
 			p.Line = strings.TrimSpace(line.String())
 			if kind == "area" && len(s.Points) > 0 {
@@ -253,8 +323,39 @@ func Chart(kind string, series []Series, unit string, fixedMax float64) ChartVie
 			}
 		}
 		v.Plots = append(v.Plots, p)
+		v.Cursor.Series = append(v.Cursor.Series, read)
 	}
 	return v
+}
+
+// columns is every moment any series has a point for, in order.
+func columns(series []Series) []time.Time {
+	seen := map[time.Time]bool{}
+	var out []time.Time
+	for _, s := range series {
+		for _, p := range s.Points {
+			if !seen[p.At] {
+				seen[p.At] = true
+				out = append(out, p.At)
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b time.Time) int { return a.Compare(b) })
+	return out
+}
+
+// momentLabel words a moment for the readout, at the precision the window
+// makes worth having: a chart of one day is read to the minute, one of a month
+// to the hour, and neither wants the other's answer.
+func momentLabel(from, to time.Time) func(time.Time) string {
+	layout := "15:04"
+	switch span := to.Sub(from); {
+	case span > 14*24*time.Hour:
+		layout = "2 Jan"
+	case span > 48*time.Hour:
+		layout = "2 Jan 15:04"
+	}
+	return func(t time.Time) string { return t.Local().Format(layout) }
 }
 
 // span is the window the points cover, and whether there are any.
@@ -384,15 +485,6 @@ func barWidth(points, seriesCount int, kind string) float64 {
 // is not the thing to fix about it.
 func chartColour(i int) string {
 	return fmt.Sprintf("var(--chart-%d, var(--chart))", i%MaxChartColours+1)
-}
-
-// title is one hover label: when, and how much.
-func title(p Point, label, unit string) string {
-	when := p.At.Local().Format("2 Jan 15:04")
-	if label == "" {
-		return when + " · " + amount(p.Value, unit)
-	}
-	return when + " · " + label + " " + amount(p.Value, unit)
 }
 
 // amount is a value as somebody reads it: whole numbers stay whole, because a

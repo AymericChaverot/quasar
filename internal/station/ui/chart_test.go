@@ -39,13 +39,20 @@ func TestAChartPositionsItsPoints(t *testing.T) {
 		t.Errorf("a value at the top of the scale is at %q, want the top of the plot", coords[2])
 	}
 
-	// Every point carries its own hover label, which is the whole tooltip
-	// layer and costs no script.
-	if n := len(v.Plots[0].Dots); n != 3 {
-		t.Errorf("%d hover targets for 3 points", n)
+	// And the readout the pointer will use: one column per moment, each
+	// carrying where the point sits and what it read, worded here so that the
+	// browser never has to decide what a number says.
+	if n := len(v.Cursor.X); n != 3 {
+		t.Fatalf("%d columns for 3 points", n)
 	}
-	if title := v.Plots[0].Dots[1].Title; !strings.Contains(title, "players") || !strings.Contains(title, "5") {
-		t.Errorf("a hover label reads %q", title)
+	if got := v.Cursor.Series[0].Value; got[1] != "5" {
+		t.Errorf("the middle column reads %q", got[1])
+	}
+	if y := v.Cursor.Series[0].Y[2]; y == nil || *y != 10 {
+		t.Errorf("the last column's mark is at %v, want the top of the plot", y)
+	}
+	if v.Cursor.Left != 46 || v.Cursor.Right != 630 {
+		t.Errorf("the plot's bounds are %v..%v", v.Cursor.Left, v.Cursor.Right)
 	}
 	// Whole numbers stay whole: a chart of players online should not say 4.0.
 	if v.Plots[0].Latest != "10" {
@@ -201,5 +208,73 @@ func TestBarsStayInsideThePlot(t *testing.T) {
 					kind, count, right, chartW-chartPadR)
 			}
 		}
+	}
+}
+
+// The cursor reads every series at one moment, which is the thing a native
+// tooltip could never do: it can say what one line was worth and never what
+// the others were beside it.
+func TestTheCursorReadsEverySeriesAtOneColumn(t *testing.T) {
+	v := Chart("line", []Series{
+		{Label: "fabric", Points: []Point{{At: at(0), Value: 2}, {At: at(30), Value: 4}}},
+		// Started half an hour late, which is what a series added to a station
+		// after the fact looks like.
+		{Label: "forge", Points: []Point{{At: at(30), Value: 1}}},
+	}, " online", 0)
+
+	// The columns are the union of both, in order — a cursor built from one
+	// series would read the wrong column for the other.
+	if got := v.Cursor.At; len(got) != 2 {
+		t.Fatalf("%d columns for two series sharing one moment: %v", len(got), got)
+	}
+	if v.Cursor.X[0] >= v.Cursor.X[1] {
+		t.Errorf("the columns are not in order: %v", v.Cursor.X)
+	}
+
+	fabric, forge := v.Cursor.Series[0], v.Cursor.Series[1]
+	if fabric.Value[0] != "2 online" || fabric.Value[1] != "4 online" {
+		t.Errorf("fabric reads %v", fabric.Value)
+	}
+	// The column it has nothing for is null in both, so the browser knows to
+	// draw no mark rather than one at the top of the plot.
+	if forge.Y[0] != nil || forge.Value[0] != "" {
+		t.Errorf("a series with no point at a column reads %v / %q", forge.Y[0], forge.Value[0])
+	}
+	if forge.Y[1] == nil || forge.Value[1] != "1 online" {
+		t.Errorf("forge reads %q at the column it does have", forge.Value[1])
+	}
+	// Each side of the readout is drawn in its own series' colour, the same
+	// one the line is.
+	if fabric.Colour == forge.Colour {
+		t.Errorf("both series read out in %s", fabric.Colour)
+	}
+	if fabric.Colour != v.Plots[0].Colour {
+		t.Errorf("the readout is %s and the line is %s", fabric.Colour, v.Plots[0].Colour)
+	}
+
+	// And it survives the journey to the page.
+	if payload := v.CursorJSON(); !strings.Contains(payload, `"4 online"`) || !strings.Contains(payload, `null`) {
+		t.Errorf("the payload the page carries is %s", payload)
+	}
+}
+
+// A stacked chart's mark belongs on top of its own band rather than at its own
+// value, or the pointer lands somewhere the eye cannot find.
+func TestAStackedCursorFollowsTheBands(t *testing.T) {
+	v := Chart("stacked", []Series{
+		{Label: "fabric", Points: []Point{{At: at(0), Value: 6}}},
+		{Label: "forge", Points: []Point{{At: at(0), Value: 4}}},
+	}, "", 0)
+
+	first, second := v.Cursor.Series[0].Y[0], v.Cursor.Series[1].Y[0]
+	if first == nil || second == nil {
+		t.Fatal("a stacked chart's columns have no marks")
+	}
+	// Higher up the plot is a smaller y, and the second band sits on the first.
+	if *second >= *first {
+		t.Errorf("the second band's mark is at %v and the first at %v", *second, *first)
+	}
+	if *first != v.Plots[0].Bars[0].Y || *second != v.Plots[1].Bars[0].Y {
+		t.Error("the marks are not on the tops of the bars they belong to")
 	}
 }

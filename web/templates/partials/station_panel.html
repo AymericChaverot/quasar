@@ -145,24 +145,46 @@
   {{if .Empty}}
   <p class="faint py-6 text-center text-sm">Nothing measured yet — the first points appear once the station has sampled a few.</p>
   {{else}}
+  {{/* The wrapper is what the pointer is tracked over, and what the readout
+       is positioned inside. The data attribute carries every column of the
+       chart already worded by Go, so the browser arranges strings rather than
+       deciding what they say. */}}
+  <div class="station-chart-wrap" data-chart="{{.CursorJSON}}">
   <svg viewBox="0 0 {{.W}} {{.H}}" class="station-chart" role="img"
        aria-label="{{if $panel.Title}}{{$panel.Title}}{{else}}Chart{{end}}">
     {{range .Grid}}
     <line x1="46" y1="{{.Y}}" x2="{{$.Chart.W}}" y2="{{.Y}}" class="station-chart-grid"/>
     <text x="40" y="{{.Y}}" class="station-chart-label" text-anchor="end" dominant-baseline="middle">{{.Label}}</text>
     {{end}}
+    <line class="station-chart-cursor" y1="{{.Cursor.Top}}" y2="{{.Cursor.Bottom}}" x1="0" x2="0" hidden/>
     {{range .Plots}}
     {{$colour := .Colour}}
     {{if .Area}}<polygon points="{{.Area}}" fill="{{$colour}}" fill-opacity="0.14"/>{{end}}
     {{if .Line}}<polyline points="{{.Line}}" fill="none" stroke="{{$colour}}" stroke-width="2"
                           stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>{{end}}
-    {{range .Bars}}<rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" fill="{{$colour}}" rx="1"><title>{{.Title}}</title></rect>{{end}}
-    {{range .Dots}}<circle cx="{{.X}}" cy="{{.Y}}" r="6" fill="transparent"><title>{{.Title}}</title></circle>{{end}}
+    {{range .Bars}}<rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" fill="{{$colour}}" rx="1"/>{{end}}
+    {{end}}
+    {{/* One mark per series, parked until the pointer puts it somewhere. */}}
+    {{range .Cursor.Series}}
+    <circle class="station-chart-mark" r="3.5" cx="0" cy="0" fill="{{.Colour}}" hidden/>
     {{end}}
     {{range .Times}}
     <text x="{{.X}}" y="{{$.Chart.H}}" class="station-chart-label" text-anchor="{{.Anchor}}">{{.Label}}</text>
     {{end}}
   </svg>
+  <div class="station-chart-readout" hidden>
+    <p class="station-chart-when"></p>
+    <ul>
+      {{range .Cursor.Series}}
+      <li>
+        <svg viewBox="0 0 8 8" class="station-chart-key" aria-hidden="true"><rect width="8" height="8" rx="2" fill="{{.Colour}}"/></svg>
+        {{if $.Chart.Legend}}<span class="station-chart-name">{{.Label}}</span>{{end}}
+        <span class="station-chart-value mono"></span>
+      </li>
+      {{end}}
+    </ul>
+  </div>
+  </div>
   {{if .Legend}}
   <ul class="station-chart-legend">
     {{range .Plots}}

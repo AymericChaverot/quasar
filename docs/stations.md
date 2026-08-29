@@ -450,10 +450,15 @@ value renders the panel — `{static: ...}` for content that never changes, or
           refresh: {seconds: 60}
 ```
 
-A chart is drawn on the server as SVG, with native `<title>` tooltips and no
-client JavaScript, which is what the dashboard's own sparklines already are.
-Naming more than one series draws them together, each in the next of the
+A chart is drawn on the server as SVG, the way the dashboard's own sparklines
+are. Naming more than one series draws them together, each in the next of the
 theme's `chart` colours, with a legend.
+
+Pointing at one puts a rule down the column under the pointer, a mark on every
+series at that moment, and a card giving the time and what each of them read.
+Every word of that was written by Quasar before the page was sent — the same
+rounding, the same unit, the same clock as the rest of the chart — and the
+browser only arranges it, so a station never has a say in what a number says.
 
 **A chart on `{series: ...}` runs nothing.** No worker starts, no script is
 loaded: the points are in Quasar's own tables and the panel is a query. It is

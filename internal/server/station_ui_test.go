@@ -567,8 +567,13 @@ func TestTheBlockDrawsItsTabStrip(t *testing.T) {
 func TestAChartPanelDrawsWhatTheStationRecorded(t *testing.T) {
 	c, _ := brokerFor(t, station.Permissions{}, "")
 
-	for _, v := range []float64{3, 9, 6} {
-		if err := db.RecordStationSeries(c.srv.db, c.app.ID, c.doc.ID, "players", v); err != nil {
+	// Written with times of their own rather than through the recorder, which
+	// stamps every sample with the current second: three of those are three
+	// readings of one moment, and one moment is one column.
+	for i, v := range []float64{3, 9, 6} {
+		at := time.Now().UTC().Add(time.Duration(i-3) * time.Hour).Format("2006-01-02 15:04:05")
+		if _, err := c.srv.db.Exec(`INSERT INTO station_series (app_id, station_id, name, ts, value)
+			VALUES (?, ?, ?, ?, ?)`, c.app.ID, c.doc.ID, "players", at, v); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -581,8 +586,13 @@ func TestAChartPanelDrawsWhatTheStationRecorded(t *testing.T) {
 		"<svg",          // drawn, not described
 		"<polyline",     // the line itself
 		"<polygon",      // and the area under it, because kind is area
-		"9 online",      // a hover label, carrying the unit
 		"var(--chart-1", // in the station's own first series colour
+		// And everything the pointer reads out, worded here rather than in
+		// the browser: three moments, three values, each carrying the unit.
+		`"value":["3 online","9 online","6 online"]`,
+		"station-chart-cursor", // the rule that follows the pointer
+		"station-chart-mark",   // and the point it lands on
+		"station-chart-readout",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the chart does not draw %q:\n%s", want, page)

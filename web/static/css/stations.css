@@ -865,3 +865,58 @@
   height: 0.5rem;
   flex-shrink: 0;
 }
+
+/* The readout that follows the pointer. The wrapper is the positioning
+   context, and the only thing in here that moves is the card: the cursor and
+   the marks are inside the SVG, in its own coordinates. */
+.station-chart-wrap {
+  position: relative;
+}
+.station-chart-cursor {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.station-chart-mark {
+  stroke: var(--surface);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.station-chart-readout {
+  position: absolute;
+  top: 0.25rem;
+  /* Clear of the cursor it belongs to, on whichever side it is drawn. */
+  transform: translateX(0.625rem);
+  z-index: 2;
+  min-width: 7rem;
+  padding: 0.4375rem 0.5625rem;
+  border: var(--border-w, 1px) solid var(--border);
+  border-radius: var(--radius, 8px);
+  background: var(--station-surface-2, var(--surface-2));
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  pointer-events: none;
+}
+.station-chart-readout.is-left {
+  transform: translateX(calc(-100% - 0.625rem));
+}
+.station-chart-when {
+  margin: 0 0 0.1875rem;
+  color: var(--text-faint);
+  font-size: 0.75rem;
+}
+.station-chart-readout li {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  white-space: nowrap;
+}
+/* A series with no point at this column keeps its row rather than closing the
+   gap, so the card does not resize as the pointer crosses the moment one of
+   them started. */
+.station-chart-readout li.is-absent { opacity: 0.45; }
+.station-chart-name { color: var(--text-muted, var(--text-faint)); }
+.station-chart-value { margin-left: auto; }
