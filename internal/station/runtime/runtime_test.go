@@ -1,6 +1,7 @@
 package runtime_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -286,5 +287,64 @@ func TestTheScriptGetsNothingItWasNotGiven(t *testing.T) {
 		if got.Data != "undefined" {
 			t.Errorf("%s is %q in a station's script", global, got.Data)
 		}
+	}
+}
+
+// A mod is a jar, a jar is a zip, and a zip is bytes that are not text. The
+// journey it makes has two halves — down from the server the station fetched
+// it from, then up to the file the station writes it to — and both cross a
+// pipe carrying JSON, which carries UTF-8 and nothing else. This is the test
+// that says neither half turns a byte into U+FFFD, because the way that fails
+// is not an error anybody sees: the action succeeds, the file is written, and
+// the server refuses to load a mod that unzip cannot open either.
+func TestBytesSurviveBothWaysThroughThePipe(t *testing.T) {
+	jar := []byte{'P', 'K', 0x03, 0x04, 0x00, 0xFF, 0xFE, 0x80, '\n', 0xC3, 0x28}
+
+	var written []byte
+	broker := &asked{answer: func(capability string, args json.RawMessage) (json.RawMessage, error) {
+		switch capability {
+		case "http.get":
+			return json.Marshal(map[string]any{"status": 200, "body": jar})
+		case "files.write":
+			var a struct {
+				Content []byte `json:"content"`
+			}
+			if err := json.Unmarshal(args, &a); err != nil {
+				return nil, err
+			}
+			written = a.Content
+			return json.RawMessage("null"), nil
+		}
+		return nil, errors.New("this station has not been granted " + capability)
+	}}
+
+	out, _, err := callWith(t, `
+		export function install() {
+			const resp = quasar.http.get('https://example.com/sodium.jar')
+			quasar.files.write('data/mods/sodium.jar', resp.bytes())
+			return { data: { length: resp.bytes().length, first: resp.bytes()[0] } }
+		}
+	`, "install", broker)
+	if err != nil {
+		t.Fatalf("the action failed: %v", err)
+	}
+	if !bytes.Equal(written, jar) {
+		t.Errorf("the file was written %v, want %v", written, jar)
+	}
+
+	// And the script saw the same length the server sent, rather than the
+	// longer one a replacement character per bad byte would have produced.
+	var got struct {
+		Data struct {
+			Length int `json:"length"`
+			First  int `json:"first"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Value, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Data.Length != len(jar) || got.Data.First != 'P' {
+		t.Errorf("the script read %d bytes starting with %d, want %d starting with %d",
+			got.Data.Length, got.Data.First, len(jar), 'P')
 	}
 }

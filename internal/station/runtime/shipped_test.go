@@ -408,7 +408,9 @@ func TestTheMinecraftStationOffersEveryRelease(t *testing.T) {
 			if !strings.Contains(string(args), "piston-meta.mojang.com") {
 				return nil, errors.New("this station has not been granted that host")
 			}
-			return json.Marshal(map[string]any{"status": 200, "body": manifest})
+			// Bytes, which is what the parent sends and what json encodes as
+			// base64 — a body is not text until the worker says it is.
+			return json.Marshal(map[string]any{"status": 200, "body": []byte(manifest)})
 		case "env.get":
 			return json.Marshal("1.21.1")
 		}

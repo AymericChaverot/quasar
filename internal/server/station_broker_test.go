@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"html/template"
@@ -118,7 +119,7 @@ func TestASymlinkOutOfTheFolderIsRefused(t *testing.T) {
 	}
 	// And writing through one replaces the link rather than the target, which
 	// is the storage explorer's own guarantee showing through.
-	ask(t, c, "files.write", map[string]any{"path": "data/escape", "content": "mine"})
+	ask(t, c, "files.write", map[string]any{"path": "data/escape", "content": []byte("mine")})
 	if got, _ := os.ReadFile(outside); string(got) != "not yours" {
 		t.Errorf("the write went through the link: the target now reads %q", got)
 	}
@@ -127,13 +128,31 @@ func TestASymlinkOutOfTheFolderIsRefused(t *testing.T) {
 func TestFilesRoundTripWithinTheGlobs(t *testing.T) {
 	c, dir := brokerFor(t, station.Permissions{Files: station.Files{Paths: []string{"data/mods/**"}}}, "")
 
+	// A real jar, in the only respect that matters here: it opens with the two
+	// bytes every zip does and goes on to hold bytes that are not text at all.
+	// Written through a JSON string, every one of those would reach the disk
+	// as U+FFFD and the file would be a jar nothing could open.
+	jar := []byte{'P', 'K', 0x03, 0x04, 0x00, 0xFF, 0xFE, 0x80, '\n', 0xC3}
 	if _, err := ask(t, c, "files.write", map[string]any{
-		"path": "data/mods/sodium.jar", "content": "jar bytes",
+		"path": "data/mods/sodium.jar", "content": jar,
 	}); err != nil {
 		t.Fatalf("writing: %v", err)
 	}
-	if got, err := os.ReadFile(filepath.Join(dir, "data", "mods", "sodium.jar")); err != nil || string(got) != "jar bytes" {
-		t.Fatalf("the file on disk is %q (%v)", got, err)
+	if got, err := os.ReadFile(filepath.Join(dir, "data", "mods", "sodium.jar")); err != nil || !bytes.Equal(got, jar) {
+		t.Fatalf("the file on disk is %v (%v), want %v", got, err, jar)
+	}
+
+	// And back out again, which is the same journey in reverse.
+	read, err := ask(t, c, "files.readBytes", map[string]any{"path": "data/mods/sodium.jar"})
+	if err != nil {
+		t.Fatalf("reading the bytes back: %v", err)
+	}
+	var back []byte
+	if err := json.Unmarshal(read, &back); err != nil {
+		t.Fatalf("readBytes did not answer with bytes: %v (%s)", err, read)
+	}
+	if !bytes.Equal(back, jar) {
+		t.Errorf("readBytes returned %v, want %v", back, jar)
 	}
 
 	listed, err := ask(t, c, "files.list", map[string]any{"path": "data/mods"})

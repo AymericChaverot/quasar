@@ -1133,7 +1133,7 @@ script: |
         quasar.env.get('MINECRAFT_VERSION') + '.' }
     }
 
-    quasar.files.write(modDir() + '/' + file.filename, quasar.http.get(file.url).body)
+    quasar.files.write(modDir() + '/' + file.filename, quasar.http.get(file.url).bytes())
     note('installed ' + slug + ' ' + file.version)
     return { toast: slug + ' ' + file.version + ' installed — restart to load it',
              refresh: ['mc_modlist', 'mc_events'] }
@@ -1153,7 +1153,7 @@ script: |
     if (!found) return { warn: 'Nothing newer is known for this one. Check for updates first.' }
 
     quasar.progress(20, 'downloading ' + found.filename)
-    quasar.files.write(modDir() + '/' + found.filename, quasar.http.get(found.url).body)
+    quasar.files.write(modDir() + '/' + found.filename, quasar.http.get(found.url).bytes())
     if (found.filename !== file) quasar.files.delete(modDir() + '/' + file)
 
     delete known[file]

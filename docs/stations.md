@@ -282,7 +282,7 @@ quasar.files.write(path, content)       // atomic
 quasar.files.delete(path)
 quasar.files.mkdir(path)
 
-quasar.http.get(url, opts)              // -> {status, headers, body, json()}
+quasar.http.get(url, opts)              // -> {status, headers, body, json(), bytes()}
 quasar.http.post(url, opts)
 quasar.service(name, port)              // -> a base URL on the internal network
 
@@ -296,6 +296,16 @@ quasar.progress(percent, message)       // long actions only, see § Actions
 Everything is synchronous. There is no event loop, no promises, no
 `setTimeout`: a station action is a function that runs and returns, which is
 both simpler to write and simpler to bound.
+
+**A response has two bodies, and downloads want the second one.** `body` is the
+answer as text, which is what an API returns and what almost every action
+reads. `bytes()` is the answer as it actually arrived, a `Uint8Array`, and it
+is what anything that is not text has to go through: a jar, an image, an
+archive. Reading a mod through `body` and writing that is how a station
+installs a file the server then refuses to load — text is UTF-8, a jar is not,
+and every byte that is not valid UTF-8 becomes U+FFFD on the way past without
+anything failing. `quasar.files.write` takes either, and `quasar.files.readBytes`
+hands back the same `Uint8Array` on the way out.
 
 ### Limits
 
@@ -415,7 +425,7 @@ An action is an exported function. Its return value drives the interface:
 ```js
 export function add_mod({ url }) {
   const meta = quasar.http.get(`https://api.modrinth.com/v2/project/${slug(url)}`).json()
-  const file = quasar.http.get(meta.files[0].url).body
+  const file = quasar.http.get(meta.files[0].url).bytes()
   quasar.files.write(`data/mods/${meta.filename}`, file)
   return { toast: `${meta.title} installed`, refresh: ['mod_list'] }
 }
@@ -787,7 +797,7 @@ script: |
       return { error: `No build of ${slug} for ${quasar.app.params.TYPE} ${quasar.env.get('MINECRAFT_VERSION')}.` }
 
     const file = versions[0].files.find(f => f.primary)
-    quasar.files.write(`${MODS}/${file.filename}`, quasar.http.get(file.url).body)
+    quasar.files.write(`${MODS}/${file.filename}`, quasar.http.get(file.url).bytes())
     return { toast: `${slug} installed — restart to load it`, refresh: ['mod_list'] }
   }
 
@@ -795,7 +805,7 @@ script: |
     const next = (quasar.store.get('updates') || {})[file]
     if (!next) return { toast: `${name} is already on the newest build` }
 
-    quasar.files.write(`${MODS}/${next.filename}`, quasar.http.get(next.url).body)
+    quasar.files.write(`${MODS}/${next.filename}`, quasar.http.get(next.url).bytes())
     if (next.filename !== file) quasar.files.delete(`${MODS}/${file}`)
     return { toast: `${name} updated — restart to load it`, refresh: ['mod_list'] }
   }

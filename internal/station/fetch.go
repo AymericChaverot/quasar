@@ -43,10 +43,20 @@ const MaxHTTPBody = 8 << 20
 const httpTimeout = 30 * time.Second
 
 // Response is what a station gets back.
+//
+// The body is bytes rather than a string, and travels to the worker base64
+// encoded — which is what encoding/json does with a []byte, and the reason the
+// field is one. A string here would be marshalled as JSON text, and JSON text
+// is UTF-8: every byte of a jar or an image that is not valid UTF-8 would be
+// replaced by U+FFFD on the way through the pipe, so a station could fetch a
+// mod but never write the one it fetched. Base64 also costs a predictable
+// third rather than the sixfold that escaping a binary body ran to, which is
+// what used to take a large download past the protocol's line limit and kill
+// the worker instead of reporting anything.
 type Response struct {
 	Status  int               `json:"status"`
 	Headers map[string]string `json:"headers"`
-	Body    string            `json:"body"`
+	Body    []byte            `json:"body"`
 }
 
 // Fetcher is one station's way out, for one call.
@@ -142,7 +152,7 @@ func (f *Fetcher) Do(ctx context.Context, method, raw string, headers map[string
 			u.Host, MaxHTTPBody>>20)
 	}
 
-	out := Response{Status: resp.StatusCode, Headers: map[string]string{}, Body: string(read)}
+	out := Response{Status: resp.StatusCode, Headers: map[string]string{}, Body: read}
 	for k := range resp.Header {
 		out.Headers[strings.ToLower(k)] = resp.Header.Get(k)
 	}

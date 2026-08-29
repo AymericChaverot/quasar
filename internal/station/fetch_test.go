@@ -61,7 +61,7 @@ func TestOnlyListedHostsAreReached(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a listed host was refused: %v", err)
 	}
-	if resp.Status != 200 || resp.Body != `{"ok":true}` {
+	if resp.Status != 200 || string(resp.Body) != `{"ok":true}` {
 		t.Errorf("response = %+v", resp)
 	}
 

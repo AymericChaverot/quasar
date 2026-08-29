@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -211,11 +212,11 @@ func (b *bridge) files() *goja.Object {
 	obj := b.vm.NewObject()
 	set(obj, "list", func(path string) goja.Value { return b.ask("files.list", pathArg(path)) })
 	set(obj, "read", func(path string) goja.Value { return b.ask("files.read", pathArg(path)) })
-	set(obj, "readBytes", func(path string) goja.Value { return b.ask("files.readBytes", pathArg(path)) })
+	set(obj, "readBytes", func(path string) goja.Value { return b.askBytes("files.readBytes", pathArg(path)) })
 	set(obj, "delete", func(path string) goja.Value { return b.ask("files.delete", pathArg(path)) })
 	set(obj, "mkdir", func(path string) goja.Value { return b.ask("files.mkdir", pathArg(path)) })
-	set(obj, "write", func(path string, content goja.Value) goja.Value {
-		return b.ask("files.write", map[string]any{"path": path, "content": text(content)})
+	set(obj, "write", func(path string, value goja.Value) goja.Value {
+		return b.ask("files.write", map[string]any{"path": path, "content": content(value)})
 	})
 	return obj
 }
@@ -235,13 +236,28 @@ func (b *bridge) env() *goja.Object {
 
 func pathArg(path string) map[string]any { return map[string]any{"path": path} }
 
-// text is a value on its way to a file or an environment line. An array of
-// bytes — what readBytes hands back, and what an action downloading a mod
-// passes straight through — becomes those bytes rather than "1,2,3".
-func text(v goja.Value) string {
+// text is a value on its way to an environment line, which is text by
+// definition: a variable holding a byte that is not one has nowhere to be
+// written.
+func text(v goja.Value) string { return string(content(v)) }
+
+// content is a value on its way to a file. Bytes — what bytes() and readBytes()
+// hand back, and what an action downloading a mod passes straight through —
+// stay those bytes rather than becoming "1,2,3", and they leave as a []byte
+// rather than a string so that the pipe carries them base64 encoded. A string
+// here would be JSON text on the way up, and the jar would arrive at the file
+// with every byte that is not valid UTF-8 replaced, which is the same way it
+// used to arrive from the server.
+func content(v goja.Value) []byte {
 	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
-		return ""
+		return nil
 	}
+	// A Uint8Array, which is what bytes() and readBytes() return.
+	if buf, ok := v.Export().([]byte); ok {
+		return buf
+	}
+	// An ordinary array whose elements happen to be byte-sized, which is what
+	// a script that built one itself passes.
 	if numbers, ok := v.Export().([]any); ok {
 		buf := make([]byte, 0, len(numbers))
 		for _, n := range numbers {
@@ -251,12 +267,12 @@ func text(v goja.Value) string {
 			case float64:
 				buf = append(buf, byte(int64(b)))
 			default:
-				return v.String()
+				return []byte(v.String())
 			}
 		}
-		return string(buf)
+		return buf
 	}
-	return v.String()
+	return []byte(v.String())
 }
 
 // http is the way out, over the parent, which is where the allowlist lives.
@@ -298,13 +314,18 @@ func (b *bridge) request(capability, url string, opts goja.Value) goja.Value {
 	if !ok {
 		return resp
 	}
+	// The body arrives base64 encoded and is decoded once, here: .body stays
+	// the string it has always been, and .bytes() hands over exactly what the
+	// server sent, which is the only one of the two a jar survives.
+	body := b.decode(capability, obj.Get("body"))
+	set(obj, "body", string(body))
+	set(obj, "bytes", func() goja.Value { return b.uint8Array(body) })
 	set(obj, "json", func() goja.Value {
-		body := obj.Get("body")
-		if body == nil || goja.IsUndefined(body) {
+		if len(body) == 0 {
 			return goja.Undefined()
 		}
 		var v any
-		if err := json.Unmarshal([]byte(body.String()), &v); err != nil {
+		if err := json.Unmarshal(body, &v); err != nil {
 			panic(b.vm.NewGoError(fmt.Errorf("the answer is not JSON: %w", err)))
 		}
 		return b.vm.ToValue(v)
@@ -341,6 +362,43 @@ func (b *bridge) ask(capability string, args any) goja.Value {
 		panic(b.vm.NewGoError(fmt.Errorf("%s answered with something unreadable: %w", capability, err)))
 	}
 	return b.vm.ToValue(v)
+}
+
+// askBytes is a capability whose answer is bytes rather than a value.
+func (b *bridge) askBytes(capability string, args any) goja.Value {
+	return b.uint8Array(b.decode(capability, b.ask(capability, args)))
+}
+
+// decode reads what the parent sent as bytes. JSON has no way to carry a byte
+// that is not text, so everything binary crosses the pipe base64 encoded —
+// which is also what encoding/json does with a []byte on the other side, so
+// the two ends agree without either having to say so.
+func (b *bridge) decode(capability string, v goja.Value) []byte {
+	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
+		return nil
+	}
+	buf, err := base64.StdEncoding.DecodeString(v.String())
+	if err != nil {
+		panic(b.vm.NewGoError(fmt.Errorf("%s answered with something unreadable: %w", capability, err)))
+	}
+	return buf
+}
+
+// uint8Array is bytes as the script sees them. An ordinary array of numbers
+// would read the same in a script and cost roughly sixteen times the memory —
+// a five megabyte download is five million interpreter values, against a
+// worker held to 128 MB — and it is the wrong type besides: the documented
+// one has always been Uint8Array.
+func (b *bridge) uint8Array(buf []byte) goja.Value {
+	ctor, ok := goja.AssertConstructor(b.vm.Get("Uint8Array"))
+	if !ok {
+		panic(b.vm.NewGoError(fmt.Errorf("this runtime has no Uint8Array to put %d bytes in", len(buf))))
+	}
+	obj, err := ctor(nil, b.vm.ToValue(b.vm.NewArrayBuffer(buf)))
+	if err != nil {
+		panic(b.vm.NewGoError(err))
+	}
+	return obj
 }
 
 // exported turns a script value into something that survives JSON on its way

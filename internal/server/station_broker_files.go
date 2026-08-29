@@ -1,11 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"quasar/internal/files"
 )
@@ -20,8 +20,12 @@ import (
 const maxStationFileBytes = 4 << 20
 
 type fileArgs struct {
-	Path    string `json:"path"`
-	Content string `json:"content"`
+	Path string `json:"path"`
+
+	// Content is bytes, and arrives base64 encoded for the reason it leaves
+	// that way: JSON carries text, and a jar written through a JSON string
+	// reaches the disk with every byte that is not valid UTF-8 replaced.
+	Content []byte `json:"content"`
 }
 
 // files reads and writes under apps/<id>/, restricted to the globs the
@@ -75,14 +79,12 @@ func (c *stationCall) files(capability string, raw json.RawMessage) (json.RawMes
 			return nil, err
 		}
 		if capability == "files.readBytes" {
-			// As numbers, which is what a Uint8Array is on the other side.
-			// Bytes that are not text have no business being turned into a
-			// string on the way past.
-			out := make([]int, len(buf))
-			for i, b := range buf {
-				out[i] = int(b)
-			}
-			return json.Marshal(out)
+			// Base64, which is what encoding/json does with a []byte and what
+			// the worker turns back into a Uint8Array. Bytes that are not text
+			// have no business being turned into a string on the way past: the
+			// pipe carries JSON, JSON carries UTF-8, and every byte that is
+			// not valid UTF-8 would arrive as U+FFFD.
+			return json.Marshal(buf)
 		}
 		return json.Marshal(string(buf))
 
@@ -91,7 +93,7 @@ func (c *stationCall) files(capability string, raw json.RawMessage) (json.RawMes
 		// so a configuration file is never read half-written, and permissions
 		// are preserved — a secret at 600 does not come back at 644 because a
 		// station touched it.
-		n, err := root.Save(a.Path, strings.NewReader(a.Content), maxStationFileBytes)
+		n, err := root.Save(a.Path, bytes.NewReader(a.Content), maxStationFileBytes)
 		if err != nil {
 			return nil, readableFileError(err, a.Path)
 		}
