@@ -145,3 +145,61 @@ func lastY(line string) float64 {
 	}
 	return y
 }
+
+// A scale worked out from the data ends where a person would have ended it. A
+// chart labelled 3.3 and 1.7 is arithmetic showing through, and it tells the
+// reader nothing the plot did not already say.
+func TestAWorkedOutScaleEndsSomewhereRound(t *testing.T) {
+	for peak, want := range map[float64]string{
+		4:    "4",   // a handful of restarts
+		17:   "20",  // players at their busiest
+		0.42: "0.5", // a fraction
+		230:  "250", // a queue
+	} {
+		v := Chart("line", []Series{{Points: []Point{{At: at(0), Value: peak}}}}, "", 0)
+		if got := v.Grid[len(v.Grid)-1].Label; got != want {
+			t.Errorf("a peak of %v put the top of the scale at %q, want %q", peak, got, want)
+		}
+	}
+
+	// And the unit is on that label alone: repeating it down the side says
+	// nothing the first one did not.
+	v := Chart("line", []Series{{Points: []Point{{At: at(0), Value: 8}}}}, " online", 0)
+	if top := v.Grid[len(v.Grid)-1].Label; !strings.HasSuffix(top, " online") {
+		t.Errorf("the top of the scale reads %q, without the unit", top)
+	}
+	for _, g := range v.Grid[:len(v.Grid)-1] {
+		if strings.Contains(g.Label, "online") {
+			t.Errorf("the unit is repeated on %q", g.Label)
+		}
+	}
+}
+
+// Bars are drawn from their centres, so the first and the last need half a bar
+// of room or one sits on the value labels and the other runs out of the plot —
+// which is exactly what they did until somebody looked at a chart rather than
+// at its coordinates.
+func TestBarsStayInsideThePlot(t *testing.T) {
+	for _, kind := range []string{"bar", "stacked"} {
+		for _, count := range []int{1, 2, 7, 288} {
+			points := make([]Point, count)
+			for i := range points {
+				points[i] = Point{At: at(i * 5), Value: 3}
+			}
+			v := Chart(kind, []Series{{Label: "restarts", Points: points}}, "", 0)
+
+			bars := v.Plots[0].Bars
+			if len(bars) != count {
+				t.Fatalf("%s of %d points drew %d bars", kind, count, len(bars))
+			}
+			if left := bars[0].X; left < chartPadL-0.01 {
+				t.Errorf("%s of %d: the first bar starts at %v, left of the plot at %v",
+					kind, count, left, chartPadL)
+			}
+			if right := bars[len(bars)-1].X + bars[len(bars)-1].W; right > chartW-chartPadR+0.01 {
+				t.Errorf("%s of %d: the last bar ends at %v, right of the plot at %v",
+					kind, count, right, chartW-chartPadR)
+			}
+		}
+	}
+}

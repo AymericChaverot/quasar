@@ -171,27 +171,41 @@ func Chart(kind string, series []Series, unit string, fixedMax float64) ChartVie
 		return v
 	}
 
+	// A declared max is taken as written — a percentage chart says 100 and
+	// means it. One worked out from the data is rounded up to somewhere a
+	// person would have put it, because a scale labelled 3.3 and 1.7 reads as
+	// an accident and tells nobody anything the data did not already say.
 	top := fixedMax
 	if top <= 0 {
-		top = peak(kind, series) * 1.1
-	}
-	if top <= 0 {
-		top = 1
+		top = niceTop(peak(kind, series))
 	}
 
 	v.Grid = grid(top, unit)
 	v.Times = times(from, to)
+
+	// Bars are drawn from their centres, so the ends of the window need half a
+	// bar of room on each side or the first one sits on the value labels and
+	// the last one runs out of the plot. One width for the whole chart, from
+	// the longest series, so that series drawn together line up.
+	bar := barWidth(longest(series), len(series), kind)
+	inset := 0.0
+	if kind == "bar" || kind == "stacked" {
+		inset = bar / 2
+		if kind == "bar" && len(series) > 1 {
+			inset = bar * float64(len(series)) / 2
+		}
+	}
 
 	// Where a value sits vertically, and where a moment sits horizontally.
 	y := func(value float64) float64 {
 		return chartPadT + (chartH-chartPadT-chartPadB)*(1-clamp(value/top))
 	}
 	x := func(at time.Time) float64 {
-		width := chartW - chartPadL - chartPadR
+		left, right := chartPadL+inset, chartW-chartPadR-inset
 		if !to.After(from) {
-			return chartPadL + width/2
+			return (left + right) / 2
 		}
-		return chartPadL + width*float64(at.Sub(from))/float64(to.Sub(from))
+		return left + (right-left)*float64(at.Sub(from))/float64(to.Sub(from))
 	}
 
 	// Stacked bars sit on the running total of the series before them, which
@@ -206,18 +220,17 @@ func Chart(kind string, series []Series, unit string, fixedMax float64) ChartVie
 
 		switch kind {
 		case "bar", "stacked":
-			width := barWidth(len(s.Points), len(series), kind)
 			for _, pt := range s.Points {
 				base := stacked[pt.At]
 				topY, baseY := y(base+pt.Value), y(base)
-				left := x(pt.At) - width/2
+				left := x(pt.At) - bar/2
 				if kind == "bar" && len(series) > 1 {
 					// Side by side, so two series of bars at the same moment
 					// are both visible.
-					left = x(pt.At) - width*float64(len(series))/2 + width*float64(i)
+					left = x(pt.At) - bar*float64(len(series))/2 + bar*float64(i)
 				}
 				p.Bars = append(p.Bars, ChartBar{
-					X: left, Y: topY, W: width, H: math.Max(baseY-topY, 1),
+					X: left, Y: topY, W: bar, H: math.Max(baseY-topY, 1),
 					Title: title(pt, s.Label, unit),
 				})
 				if kind == "stacked" {
@@ -283,14 +296,53 @@ func peak(kind string, series []Series) float64 {
 	return max
 }
 
+// niceTop is where a person would have ended the scale: the next round number
+// of the right magnitude above the largest value.
+//
+// The ladder includes 4 as well as the usual 1, 2, 2.5, 5 and 10, because so
+// much of what a station measures is a small count of things — four restarts,
+// eight players — and putting the top of that scale at 5 wastes a fifth of the
+// plot to say the same thing. Every rung halves into another number worth
+// reading, which is what the middle rule shows.
+func niceTop(max float64) float64 {
+	if max <= 0 {
+		return 1
+	}
+	magnitude := math.Pow(10, math.Floor(math.Log10(max)))
+	for _, step := range []float64{1, 2, 2.5, 4, 5, 10} {
+		if top := step * magnitude; top >= max {
+			return top
+		}
+	}
+	return 10 * magnitude
+}
+
+// longest is the number of points in the fullest series, which is what the bar
+// width has to fit.
+func longest(series []Series) int {
+	n := 0
+	for _, s := range series {
+		n = max(n, len(s.Points))
+	}
+	return n
+}
+
 // grid is the horizontal rules, from the axis up.
+//
+// Only the top one carries the unit. Repeating " online" down the side says
+// nothing the first one did not and crowds the plot, and the top label is the
+// one somebody reads to learn what the scale is measuring.
 func grid(top float64, unit string) []ChartGrid {
 	out := make([]ChartGrid, 0, chartGridLines)
 	for i := range chartGridLines {
 		share := float64(i) / float64(chartGridLines-1)
+		label := amount(top*share, "")
+		if i == chartGridLines-1 {
+			label = amount(top*share, unit)
+		}
 		out = append(out, ChartGrid{
 			Y:     chartPadT + (chartH-chartPadT-chartPadB)*(1-share),
-			Label: amount(top*share, unit),
+			Label: label,
 		})
 	}
 	return out
