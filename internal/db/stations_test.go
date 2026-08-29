@@ -56,3 +56,47 @@ func TestOnlyEnabledStationsCount(t *testing.T) {
 		t.Errorf("%d enabled stations after disabling the only one", n)
 	}
 }
+
+// A store is scoped to an application and a station, so either one going is
+// enough to orphan it, and both ends clear their side. What the test insists
+// on is that each end clears only its own: two stations on one application and
+// one station on two applications are both ordinary, and a delete that took
+// the neighbour's rows with it would be discovered as a station that had
+// forgotten everything the moment somebody removed a different one.
+func TestRemovingEitherEndClearsTheStoreItOrphans(t *testing.T) {
+	database := openTestDB(t)
+
+	id, err := InsertStation(database, &Station{StationID: "minecraft", Name: "Minecraft", YAML: "schema: 1", PermsHash: "x", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct{ app, station string }{
+		{"app1", "minecraft"},
+		{"app2", "minecraft"},
+		{"app1", "gitea"},
+	} {
+		if err := StationStoreSet(database, row.app, row.station, "seen", "yes"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := DeleteAppStore(database, "app2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := StationStoreGet(database, "app2", "minecraft", "seen"); ok {
+		t.Error("the store of a deleted application survived it")
+	}
+	if _, ok := StationStoreGet(database, "app1", "minecraft", "seen"); !ok {
+		t.Error("deleting one application cleared another's store")
+	}
+
+	if err := DeleteStation(database, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := StationStoreGet(database, "app1", "minecraft", "seen"); ok {
+		t.Error("the store of a removed station survived it")
+	}
+	if _, ok := StationStoreGet(database, "app1", "gitea", "seen"); !ok {
+		t.Error("removing one station cleared what another had remembered")
+	}
+}

@@ -191,7 +191,12 @@ permissions:
 | `notify` | Sending to the configured webhook | Rate-limited. |
 
 `quasar.store` needs no permission: it is a small key–value space scoped to one
-application and one station, and it can reach nothing else.
+application and one station, and it can reach nothing else. It lives exactly as
+long as that pair does: deleting the application clears what every station kept
+for it, and removing the station clears what it kept for every application. The
+applications carry on either way — a removed station leaves them running, as it
+always did — but nothing is left behind that would be read back if the same
+station id were installed again.
 
 **`net.external` must name its hosts.** A permission that reads "may reach the
 internet" tells the operator nothing and is an exfiltration channel with their

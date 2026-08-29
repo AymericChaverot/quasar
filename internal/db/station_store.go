@@ -93,10 +93,24 @@ func StationStoreBytes(db *sql.DB, appID, stationID string) (int, error) {
 	return int(n.Int64), nil
 }
 
-// DeleteStationStore clears everything one station kept for one application.
+// A store is scoped to a pair, so it has two ways of being orphaned and needs
+// clearing from both ends: the application it described can go, and so can the
+// station that wrote it.
+
+// DeleteAppStore clears everything every station kept for one application.
 // Called when the application goes, so a store does not outlive the thing it
 // was about.
-func DeleteStationStore(db *sql.DB, appID string) error {
+func DeleteAppStore(db *sql.DB, appID string) error {
 	_, err := db.Exec(`DELETE FROM station_store WHERE app_id = ?`, appID)
+	return err
+}
+
+// DeleteStationStore clears everything one station kept, for every application
+// it ran on. Called when the station is removed: the applications keep
+// running, but nothing is left that would read this back, and a store that
+// outlived its station would come back as somebody else's stale answers if the
+// id were ever installed again.
+func DeleteStationStore(db *sql.DB, stationID string) error {
+	_, err := db.Exec(`DELETE FROM station_store WHERE station_id = ?`, stationID)
 	return err
 }

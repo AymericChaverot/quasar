@@ -180,7 +180,17 @@ func ToggleStationFavorite(db *sql.DB, stationID string) (bool, error) {
 	return on, err
 }
 
+// DeleteStation removes a station and whatever it remembered. The
+// applications it deployed keep running — that is the point of a station
+// leaving an ordinary application behind — but nothing is left that would ever
+// read the store back, and rows scoped to a station id that no longer exists
+// are debris nothing else in the schema would ever collect.
 func DeleteStation(db *sql.DB, id int64) error {
+	if row := GetStation(db, id); row != nil {
+		if err := DeleteStationStore(db, row.StationID); err != nil {
+			return err
+		}
+	}
 	_, err := db.Exec("DELETE FROM stations WHERE id = ?", id)
 	return err
 }

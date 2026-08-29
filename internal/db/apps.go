@@ -247,7 +247,7 @@ func DeleteApp(db *sql.DB, id string) error {
 	// Whatever a station remembered about this application goes with it: a
 	// scratch space that outlived the thing it was about would come back as
 	// stale answers under the next application to take the id.
-	if err := DeleteStationStore(db, id); err != nil {
+	if err := DeleteAppStore(db, id); err != nil {
 		return err
 	}
 	_, err := db.Exec("DELETE FROM apps WHERE id = ?", id)
