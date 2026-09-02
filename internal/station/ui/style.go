@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"html/template"
 	"math"
+	"quasar/internal/chart"
 	"strconv"
 	"strings"
 )
@@ -62,7 +63,7 @@ func (t Theme) Tokens(scope string) template.CSS {
 		fmt.Fprintf(&b, "--chart:%s;", t.Chart[0])
 	}
 	for i, c := range t.Chart {
-		if i >= MaxChartColours {
+		if i >= chart.MaxColours {
 			break
 		}
 		fmt.Fprintf(&b, "--chart-%d:%s;", i+1, c)

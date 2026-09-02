@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"path"
 	"path/filepath"
+	"quasar/internal/chart"
 	"slices"
 	"strconv"
 	"strings"
@@ -229,25 +230,32 @@ func (s *Server) logPanel(r *http.Request, a *db.App, doc station.Station, panel
 // rather than a failure — that is what every series looks like for its first
 // few minutes, and a red card would be wrong about it.
 func (s *Server) chartPanel(a *db.App, doc station.Station, panel ui.Panel) ui.PanelView {
-	window, err := ui.ParseRange(panel.Range)
+	window, err := chart.ParseRange(panel.Range)
 	if err != nil {
 		return ui.Failed(a.ID, panel, err.Error())
 	}
 	since := time.Now().Add(-window)
 
-	series := make([]ui.Series, 0, len(panel.Source.Series))
+	series := make([]chart.Series, 0, len(panel.Source.Series))
 	for _, name := range panel.Source.Series {
 		points, err := db.StationSeries(s.db, a.ID, doc.ID, name, since)
 		if err != nil {
 			return ui.Failed(a.ID, panel, fmt.Sprintf("reading the series %q: %v", name, err))
 		}
-		out := make([]ui.Point, 0, len(points))
+		out := make([]chart.Point, 0, len(points))
 		for _, p := range points {
-			out = append(out, ui.Point{At: p.TS, Value: p.Value})
+			out = append(out, chart.Point{At: p.TS, Value: p.Value})
 		}
-		series = append(series, ui.Series{Label: name, Points: out})
+		series = append(series, chart.Series{Label: name, Points: out})
 	}
-	return ui.Charted(a.ID, panel, ui.Chart(panel.Kind, series, panel.Unit, panel.Max))
+	v := chart.Build(panel.Kind, series, panel.Unit, panel.Max)
+	// What the SVG is announced as. The panel's own title where it has one,
+	// since that is what a sighted reader has just read above it.
+	v.Label = panel.Title
+	if v.Label == "" {
+		v.Label = "Chart"
+	}
+	return ui.Charted(a.ID, panel, v)
 }
 
 // embedPanel points an iframe at this application's own service, through

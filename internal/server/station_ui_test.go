@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"html"
+	"quasar/internal/chart"
 	"strings"
 	"testing"
 	"time"
@@ -198,7 +199,7 @@ func TestEveryComponentDraws(t *testing.T) {
 			// rather than the "nothing measured yet" card every series shows
 			// for its first few minutes.
 			now := time.Now()
-			v = ui.Charted("abcd1234", panel, ui.Chart("area", []ui.Series{{Label: "players", Points: []ui.Point{
+			v = ui.Charted("abcd1234", panel, chart.Build("area", []chart.Series{{Label: "players", Points: []chart.Point{
 				{At: now.Add(-time.Hour), Value: 3}, {At: now, Value: 7},
 			}}}, "", 0))
 		}
@@ -590,9 +591,9 @@ func TestAChartPanelDrawsWhatTheStationRecorded(t *testing.T) {
 		// And everything the pointer reads out, worded here rather than in
 		// the browser: three moments, three values, each carrying the unit.
 		`"value":["3 online","9 online","6 online"]`,
-		"station-chart-cursor", // the rule that follows the pointer
-		"station-chart-mark",   // and the point it lands on
-		"station-chart-readout",
+		"chart-cursor", // the rule that follows the pointer
+		"chart-mark",   // and the point it lands on
+		"chart-readout",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the chart does not draw %q:\n%s", want, page)
@@ -606,7 +607,7 @@ func TestAChartPanelDrawsWhatTheStationRecorded(t *testing.T) {
 	// that is what every series looks like for its first few minutes.
 	panel.Source.Series = []string{"nothing_yet"}
 	empty := renderPanelPartial(t, c.srv.chartPanel(c.app, c.doc, panel))
-	if !strings.Contains(empty, "Nothing measured yet") {
+	if !strings.Contains(empty, "Not enough samples yet") {
 		t.Errorf("an unrecorded series does not say it has nothing yet:\n%s", empty)
 	}
 	if strings.Contains(empty, "nothing to show") {

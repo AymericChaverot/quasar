@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"quasar/internal/chart"
 	"regexp"
 	"slices"
 	"strconv"
@@ -121,7 +122,7 @@ type PanelView struct {
 	// Chart is a positioned chart. Like the two above it is filled in by the
 	// parent rather than decoded from what a script returned, because what a
 	// chart reads is Quasar's own record of what this station measured.
-	Chart ChartView
+	Chart chart.View
 }
 
 // Row is one line of a table.
@@ -227,8 +228,8 @@ func Embedded(appID string, p Panel, url string) PanelView {
 
 // Charted is a chart, already positioned by the parent from the series it
 // read.
-func Charted(appID string, p Panel, chart ChartView) PanelView {
-	return PanelView{Panel: p, AppID: appID, Chart: chart}
+func Charted(appID string, p Panel, v chart.View) PanelView {
+	return PanelView{Panel: p, AppID: appID, Chart: v}
 }
 
 // imageSrcRe is what an image panel may point at when it points at a data:

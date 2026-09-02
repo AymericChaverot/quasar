@@ -12,6 +12,7 @@ package ui
 
 import (
 	"fmt"
+	"quasar/internal/chart"
 	"regexp"
 	"slices"
 	"strconv"
@@ -275,6 +276,12 @@ func eachPanel(panels []Panel, fn func(Panel)) {
 // both.
 var idRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 
+// SeriesName is what a series may be called, in the document that charts it
+// and in the script that records it alike. It lives here, with the rest of the
+// document's vocabulary, so that a name refused at import is refused for the
+// same reason at the moment a script writes one.
+var SeriesName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+
 // serviceRefRe is the {{service:name:port}} an iframe's src is written with.
 var serviceRefRe = regexp.MustCompile(`^\{\{service:([A-Za-z0-9][A-Za-z0-9._-]*):([0-9]{1,5})\}\}(.*)$`)
 
@@ -417,10 +424,10 @@ func validatePanel(p Panel, seen map[string]bool) []error {
 
 	switch p.Type {
 	case "chart":
-		if p.Kind != "" && !slices.Contains(ChartKinds, p.Kind) {
-			add("kind %q is not %s", p.Kind, strings.Join(ChartKinds, ", "))
+		if p.Kind != "" && !slices.Contains(chart.Kinds, p.Kind) {
+			add("kind %q is not %s", p.Kind, strings.Join(chart.Kinds, ", "))
 		}
-		if _, err := ParseRange(p.Range); err != nil {
+		if _, err := chart.ParseRange(p.Range); err != nil {
 			add("%s", err)
 		}
 		for _, name := range p.Source.Series {

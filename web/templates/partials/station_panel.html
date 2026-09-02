@@ -138,66 +138,9 @@
   <img src="{{.ImageSrc}}" alt="{{$panel.Title}}" class="max-w-full rounded">
 
   {{else if eq $panel.Type "chart"}}
-  {{/* Positioned in Go and drawn here, the way the dashboard's own sparklines
-       are: no charting library, no client script, and a tooltip layer that is
-       nothing but native <title> elements. */}}
-  {{with .Chart}}
-  {{if .Empty}}
-  <p class="faint py-6 text-center text-sm">Nothing measured yet — the first points appear once the station has sampled a few.</p>
-  {{else}}
-  {{/* The wrapper is what the pointer is tracked over, and what the readout
-       is positioned inside. The data attribute carries every column of the
-       chart already worded by Go, so the browser arranges strings rather than
-       deciding what they say. */}}
-  <div class="station-chart-wrap" data-chart="{{.CursorJSON}}">
-  <svg viewBox="0 0 {{.W}} {{.H}}" class="station-chart" role="img"
-       aria-label="{{if $panel.Title}}{{$panel.Title}}{{else}}Chart{{end}}">
-    {{range .Grid}}
-    <line x1="46" y1="{{.Y}}" x2="{{$.Chart.W}}" y2="{{.Y}}" class="station-chart-grid"/>
-    <text x="40" y="{{.Y}}" class="station-chart-label" text-anchor="end" dominant-baseline="middle">{{.Label}}</text>
-    {{end}}
-    <line class="station-chart-cursor" y1="{{.Cursor.Top}}" y2="{{.Cursor.Bottom}}" x1="0" x2="0" hidden/>
-    {{range .Plots}}
-    {{$colour := .Colour}}
-    {{if .Area}}<polygon points="{{.Area}}" fill="{{$colour}}" fill-opacity="0.14"/>{{end}}
-    {{if .Line}}<polyline points="{{.Line}}" fill="none" stroke="{{$colour}}" stroke-width="2"
-                          stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>{{end}}
-    {{range .Bars}}<rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" fill="{{$colour}}" rx="1"/>{{end}}
-    {{end}}
-    {{/* One mark per series, parked until the pointer puts it somewhere. */}}
-    {{range .Cursor.Series}}
-    <circle class="station-chart-mark" r="3.5" cx="0" cy="0" fill="{{.Colour}}" hidden/>
-    {{end}}
-    {{range .Times}}
-    <text x="{{.X}}" y="{{$.Chart.H}}" class="station-chart-label" text-anchor="{{.Anchor}}">{{.Label}}</text>
-    {{end}}
-  </svg>
-  <div class="station-chart-readout" hidden>
-    <p class="station-chart-when"></p>
-    <ul>
-      {{range .Cursor.Series}}
-      <li>
-        <svg viewBox="0 0 8 8" class="station-chart-key" aria-hidden="true"><rect width="8" height="8" rx="2" fill="{{.Colour}}"/></svg>
-        {{if $.Chart.Legend}}<span class="station-chart-name">{{.Label}}</span>{{end}}
-        <span class="station-chart-value mono"></span>
-      </li>
-      {{end}}
-    </ul>
-  </div>
-  </div>
-  {{if .Legend}}
-  <ul class="station-chart-legend">
-    {{range .Plots}}
-    {{/* The key is drawn rather than styled: a colour is a fill attribute
-         everywhere else on this chart, and a style attribute would be the one
-         place a value took a different road to the page. */}}
-    <li><svg viewBox="0 0 8 8" class="station-chart-key" aria-hidden="true"><rect width="8" height="8" rx="2" fill="{{.Colour}}"/></svg>{{.Label}}
-      {{with .Latest}}<span class="mono faint">{{.}}</span>{{end}}</li>
-    {{end}}
-  </ul>
-  {{end}}
-  {{end}}
-  {{end}}
+  {{/* The same component the dashboard draws its own history with; what the
+       panel supplies is the series and the title. */}}
+  {{template "chart" .Chart}}
 
   {{else if eq $panel.Type "log"}}
   {{if .Stream}}{{template "log_pane" .Stream}}{{end}}

@@ -88,6 +88,11 @@
   {{/* Pins every shimmer to the document clock so a polled panel does not
        restart its animation on each swap. See the file for why. */}}
   <script src="/static/js/motion.js" defer></script>
+  {{/* Follows the pointer across any chart on the page. Loaded here rather
+       than beside the one component that used to draw them: the dashboard and
+       every application page carry charts of their own now, and three copies
+       of the same tag is three places to forget one. */}}
+  <script src="/static/js/chart.js" defer></script>
 </body>
 </html>
 {{end}}

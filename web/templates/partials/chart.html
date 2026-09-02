@@ -1,0 +1,66 @@
+{{/* A chart, positioned in Go and drawn here: no charting library, no layout
+     arithmetic in the template, and every coordinate on the page already
+     decided by the code the tests cover.
+
+     Takes a ChartView with a Label, which is what the SVG is announced as to a
+     reader who cannot see it. It is used by a station's chart panel and by the
+     dashboard's own history alike — the two differ in where their points come
+     from and in nothing else, which is the reason this is one template and not
+     two that drift. */}}
+{{define "chart"}}
+{{if .Empty}}
+<p class="faint py-6 text-center text-sm">Not enough samples yet — the first points appear within a few minutes.</p>
+{{else}}
+{{/* The wrapper is what the pointer is tracked over, and what the readout is
+     positioned inside. The data attribute carries every column of the chart
+     already worded by Go, so the browser arranges strings rather than deciding
+     what they say. */}}
+<div class="chart-wrap" data-chart="{{.CursorJSON}}">
+  <svg viewBox="0 0 {{.W}} {{.H}}" class="chart" role="img" aria-label="{{.Label}}">
+    {{$v := .}}
+    {{range .Grid}}
+    <line x1="46" y1="{{.Y}}" x2="{{$v.W}}" y2="{{.Y}}" class="chart-grid"/>
+    <text x="40" y="{{.Y}}" class="chart-label" text-anchor="end" dominant-baseline="middle">{{.Label}}</text>
+    {{end}}
+    <line class="chart-cursor" y1="{{.Cursor.Top}}" y2="{{.Cursor.Bottom}}" x1="0" x2="0" hidden/>
+    {{range .Plots}}
+    {{$colour := .Colour}}
+    {{if .Area}}<polygon points="{{.Area}}" fill="{{$colour}}" fill-opacity="0.14"/>{{end}}
+    {{if .Line}}<polyline points="{{.Line}}" fill="none" stroke="{{$colour}}" stroke-width="2"
+                          stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>{{end}}
+    {{range .Bars}}<rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" fill="{{$colour}}" rx="1"/>{{end}}
+    {{end}}
+    {{/* One mark per series, parked until the pointer puts it somewhere. */}}
+    {{range .Cursor.Series}}
+    <circle class="chart-mark" r="3.5" cx="0" cy="0" fill="{{.Colour}}" hidden/>
+    {{end}}
+    {{range .Times}}
+    <text x="{{.X}}" y="{{$v.H}}" class="chart-label" text-anchor="{{.Anchor}}">{{.Label}}</text>
+    {{end}}
+  </svg>
+  <div class="chart-readout" hidden>
+    <p class="chart-when"></p>
+    <ul>
+      {{range .Cursor.Series}}
+      <li>
+        <svg viewBox="0 0 8 8" class="chart-key" aria-hidden="true"><rect width="8" height="8" rx="2" fill="{{.Colour}}"/></svg>
+        {{if $v.Legend}}<span class="chart-name">{{.Label}}</span>{{end}}
+        <span class="chart-value mono"></span>
+      </li>
+      {{end}}
+    </ul>
+  </div>
+</div>
+{{if .Legend}}
+<ul class="chart-legend">
+  {{range .Plots}}
+  {{/* The key is drawn rather than styled: a colour is a fill attribute
+       everywhere else on this chart, and a style attribute would be the one
+       place a value took a different road to the page. */}}
+  <li><svg viewBox="0 0 8 8" class="chart-key" aria-hidden="true"><rect width="8" height="8" rx="2" fill="{{.Colour}}"/></svg>{{.Label}}
+    {{with .Latest}}<span class="mono faint">{{.}}</span>{{end}}</li>
+  {{end}}
+</ul>
+{{end}}
+{{end}}
+{{end}}

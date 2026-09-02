@@ -1,10 +1,9 @@
-package ui
+package chart
 
 import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,26 +19,20 @@ import (
 //
 // The one thing the browser does is follow the pointer, and even that is
 // arranging what is written here rather than working anything out — see
-// ChartCursor.
+// Cursor.
 //
 // This file is geometry and nothing else — no database, no HTTP, no template.
 // What it takes is series of points; what it hands back is the coordinates to
 // draw them at, which is what makes it testable without any of the above.
 
-// ChartKinds are the shapes a chart may take.
-var ChartKinds = []string{"line", "area", "bar", "stacked"}
+// Kinds are the shapes a chart may take.
+var Kinds = []string{"line", "area", "bar", "stacked"}
 
-// MaxChartColours is how many series colours a theme may name, and therefore
-// how many a chart cycles through before it starts again. Eight is more than a
+// MaxColours is how many series colours a theme may name, and therefore how
+// many a chart cycles through before it starts again. Eight is more than a
 // chart anybody can read holds, and it is the same number as the series a
 // station may keep for one application.
-const MaxChartColours = 8
-
-// SeriesName is what a series may be called, in the document that charts it
-// and in the script that records it alike. It lives here, with the rest of the
-// document's vocabulary, so that a name refused at import is refused for the
-// same reason at the moment a script writes one.
-var SeriesName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+const MaxColours = 8
 
 // ParseRange reads how far back a chart draws. Empty is a day, which is the
 // window every graph on the dashboard has always been.
@@ -95,31 +88,36 @@ const (
 	chartGridLines = 3
 )
 
-// ChartView is a chart ready for a template: everything already positioned,
+// View is a chart ready for a template: everything already positioned,
 // so that the template places strings and never computes one.
-type ChartView struct {
+type View struct {
 	Kind string
+
+	// Label is what the chart is announced as to a reader who cannot see it.
+	// Set by whoever assembled the series, because only they know whether this
+	// one is the server's last day of CPU or the title a station gave a panel.
+	Label string
 
 	// W and H are the viewBox, which the page scales to whatever width it has.
 	W, H float64
 
-	Plots  []ChartPlot
-	Grid   []ChartGrid
-	Times  []ChartTime
+	Plots  []Plot
+	Grid   []Grid
+	Times  []Time
 	Legend bool
 
 	// Cursor is what a hover reads out: every column of the chart, already
 	// worded, so that following the pointer is arranging strings rather than
 	// deciding what they say.
-	Cursor ChartCursor
+	Cursor Cursor
 
 	// Empty is a chart with nothing to draw yet, which is what a series looks
 	// like for the first few minutes of its life and is not a failure.
 	Empty bool
 }
 
-// ChartPlot is one series, positioned.
-type ChartPlot struct {
+// Plot is one series, positioned.
+type Plot struct {
 	Label string
 
 	// Colour is the CSS custom property to draw it in, cycling through the
@@ -130,13 +128,13 @@ type ChartPlot struct {
 	// bar or stacked chart draws instead.
 	Line string
 	Area string
-	Bars []ChartBar
+	Bars []Bar
 
 	// Latest is the most recent value, for the legend.
 	Latest string
 }
 
-// ChartCursor is everything the pointer needs to read a chart back to
+// Cursor is everything the pointer needs to read a chart back to
 // somebody: where the plot is, where each column of it sits, and what each
 // series was worth at that column.
 //
@@ -150,7 +148,7 @@ type ChartPlot struct {
 // is the wrong tool at this size: it appears after a second, in the operating
 // system's own box, only over the exact pixel of a point, and it can say what
 // one series was doing and never what the others were.
-type ChartCursor struct {
+type Cursor struct {
 	// The plot's own bounds, in viewBox units.
 	Left   float64 `json:"left"`
 	Right  float64 `json:"right"`
@@ -162,13 +160,13 @@ type ChartCursor struct {
 	At []string  `json:"at"`
 	X  []float64 `json:"x"`
 
-	Series []ChartCursorSeries `json:"series"`
+	Series []CursorSeries `json:"series"`
 }
 
-// ChartCursorSeries is one series' side of the readout: where its point sits
+// CursorSeries is one series' side of the readout: where its point sits
 // in each column and what it read there. A column a series has no point for is
 // null in both, which is what a series that started later looks like.
-type ChartCursorSeries struct {
+type CursorSeries struct {
 	Label  string     `json:"label"`
 	Colour string     `json:"colour"`
 	Y      []*float64 `json:"y"`
@@ -179,7 +177,7 @@ type ChartCursorSeries struct {
 // than an error: a chart whose cursor could not be marshalled is a chart that
 // draws and does not follow the pointer, which is worth far more than a panel
 // that refuses to render.
-func (v ChartView) CursorJSON() string {
+func (v View) CursorJSON() string {
 	out, err := json.Marshal(v.Cursor)
 	if err != nil {
 		return "{}"
@@ -187,19 +185,19 @@ func (v ChartView) CursorJSON() string {
 	return string(out)
 }
 
-// ChartBar is one bar, in viewBox units.
-type ChartBar struct {
+// Bar is one bar, in viewBox units.
+type Bar struct {
 	X, Y, W, H float64
 }
 
-// ChartGrid is one horizontal rule and the value it stands for.
-type ChartGrid struct {
+// Grid is one horizontal rule and the value it stands for.
+type Grid struct {
 	Y     float64
 	Label string
 }
 
-// ChartTime is one label under the axis.
-type ChartTime struct {
+// Time is one label under the axis.
+type Time struct {
 	X     float64
 	Label string
 	// Anchor keeps the first and last labels inside the plot rather than half
@@ -207,13 +205,13 @@ type ChartTime struct {
 	Anchor string
 }
 
-// Chart positions a set of series.
+// Build positions a set of series.
 //
 // unit is appended to every value shown; fixedMax pins the top of the scale
 // where the panel declared one, which is what keeps a percentage chart honest
 // at 3% instead of redrawing itself as if 3 were a lot.
-func Chart(kind string, series []Series, unit string, fixedMax float64) ChartView {
-	v := ChartView{Kind: kind, W: chartW, H: chartH, Legend: len(series) > 1}
+func Build(kind string, series []Series, unit string, fixedMax float64) View {
+	v := View{Kind: kind, W: chartW, H: chartH, Legend: len(series) > 1}
 
 	from, to, ok := span(series)
 	if !ok {
@@ -267,7 +265,7 @@ func Chart(kind string, series []Series, unit string, fixedMax float64) ChartVie
 	// hook — but one that started later has fewer, and a cursor built from any
 	// single series would then be reading the wrong column for the others.
 	cols, at := columns(series), momentLabel(from, to)
-	v.Cursor = ChartCursor{
+	v.Cursor = Cursor{
 		Left: chartPadL, Right: chartW - chartPadR,
 		Top: chartPadT, Bottom: chartH - chartPadB,
 	}
@@ -279,11 +277,11 @@ func Chart(kind string, series []Series, unit string, fixedMax float64) ChartVie
 	}
 
 	for i, s := range series {
-		p := ChartPlot{Label: s.Label, Colour: chartColour(i)}
+		p := Plot{Label: s.Label, Colour: chartColour(i)}
 		if n := len(s.Points); n > 0 {
 			p.Latest = amount(s.Points[n-1].Value, unit)
 		}
-		read := ChartCursorSeries{Label: s.Label, Colour: p.Colour,
+		read := CursorSeries{Label: s.Label, Colour: p.Colour,
 			Y: make([]*float64, len(cols)), Value: make([]string, len(cols))}
 		mark := func(pt Point, top float64) {
 			j := column[pt.At]
@@ -301,7 +299,7 @@ func Chart(kind string, series []Series, unit string, fixedMax float64) ChartVie
 					// are both visible.
 					left = x(pt.At) - bar*float64(len(series))/2 + bar*float64(i)
 				}
-				p.Bars = append(p.Bars, ChartBar{X: left, Y: topY, W: bar, H: math.Max(baseY-topY, 1)})
+				p.Bars = append(p.Bars, Bar{X: left, Y: topY, W: bar, H: math.Max(baseY-topY, 1)})
 				mark(pt, topY)
 				if kind == "stacked" {
 					stacked[pt.At] = base + pt.Value
@@ -433,15 +431,15 @@ func longest(series []Series) int {
 // Only the top one carries the unit. Repeating " online" down the side says
 // nothing the first one did not and crowds the plot, and the top label is the
 // one somebody reads to learn what the scale is measuring.
-func grid(top float64, unit string) []ChartGrid {
-	out := make([]ChartGrid, 0, chartGridLines)
+func grid(top float64, unit string) []Grid {
+	out := make([]Grid, 0, chartGridLines)
 	for i := range chartGridLines {
 		share := float64(i) / float64(chartGridLines-1)
 		label := amount(top*share, "")
 		if i == chartGridLines-1 {
 			label = amount(top*share, unit)
 		}
-		out = append(out, ChartGrid{
+		out = append(out, Grid{
 			Y:     chartPadT + (chartH-chartPadT-chartPadB)*(1-share),
 			Label: label,
 		})
@@ -451,7 +449,7 @@ func grid(top float64, unit string) []ChartGrid {
 
 // times is the labels under the axis: the ends, and the middle when the window
 // is wide enough that the ends alone say little.
-func times(from, to time.Time) []ChartTime {
+func times(from, to time.Time) []Time {
 	label := func(t time.Time) string {
 		if to.Sub(from) > 48*time.Hour {
 			return t.Local().Format("2 Jan")
@@ -459,7 +457,7 @@ func times(from, to time.Time) []ChartTime {
 		return t.Local().Format("15:04")
 	}
 	mid := chartPadL + (chartW-chartPadL-chartPadR)/2
-	return []ChartTime{
+	return []Time{
 		{X: chartPadL, Label: label(from), Anchor: "start"},
 		{X: mid, Label: label(from.Add(to.Sub(from) / 2)), Anchor: "middle"},
 		{X: chartW - chartPadR, Label: label(to), Anchor: "end"},
@@ -484,7 +482,7 @@ func barWidth(points, seriesCount int, kind string) float64 {
 // of nine series is a chart nobody can read anyway and running out of colours
 // is not the thing to fix about it.
 func chartColour(i int) string {
-	return fmt.Sprintf("var(--chart-%d, var(--chart))", i%MaxChartColours+1)
+	return fmt.Sprintf("var(--chart-%d, var(--chart))", i%MaxColours+1)
 }
 
 // amount is a value as somebody reads it: whole numbers stay whole, because a

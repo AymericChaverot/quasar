@@ -1,4 +1,4 @@
-package ui
+package chart
 
 import (
 	"strconv"
@@ -14,7 +14,7 @@ func at(n int) time.Time {
 }
 
 func TestAChartPositionsItsPoints(t *testing.T) {
-	v := Chart("line", []Series{{Label: "players", Points: []Point{
+	v := Build("line", []Series{{Label: "players", Points: []Point{
 		{At: at(0), Value: 0},
 		{At: at(30), Value: 5},
 		{At: at(60), Value: 10},
@@ -66,8 +66,8 @@ func TestAChartPositionsItsPoints(t *testing.T) {
 func TestADeclaredMaxPinsTheScale(t *testing.T) {
 	points := []Point{{At: at(0), Value: 1}, {At: at(60), Value: 3}}
 
-	pinned := Chart("line", []Series{{Points: points}}, "%", 100)
-	free := Chart("line", []Series{{Points: points}}, "%", 0)
+	pinned := Build("line", []Series{{Points: points}}, "%", 100)
+	free := Build("line", []Series{{Points: points}}, "%", 0)
 
 	if pinned.Grid[len(pinned.Grid)-1].Label != "100%" {
 		t.Errorf("the pinned scale tops out at %q", pinned.Grid[len(pinned.Grid)-1].Label)
@@ -84,7 +84,7 @@ func TestADeclaredMaxPinsTheScale(t *testing.T) {
 // Stacked bars are measured against the total at each moment, not against the
 // tallest single series, or the stack runs off the top of the plot.
 func TestStackedBarsSitOnEachOther(t *testing.T) {
-	v := Chart("stacked", []Series{
+	v := Build("stacked", []Series{
 		{Label: "fabric", Points: []Point{{At: at(0), Value: 6}}},
 		{Label: "forge", Points: []Point{{At: at(0), Value: 4}}},
 	}, "", 0)
@@ -104,7 +104,7 @@ func TestStackedBarsSitOnEachOther(t *testing.T) {
 	if !v.Legend {
 		t.Error("a chart of two series has no legend")
 	}
-	if Chart("line", []Series{{Points: []Point{{At: at(0), Value: 1}}}}, "", 0).Legend {
+	if Build("line", []Series{{Points: []Point{{At: at(0), Value: 1}}}}, "", 0).Legend {
 		t.Error("a chart of one series drew a legend")
 	}
 }
@@ -112,10 +112,10 @@ func TestStackedBarsSitOnEachOther(t *testing.T) {
 // A series that has just started is empty, and empty is not broken: it is what
 // every series looks like for its first few minutes.
 func TestAChartWithNoPointsIsEmptyRatherThanBroken(t *testing.T) {
-	if v := Chart("line", []Series{{Label: "players"}}, "", 0); !v.Empty {
+	if v := Build("line", []Series{{Label: "players"}}, "", 0); !v.Empty {
 		t.Error("a series with no points did not come back empty")
 	}
-	if v := Chart("line", nil, "", 0); !v.Empty {
+	if v := Build("line", nil, "", 0); !v.Empty {
 		t.Error("a chart with no series did not come back empty")
 	}
 }
@@ -163,7 +163,7 @@ func TestAWorkedOutScaleEndsSomewhereRound(t *testing.T) {
 		0.42: "0.5", // a fraction
 		230:  "250", // a queue
 	} {
-		v := Chart("line", []Series{{Points: []Point{{At: at(0), Value: peak}}}}, "", 0)
+		v := Build("line", []Series{{Points: []Point{{At: at(0), Value: peak}}}}, "", 0)
 		if got := v.Grid[len(v.Grid)-1].Label; got != want {
 			t.Errorf("a peak of %v put the top of the scale at %q, want %q", peak, got, want)
 		}
@@ -171,7 +171,7 @@ func TestAWorkedOutScaleEndsSomewhereRound(t *testing.T) {
 
 	// And the unit is on that label alone: repeating it down the side says
 	// nothing the first one did not.
-	v := Chart("line", []Series{{Points: []Point{{At: at(0), Value: 8}}}}, " online", 0)
+	v := Build("line", []Series{{Points: []Point{{At: at(0), Value: 8}}}}, " online", 0)
 	if top := v.Grid[len(v.Grid)-1].Label; !strings.HasSuffix(top, " online") {
 		t.Errorf("the top of the scale reads %q, without the unit", top)
 	}
@@ -193,7 +193,7 @@ func TestBarsStayInsideThePlot(t *testing.T) {
 			for i := range points {
 				points[i] = Point{At: at(i * 5), Value: 3}
 			}
-			v := Chart(kind, []Series{{Label: "restarts", Points: points}}, "", 0)
+			v := Build(kind, []Series{{Label: "restarts", Points: points}}, "", 0)
 
 			bars := v.Plots[0].Bars
 			if len(bars) != count {
@@ -215,7 +215,7 @@ func TestBarsStayInsideThePlot(t *testing.T) {
 // tooltip could never do: it can say what one line was worth and never what
 // the others were beside it.
 func TestTheCursorReadsEverySeriesAtOneColumn(t *testing.T) {
-	v := Chart("line", []Series{
+	v := Build("line", []Series{
 		{Label: "fabric", Points: []Point{{At: at(0), Value: 2}, {At: at(30), Value: 4}}},
 		// Started half an hour late, which is what a series added to a station
 		// after the fact looks like.
@@ -261,7 +261,7 @@ func TestTheCursorReadsEverySeriesAtOneColumn(t *testing.T) {
 // A stacked chart's mark belongs on top of its own band rather than at its own
 // value, or the pointer lands somewhere the eye cannot find.
 func TestAStackedCursorFollowsTheBands(t *testing.T) {
-	v := Chart("stacked", []Series{
+	v := Build("stacked", []Series{
 		{Label: "fabric", Points: []Point{{At: at(0), Value: 6}}},
 		{Label: "forge", Points: []Point{{At: at(0), Value: 4}}},
 	}, "", 0)

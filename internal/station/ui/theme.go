@@ -18,6 +18,7 @@ package ui
 import (
 	"fmt"
 	"html/template"
+	"quasar/internal/chart"
 	"regexp"
 	"slices"
 	"strings"
@@ -151,8 +152,8 @@ func (t Theme) Validate() []error {
 	if t.Accent != "" && !hexRe.MatchString(t.Accent) {
 		add("accent %q is not a hex colour like #3ba55d", t.Accent)
 	}
-	if len(t.Chart) > MaxChartColours {
-		add("a theme may name %d chart colours; this one names %d", MaxChartColours, len(t.Chart))
+	if len(t.Chart) > chart.MaxColours {
+		add("a theme may name %d chart colours; this one names %d", chart.MaxColours, len(t.Chart))
 	}
 	for _, c := range t.Chart {
 		if !hexRe.MatchString(c) {

@@ -42,13 +42,13 @@
     if (!data || !data.x || !data.x.length) data = null;
     const parts = data && {
       data: data,
-      svg: wrap.querySelector(".station-chart"),
-      cursor: wrap.querySelector(".station-chart-cursor"),
-      marks: wrap.querySelectorAll(".station-chart-mark"),
-      readout: wrap.querySelector(".station-chart-readout"),
-      when: wrap.querySelector(".station-chart-when"),
-      values: wrap.querySelectorAll(".station-chart-value"),
-      rows: wrap.querySelectorAll(".station-chart-readout li"),
+      svg: wrap.querySelector(".chart"),
+      cursor: wrap.querySelector(".chart-cursor"),
+      marks: wrap.querySelectorAll(".chart-mark"),
+      readout: wrap.querySelector(".chart-readout"),
+      when: wrap.querySelector(".chart-when"),
+      values: wrap.querySelectorAll(".chart-value"),
+      rows: wrap.querySelectorAll(".chart-readout li"),
     };
     PARSED.set(wrap, parts);
     return parts;
@@ -125,7 +125,7 @@
   }
 
   document.addEventListener("pointermove", function (e) {
-    const wrap = e.target.closest && e.target.closest(".station-chart-wrap");
+    const wrap = e.target.closest && e.target.closest(".chart-wrap");
     if (wrap) show(wrap, e.clientX);
   });
 
@@ -137,13 +137,13 @@
   // time with nothing on screen to show for them.
   document.addEventListener("pointerleave", function (e) {
     const wrap = e.target;
-    if (wrap.classList && wrap.classList.contains("station-chart-wrap")) hide(wrap);
+    if (wrap.classList && wrap.classList.contains("chart-wrap")) hide(wrap);
   }, true);
 
   // A chart that scrolls out from under a stationary pointer would otherwise
   // keep its readout where the pointer no longer is.
   document.addEventListener("pointerdown", function (e) {
-    document.querySelectorAll(".station-chart-wrap").forEach(function (wrap) {
+    document.querySelectorAll(".chart-wrap").forEach(function (wrap) {
       if (!wrap.contains(e.target)) hide(wrap);
     });
   });
