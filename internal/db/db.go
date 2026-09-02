@@ -98,6 +98,11 @@ CREATE TABLE IF NOT EXISTS deployments (
 	image_tag   TEXT NOT NULL DEFAULT '',
 	status      TEXT NOT NULL DEFAULT 'running',
 	detail      TEXT NOT NULL DEFAULT '',
+	-- The compose file this deployment ran, for a stack that has no single
+	-- image tag to go back to. Encrypted like the app's own copy: a compose
+	-- file carries an environment block, and that is where the passwords
+	-- are. Empty for anything that is not a stack Quasar owns the file of.
+	compose_yaml TEXT NOT NULL DEFAULT '',
 	started_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	finished_at DATETIME
 );
@@ -299,6 +304,9 @@ var migrations = []string{
 	// Nothing is starred until somebody stars it, which is the right answer
 	// for an install that already has its stations.
 	"ALTER TABLE stations ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0",
+	// Kept last because it is the newest: the list is read as a history of
+	// what the schema has had to grow.
+	"ALTER TABLE deployments ADD COLUMN compose_yaml TEXT NOT NULL DEFAULT ''",
 }
 
 func Open(path string) (*sql.DB, error) {

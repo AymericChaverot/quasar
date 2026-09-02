@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -416,23 +417,44 @@ func (s *Server) handleAppUpdate(w http.ResponseWriter, r *http.Request) {
 	s.renderPartial(w, "app_status_panel", s.appView(r, a))
 }
 
-// handleAppRollback redeploys an image tag from the app's deploy history.
+// handleAppRollback puts the application back on an earlier deployment.
+//
+// What "earlier deployment" means depends on the shape. A single container goes
+// back to an image tag; a stack goes back to the compose file that deployment
+// ran, because there is no one tag that describes several services. Both are
+// posted from the same button and both are checked against this application's
+// own history before anything is deployed — the value arrives from a form, and
+// a tag or an id from somewhere else must not be a way to run something.
 func (s *Server) handleAppRollback(w http.ResponseWriter, r *http.Request) {
 	a := s.getApp(w, r)
 	if a == nil {
 		return
 	}
+	deps, _ := db.ListDeployments(s.db, a.ID, 50)
+
+	if id := r.FormValue("deployment"); id != "" {
+		depID, err := strconv.ParseInt(id, 10, 64)
+		if err != nil {
+			http.Error(w, "not a deployment of this application", http.StatusBadRequest)
+			return
+		}
+		if !slices.ContainsFunc(deps, func(d *db.Deployment) bool {
+			return d.ID == depID && d.Status == "success" && d.HasCompose
+		}) {
+			http.Error(w, "not a deployment of this application", http.StatusBadRequest)
+			return
+		}
+		s.dock.RollbackComposeAsync(a, depID)
+		s.audit(r, "app.rollback", a.Name, "to the compose file of deployment "+id)
+		s.renderPartial(w, "app_status_panel", s.appView(r, a))
+		return
+	}
+
 	tag := r.FormValue("tag")
 	// Only tags recorded in this app's history are accepted.
-	deps, _ := db.ListDeployments(s.db, a.ID, 50)
-	valid := false
-	for _, d := range deps {
-		if d.ImageTag != "" && d.ImageTag == tag && d.Status == "success" {
-			valid = true
-			break
-		}
-	}
-	if !valid {
+	if !slices.ContainsFunc(deps, func(d *db.Deployment) bool {
+		return d.ImageTag != "" && d.ImageTag == tag && d.Status == "success"
+	}) {
 		http.Error(w, "unknown image tag for this application", http.StatusBadRequest)
 		return
 	}

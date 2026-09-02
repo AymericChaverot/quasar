@@ -464,6 +464,10 @@ func TestExecuteTemplates(t *testing.T) {
 			{Deployment: &db.Deployment{ID: 2, AppID: "abcd1234", Source: "webhook", ImageTag: "qs-abcd1234:100", Status: "running", StartedAt: time.Now()}},
 			{Deployment: &db.Deployment{ID: 1, AppID: "abcd1234", Source: "manual", ImageTag: "qs-abcd1234:99", Status: "success",
 				StartedAt: time.Now().Add(-time.Hour), FinishedAt: sql.NullTime{Time: time.Now().Add(-59 * time.Minute), Valid: true}}, CanRollback: true},
+			// A stack, which goes back to a file rather than to a tag and so draws
+			// the other of the two buttons.
+			{Deployment: &db.Deployment{ID: 3, AppID: "abcd1234", Source: "manual", Status: "success", HasCompose: true,
+				StartedAt: time.Now().Add(-2 * time.Hour), FinishedAt: sql.NullTime{Time: time.Now().Add(-118 * time.Minute), Valid: true}}, CanRollback: true, ByCompose: true},
 		}}},
 		{"deployments", map[string]any{"AppID": "abcd1234", "Deployments": []DeploymentView(nil)}},
 		{"system_containers", []docker.SystemContainer{

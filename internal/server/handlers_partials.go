@@ -207,6 +207,11 @@ func routeProblem(r docker.RouteInfo, usesCompose bool, host, traefikNet string)
 type DeploymentView struct {
 	*db.Deployment
 	CanRollback bool
+
+	// ByCompose is a rollback that goes back to a compose file rather than to
+	// an image tag, which is what a stack has to do. The button posts one or
+	// the other, and this is which.
+	ByCompose bool
 }
 
 func (s *Server) handleAppDeploymentsPartial(w http.ResponseWriter, r *http.Request) {
@@ -219,21 +224,36 @@ func (s *Server) handleAppDeploymentsPartial(w http.ResponseWriter, r *http.Requ
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// The most recent successful tag is what's currently running; older
-	// successful tags with a distinct image are rollback candidates.
-	currentTag := ""
+	// What is running now is not something to go back to. For a single
+	// container that is the most recent successful tag; for a stack it is the
+	// most recent successful deployment, whatever its file said.
+	currentTag, current := "", int64(0)
 	for _, d := range deps {
-		if d.Status == "success" && d.ImageTag != "" {
+		if d.Status != "success" {
+			continue
+		}
+		if current == 0 {
+			current = d.ID
+		}
+		if currentTag == "" && d.ImageTag != "" {
 			currentTag = d.ImageTag
-			break
 		}
 	}
+	stack := s.dock.UsesCompose(a)
+
 	views := make([]DeploymentView, 0, len(deps))
 	seen := map[string]bool{}
 	for _, d := range deps {
 		v := DeploymentView{Deployment: d}
-		if d.Status == "success" && d.ImageTag != "" && d.ImageTag != currentTag && !seen[d.ImageTag] {
-			v.CanRollback = !s.dock.UsesCompose(a)
+		switch {
+		// A stack goes back to the file it ran, and only one that kept a copy
+		// can be gone back to: deployments from before this was recorded have
+		// none, and say so by not offering the button.
+		case stack:
+			v.CanRollback = d.Status == "success" && d.HasCompose && d.ID != current
+			v.ByCompose = v.CanRollback
+		case d.Status == "success" && d.ImageTag != "" && d.ImageTag != currentTag && !seen[d.ImageTag]:
+			v.CanRollback = true
 			seen[d.ImageTag] = true
 		}
 		views = append(views, v)

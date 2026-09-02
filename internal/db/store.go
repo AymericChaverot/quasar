@@ -2,7 +2,10 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
+
+	"quasar/internal/secrets"
 )
 
 // --- Deployments (history + rollback) ---------------------------------------
@@ -16,6 +19,13 @@ type Deployment struct {
 	Detail     string
 	StartedAt  time.Time
 	FinishedAt sql.NullTime
+
+	// HasCompose is whether this deployment kept a copy of the compose file it
+	// ran, which is what a stack goes back to instead of an image tag. Only
+	// whether, not the file itself: the list draws a table and a page of rows
+	// decrypted to answer a yes-or-no question is a page of secrets in memory
+	// for nothing. DeploymentCompose reads the one that is actually wanted.
+	HasCompose bool
 }
 
 // Duration returns the deploy duration for finished deployments.
@@ -26,13 +36,44 @@ func (d *Deployment) Duration() string {
 	return d.FinishedAt.Time.Sub(d.StartedAt).Round(time.Second).String()
 }
 
-func StartDeployment(db *sql.DB, appID, source string) int64 {
-	res, err := db.Exec("INSERT INTO deployments (app_id, source) VALUES (?, ?)", appID, source)
+// StartDeployment opens a deployment record and returns its id.
+//
+// compose is the file this deployment is about to run, for a stack whose file
+// Quasar owns; empty for everything else. It is written at the start rather
+// than at the end because the start is when it is known — by the end the
+// application row may already have been edited again, and the history would
+// record what is current rather than what ran.
+func StartDeployment(db *sql.DB, k *secrets.Keyring, appID, source, compose string) int64 {
+	var enc string
+	if compose != "" {
+		var err error
+		if enc, err = k.Encrypt(compose); err != nil {
+			// The deployment is still worth recording without it; what is lost
+			// is the ability to come back to this one, not the history.
+			enc = ""
+		}
+	}
+	res, err := db.Exec("INSERT INTO deployments (app_id, source, compose_yaml) VALUES (?, ?, ?)", appID, source, enc)
 	if err != nil {
 		return 0
 	}
 	id, _ := res.LastInsertId()
 	return id
+}
+
+// DeploymentCompose is the compose file one deployment ran, for the rollback
+// that is about to put it back. It refuses a deployment belonging to another
+// application: the id travels in a URL, and an id from one application's
+// history must not fetch another's file.
+func DeploymentCompose(db *sql.DB, k *secrets.Keyring, appID string, id int64) (string, error) {
+	var enc string
+	if err := db.QueryRow("SELECT compose_yaml FROM deployments WHERE id = ? AND app_id = ?", id, appID).Scan(&enc); err != nil {
+		return "", err
+	}
+	if enc == "" {
+		return "", fmt.Errorf("deployment %d kept no compose file", id)
+	}
+	return k.Decrypt(enc)
 }
 
 func FinishDeployment(db *sql.DB, id int64, status, detail, imageTag string) error {
@@ -42,8 +83,8 @@ func FinishDeployment(db *sql.DB, id int64, status, detail, imageTag string) err
 }
 
 func ListDeployments(db *sql.DB, appID string, limit int) ([]*Deployment, error) {
-	rows, err := db.Query(`SELECT id, app_id, source, image_tag, status, detail, started_at, finished_at
-		FROM deployments WHERE app_id = ? ORDER BY id DESC LIMIT ?`, appID, limit)
+	rows, err := db.Query(`SELECT id, app_id, source, image_tag, status, detail, started_at, finished_at,
+		compose_yaml != '' FROM deployments WHERE app_id = ? ORDER BY id DESC LIMIT ?`, appID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +92,8 @@ func ListDeployments(db *sql.DB, appID string, limit int) ([]*Deployment, error)
 	var out []*Deployment
 	for rows.Next() {
 		var d Deployment
-		if err := rows.Scan(&d.ID, &d.AppID, &d.Source, &d.ImageTag, &d.Status, &d.Detail, &d.StartedAt, &d.FinishedAt); err != nil {
+		if err := rows.Scan(&d.ID, &d.AppID, &d.Source, &d.ImageTag, &d.Status, &d.Detail,
+			&d.StartedAt, &d.FinishedAt, &d.HasCompose); err != nil {
 			return nil, err
 		}
 		out = append(out, &d)

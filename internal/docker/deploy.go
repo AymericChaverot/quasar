@@ -75,6 +75,39 @@ func (c *Client) RollbackAsync(a *db.App, tag string) {
 	})
 }
 
+// RollbackComposeAsync puts a stack back on the compose file one of its earlier
+// deployments ran.
+//
+// A stack has no single image tag to go back to — it is several images, and the
+// file that names them may itself have changed since. So the thing gone back to
+// is the file, and going back means what an edit means: the application's own
+// copy is replaced, and then it is deployed. That is deliberate. A rollback
+// that ran the old file without storing it would be undone by the next ordinary
+// redeploy, silently, and the page would go on showing the compose that is not
+// running.
+//
+// The env file is not touched. It is edited on its own, it holds the passwords
+// the running containers already have, and rolling it back with the compose
+// would reset credentials the stack's volumes still expect.
+func (c *Client) RollbackComposeAsync(a *db.App, depID int64) {
+	c.runAsync(a, "rollback", composePlan, func(ctx context.Context) (string, error) {
+		compose, err := db.DeploymentCompose(c.dbc, c.keyring, a.ID, depID)
+		if err != nil {
+			return "", fmt.Errorf("reading the compose file of deployment %d: %w", depID, err)
+		}
+		if err := db.UpdateAppCompose(c.dbc, c.keyring, a.ID, compose); err != nil {
+			return "", fmt.Errorf("storing the compose file to go back to: %w", err)
+		}
+		// The in-memory copy too, since what is written to disk below and what
+		// the deploy reads are both taken from it.
+		a.ComposeYAML = compose
+		if err := c.EnsureAppDirs(a); err != nil {
+			return "", err
+		}
+		return c.deploy(ctx, a, false)
+	})
+}
+
 // The steps each kind of deploy runs, and what each is worth on the progress
 // bar. A stack has no health check to wait on — Quasar does not know which of
 // its containers is the app — so what a single container spends waiting to
@@ -123,7 +156,15 @@ func (c *Client) deployPlanFor(a *db.App) []deployPhase {
 }
 
 func (c *Client) runAsync(a *db.App, source string, plan []deployPhase, fn func(ctx context.Context) (string, error)) {
-	depID := db.StartDeployment(c.dbc, a.ID, source)
+	// The compose file this deploy is about to run, kept so it can be gone
+	// back to. Only for a stack whose file Quasar owns: a git stack runs the
+	// file in its checkout, and going back to that is going back to a commit,
+	// which is a different question with a different answer.
+	var snapshot string
+	if a.DeployType == "compose" {
+		snapshot = a.ComposeYAML
+	}
+	depID := db.StartDeployment(c.dbc, c.keyring, a.ID, source, snapshot)
 	run := c.deployRunFor(a.ID)
 	run.start(plan)
 	c.note(a.ID, "%s: %s", a.Name, source)

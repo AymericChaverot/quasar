@@ -29,10 +29,21 @@
         </td>
         <td>
           {{if and .CanRollback $.IsAdmin}}
+          {{/* A stack goes back to the compose file this deployment ran, a
+               single container to the image tag it ran. The button posts one or
+               the other; the handler checks whichever it got against this
+               application's own history before deploying anything. */}}
+          {{if .ByCompose}}
+          <button hx-post="/apps/{{$appID}}/rollback" hx-vals='{"deployment": "{{.ID}}"}'
+                  hx-target="#status-panel" hx-swap="innerHTML"
+                  hx-confirm="Put the stack back on the compose file this deployment ran? The environment file is left as it is."
+                  class="btn py-1! text-xs">Rollback</button>
+          {{else}}
           <button hx-post="/apps/{{$appID}}/rollback" hx-vals='{"tag": "{{.ImageTag}}"}'
                   hx-target="#status-panel" hx-swap="innerHTML"
                   hx-confirm="Roll back to {{.ImageTag}}?"
                   class="btn py-1! text-xs">Rollback</button>
+          {{end}}
           {{end}}
         </td>
       </tr>
