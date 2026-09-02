@@ -1,16 +1,22 @@
-{{/* What each application weighs on disk. Its own partial because measuring it
-     means walking every app's directory — a git checkout with its history and
-     its dependencies in it. */}}
+{{/* What each application weighs on disk.
+
+     Its own partial because it used to be the slow half of the System page:
+     measuring meant walking every application's directory — a git checkout with
+     its history and its dependencies in it — on every visit. It reads recorded
+     samples now, which is why each row can say how old its figure is: a size
+     nobody has walked in the last hour is still true enough for a table, and
+     saying when it was taken is cheaper than taking it again. */}}
 {{define "system_app_sizes"}}
 {{if .AppSizes}}
 <div class="table-wrap max-w-2xl">
   <table>
-    <thead><tr><th>Application</th><th>On-disk size</th></tr></thead>
+    <thead><tr><th>Application</th><th>On-disk size</th><th>Measured</th></tr></thead>
     <tbody>
       {{range .AppSizes}}
       <tr>
         <td><a href="/apps/{{.ID}}" class="font-medium hover:underline">{{.Name}}</a></td>
         <td class="mono muted">{{printf "%.1f" .SizeMB}} MB</td>
+        <td class="faint text-xs">{{.Ago}}</td>
       </tr>
       {{end}}
     </tbody>

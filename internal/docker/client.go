@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -131,8 +132,16 @@ func (c *Client) AppDirSize(appID string) int64 {
 	// Errors are absorbed by the callback below, so the size is a best effort
 	// by construction: an unreadable entry contributes nothing rather than
 	// failing a page that is only showing a number.
-	_ = filepath.Walk(c.AppDir(appID), func(_ string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() {
+	//
+	// WalkDir rather than Walk: Walk stats every entry to hand the callback a
+	// FileInfo, including the directories, and a data directory is mostly
+	// directories by count. WalkDir reads them from the directory listing and
+	// only stats what is asked about, which here is the files alone.
+	_ = filepath.WalkDir(c.AppDir(appID), func(_ string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if info, err := d.Info(); err == nil {
 			size += info.Size()
 		}
 		return nil

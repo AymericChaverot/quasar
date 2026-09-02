@@ -30,7 +30,15 @@ type AppSize struct {
 	Name   string
 	ID     string
 	SizeMB float64
+
+	// Measured is when the walk behind SizeMB happened. A figure here is a
+	// recorded sample rather than something read a moment ago, so the page
+	// says how old it is instead of implying it is live.
+	Measured time.Time
 }
+
+// Ago is how long ago this figure was measured, for the column that says so.
+func (a AppSize) Ago() string { return humanSince(a.Measured) }
 
 // systemData is everything the System page can answer without leaving the
 // process: settings, the backup directory listing, and the machine's fixed
@@ -39,11 +47,12 @@ type AppSize struct {
 //
 // The four expensive sections are not here. Docker's disk report walks every
 // layer on the server, the certificate store has to be read and parsed, the
-// per-app sizes walk each app's directory, and even the engine version is two
-// round trips over the socket proxy — together seconds, spent before the first
-// byte of a page whose headings and forms were ready immediately. Each is now
-// its own partial, fetched on load and arriving when it is ready; see
-// handleSystemEnvPartial and the three below it.
+// per-app sizes are a query and one walk for anything nothing has weighed yet,
+// and even the engine version is two round trips over the socket proxy —
+// together seconds, spent before the first byte of a page whose headings and
+// forms were ready immediately. Each is now its own partial, fetched on load
+// and arriving when it is ready; see handleSystemEnvPartial and the three
+// below it.
 func (s *Server) systemData() map[string]any {
 	data := map[string]any{
 		"Title":     "System",
@@ -116,25 +125,52 @@ func (s *Server) handleSystemAppSizesPartial(w http.ResponseWriter, r *http.Requ
 // disk.
 const appSizeWorkers = 8
 
-// appSizes measures each application's directory. Order follows the app list,
-// not whichever walk finished first, so the table does not reshuffle between
-// visits.
+// appSizes is what each application weighs, from the samples the monitor
+// records — not from a walk started by this request.
+//
+// This page used to walk every application's directory on every visit, which
+// on a server with a few large stacks is a lot of filesystem for a table of
+// numbers, paid again on every refresh. It reads rows now and renders at the
+// speed of the rest of the page.
+//
+// The exception is an application nothing has weighed yet, which is what a new
+// one looks like for its first hour: those are walked here and the result
+// recorded, so the number appears with the application rather than an hour
+// after it, and so the monitor finds the work already done.
 func (s *Server) appSizes() []AppSize {
 	apps, err := db.ListApps(s.db, s.keyring)
 	if err != nil {
 		return nil
 	}
+	seen, err := db.LatestAppSizes(s.db)
+	if err != nil {
+		seen = nil
+	}
+
 	sizes := make([]AppSize, len(apps))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, appSizeWorkers)
 	for i, a := range apps {
 		sizes[i] = AppSize{Name: a.Name, ID: a.ID}
+		if s, ok := seen[a.ID]; ok {
+			sizes[i].SizeMB = float64(s.Bytes) / (1 << 20)
+			sizes[i].Measured = s.TS
+			continue
+		}
 		wg.Add(1)
 		go func(i int, id string) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			sizes[i].SizeMB = float64(s.dock.AppDirSize(id)) / (1 << 20)
+			bytes := s.dock.AppDirSize(id)
+			sizes[i].SizeMB = float64(bytes) / (1 << 20)
+			sizes[i].Measured = time.Now().UTC()
+			// Recorded as well as shown: it is the first point of this
+			// application's own history, and it is what stops the monitor
+			// walking the same tree again within the hour.
+			if err := db.RecordAppSize(s.db, id, bytes); err != nil {
+				log.Printf("recording the first size of %s: %v", id, err)
+			}
 		}(i, a.ID)
 	}
 	wg.Wait()

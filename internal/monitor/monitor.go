@@ -24,6 +24,13 @@ const (
 	healthInterval  = 30 * time.Second
 	metricsInterval = 60 * time.Second
 	taskInterval    = 60 * time.Second
+
+	// sizeInterval is how often an application's data directory is weighed.
+	// Far slower than everything else here because it is far more expensive
+	// than everything else here: a walk of every file the application owns,
+	// against a counter read from /proc. An hour is fine detail for a figure
+	// that answers "what grew this week" and never moves in a minute.
+	sizeInterval = time.Hour
 	// Retention is how long the plain time series are kept. Exported because
 	// the windows a chart offers have to stay inside it: a graph of thirty days
 	// over seven days of samples is seven days of line and three weeks of empty
@@ -52,6 +59,42 @@ func Start(database *sql.DB, dock *docker.Client, hostRoot string, keyring *secr
 	go sampleMetrics(database, dock, hostRoot, keyring)
 	go runScheduledTasks(database, dock, keyring)
 	go captureLogs(database, dock, keyring)
+	go sampleAppSizes(database, dock, keyring)
+}
+
+// sampleAppSizes weighs each application's data directory and records what it
+// found, so that everything else can read a number instead of walking a tree.
+//
+// This is the expensive loop in this file and it is written to be the cheapest
+// version of itself. It only weighs an application whose newest sample is
+// already older than the interval — which means it does nothing at all for one
+// the System page has just measured, because that page records what it measures
+// too. It weighs them one at a time rather than eight at once: the page is a
+// person waiting, and this is not. And it is the only thing on the server that
+// walks these trees on a timer, where before every visit to the System page
+// walked all of them.
+func sampleAppSizes(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) {
+	for {
+		apps, err := db.ListApps(database, keyring)
+		if err != nil {
+			time.Sleep(sizeInterval)
+			continue
+		}
+		seen, err := db.LatestAppSizes(database)
+		if err != nil {
+			seen = nil // measure everything rather than nothing
+		}
+		due := time.Now().UTC().Add(-sizeInterval)
+		for _, a := range apps {
+			if s, ok := seen[a.ID]; ok && s.TS.After(due) {
+				continue
+			}
+			if err := db.RecordAppSize(database, a.ID, dock.AppDirSize(a.ID)); err != nil {
+				log.Printf("recording the size of %s: %v", a.Name, err)
+			}
+		}
+		time.Sleep(sizeInterval)
+	}
 }
 
 // watchStates notifies when an app enters or recovers from an error state.
@@ -185,6 +228,13 @@ func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyri
 			if err := db.FoldStationSeries(database,
 				time.Now().Add(-Retention), time.Now().Add(-seriesRetention)); err != nil {
 				log.Printf("monitor: folding the stations' series: %v", err)
+			}
+			// An application's size is kept as long as a station's folded
+			// series, and for the same reason: one row an hour is nothing to
+			// store, and a disk fills over months. A window of a week could
+			// not show it happening.
+			if err := db.PruneAppSizes(database, time.Now().Add(-seriesRetention)); err != nil {
+				log.Printf("monitor: trimming the application sizes: %v", err)
 			}
 			if err := db.PruneLogs(database); err != nil {
 				log.Printf("monitor: trimming stored output: %v", err)

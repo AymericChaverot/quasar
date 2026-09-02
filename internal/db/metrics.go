@@ -172,6 +172,7 @@ func DeleteAppTimeSeries(db *sql.DB, appID string) error {
 	return firstError(
 		exec(db, "DELETE FROM app_metrics WHERE app_id = ?", appID),
 		exec(db, "DELETE FROM health_history WHERE app_id = ?", appID),
+		exec(db, "DELETE FROM app_sizes WHERE app_id = ?", appID),
 	)
 }
 

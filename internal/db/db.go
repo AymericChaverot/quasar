@@ -221,6 +221,22 @@ CREATE TABLE IF NOT EXISTS station_series_hourly (
 	PRIMARY KEY (app_id, station_id, name, hour)
 );
 
+
+-- What each application's data directory weighed, and when.
+--
+-- Sampled rather than measured on demand. The measurement is a walk of the
+-- whole tree — a git checkout with its history and its dependencies is tens of
+-- thousands of files — and the System page used to do that for every
+-- application on every visit. Now the walk happens on a schedule, whatever
+-- wants a figure reads the newest row, and the rows that pile up behind it are
+-- the only way to answer the question somebody actually has when the disk bar
+-- goes red: which of these grew this week.
+CREATE TABLE IF NOT EXISTS app_sizes (
+	app_id TEXT NOT NULL,
+	ts     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	bytes  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_sizes ON app_sizes(app_id, ts);
 CREATE TABLE IF NOT EXISTS api_tokens (
 	id           INTEGER PRIMARY KEY AUTOINCREMENT,
 	name         TEXT NOT NULL,

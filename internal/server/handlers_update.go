@@ -139,6 +139,16 @@ func humanCheckedAt(stored string) string {
 	if err != nil {
 		return ""
 	}
+	return humanSince(t)
+}
+
+// humanSince is how long ago something happened, in the words the rest of the
+// interface uses for it. A zero time reads as nothing rather than as fifty
+// years, which is what a figure nobody has measured yet has to say.
+func humanSince(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
 	switch d := time.Since(t); {
 	case d < time.Minute:
 		return "just now"
