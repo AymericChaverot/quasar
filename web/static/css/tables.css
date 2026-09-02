@@ -25,6 +25,14 @@
   letter-spacing: 0.1em;
   color: var(--text-faint);
 }
+
+/* Middle rather than the baseline a table defaults to. A row is a set of
+   cells of different heights — a stack of two move buttons beside one line of
+   name, a wrapped pair of chips beside a badge — and on the baseline the short
+   ones hang from the top of the tall one instead of sitting in the middle of
+   the row. */
+.table-wrap th,
+.table-wrap td { vertical-align: middle; }
 .table-wrap td { padding: 0.75rem 1rem; }
 .table-wrap tbody tr { border-top: var(--border-w) solid color-mix(in srgb, var(--border) 60%, transparent); }
 .table-wrap tbody tr:first-child { border-top: 0; }

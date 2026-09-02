@@ -1,8 +1,8 @@
 /* --- Stations -------------------------------------------------------------- */
 
 /* A station is one block with a tab strip, at the top of an application's page.
-   It is drawn from the same tokens as everything else — and, from step by step
-   further along, from those tokens with a station's own accent mixed in — so a
+   It is drawn from the same tokens as everything else â and, from step by step
+   further along, from those tokens with a station's own accent mixed in â so a
    station written against one theme is legible when it lands on another.
 
    The scope stops at this block. A station is a shareable program, and one that
@@ -99,7 +99,7 @@
    keeps its own height, so a row of three ends up two short cards floating
    beside a long one with a hole under each. Stretching them is half the fix;
    the other half is where the extra room goes. It goes above the content and
-   below the heading — the headings stay in a line across the row, which is what
+   below the heading â the headings stay in a line across the row, which is what
    makes it read as a row, and the numbers sit on a line of their own. */
 .station-cell {
   grid-column: span 6;
@@ -167,7 +167,7 @@
 /* The button that changes rank while it is being looked at: with an address in
    the field it becomes the primary one, and the promotion is the page answering
    what was just typed. The shared 100ms every control gets is the right length
-   for a hover nobody watches and too short for this — at that speed the fill
+   for a hover nobody watches and too short for this â at that speed the fill
    simply appears. Slower, and eased at both ends, so the colour arrives and
    settles. The weight is in the list because the two buttons are cut from the
    same face at different weights, and a variable font can walk between them. */
@@ -181,7 +181,7 @@
    would stop reading as a star. */
 :root { --star: #e0a92b; }
 
-/* A station on the Stations page. The whole card is the link — an anchor may
+/* A station on the Stations page. The whole card is the link â an anchor may
    not contain a button, so the anchor stretches over the card with a
    pseudo-element and the star sits above that. */
 .station-card {
@@ -223,7 +223,7 @@
 
 /* A station that brought a mark of its own takes the same place and is drawn
    differently, because it is a different kind of thing. The generic device is a
-   stroked outline and a repetition — every card has one — so it is tilted and
+   stroked outline and a repetition â every card has one â so it is tilted and
    run off the edge, where it reads as the surface the card is printed on. A
    station's own mark is the one thing on the card that is only true of that
    card, and a mark somebody drew has a right way up and edges that were meant:
@@ -277,7 +277,7 @@
 
    The arrival and the departure are keyframes rather than a transition, and
    that is not a style choice. Starring answers with both lists rebuilt, so the
-   card is a new element by the time anything can be seen — and an element that
+   card is a new element by the time anything can be seen â and an element that
    has just been inserted has no previous value to transition from. It has the
    state the server gave it, and the animation is played over the top of it. */
 .station-card::before {
@@ -310,7 +310,7 @@
 
 /* The two ends of the same movement: the star going on is not a flash, and the
    star coming off is not a cut. Each is played on the card the swap has just
-   put there, which already holds the state it is animating towards — or, on the
+   put there, which already holds the state it is animating towards â or, on the
    way out, the state it is animating away from.
 
    The arrival slows as it lands and runs the length of the glint crossing the
@@ -319,8 +319,8 @@
    version. */
 .station-card.is-starring::before { animation: station-halo-in 560ms ease-out; }
 /* Held on its last frame, and that is the whole of it: the card this plays on
-   is the one still saying it is a favourite — the swap that takes the star off
-   it has not landed yet — so the moment the animation lets go, the halo it just
+   is the one still saying it is a favourite â the swap that takes the star off
+   it has not landed yet â so the moment the animation lets go, the halo it just
    put out comes back on until it does. A blink at the end of a fade. */
 .station-card.is-unstarring::before {
   animation: station-halo-out 320ms ease-in-out forwards;
@@ -337,14 +337,14 @@
 
 /* And a glint travelling the length of the name at the moment it is starred.
    Along the name and nothing else: the station is what has been kept, and its
-   name is what says which station that is — a band crossing the whole card
+   name is what says which station that is â a band crossing the whole card
    paints over the version, the author and the description on its way past, none
    of which have anything to do with it.
 
    Nothing about the word itself changes. What travels is light cast around the
    letters and no colour laid on them: painting the glyphs gold, however
    briefly, is the word being replaced by another word for a second, and on the
-   dark themes — where the text is all but white and gold is darker than it —
+   dark themes â where the text is all but white and gold is darker than it â
    what that reads as is the name dimming.
 
    So this is a second copy of the name laid exactly over the first, with
@@ -360,7 +360,7 @@
   position: absolute;
   /* Pinned by two edges and not four, so the copy shrinks to the word instead
      of filling the line. The name is a block and a block is as wide as the
-     column, which on a card is half again the width of most names — measured
+     column, which on a card is half again the width of most names â measured
      against that box, the band spent the greater part of its travel in the
      empty space past the last letter, and the pass was over before it looked
      like it had started. The cap keeps a long name wrapping where the real one
@@ -371,7 +371,7 @@
   pointer-events: none;
   /* Invisible unless the animation is saying otherwise. The class outlives the
      pass by a little, and an overlay whose resting state is opaque would come
-     back the instant the animation let go of it — and would be there for the
+     back the instant the animation let go of it â and would be there for the
      first frame, before it had started. */
   opacity: 0;
   -webkit-text-fill-color: transparent;
@@ -394,7 +394,7 @@
      is the part that is watched, and one travelling at a constant speed off the
      edge of the word reads as something passing by rather than as something
      settling. The length is the one thing here that was found rather than
-     reasoned — near twice this it stopped being a flourish and became something
+     reasoned â near twice this it stopped being a flourish and became something
      to sit through, and much under it there was nothing to see. */
   animation: station-name-glint 600ms ease-out;
 }
@@ -403,7 +403,7 @@
    happens between these two positions: at 78% the band is just off the first
    letter and at 22% just past the last. Running the position from end to end
    instead wastes two thirds of the duration with the band parked outside the
-   word — and with an eased curve it wastes the two thirds at the end, which is
+   word â and with an eased curve it wastes the two thirds at the end, which is
    the part meant to be watched.
 
    It fades up as it comes on and out as it stops, so neither end is a hard edge
@@ -419,7 +419,7 @@
    measurement fix rather than a layout one.
 
    Folding it open means measuring the height it will have and animating up to
-   it, and it is clipped while that runs — but clipping is what establishes a
+   it, and it is clipped while that runs â but clipping is what establishes a
    context, and a context is what stops the margins inside from collapsing out
    through the top and bottom edges. So the box is one height while it is being
    animated and another once it is handed back, and the difference lands as a
@@ -436,7 +436,7 @@
 
    And leaving is the same movement run backwards, held on its last frame: what
    ends it is the swap, which arrives to find the card already gone. It is the
-   one half of this that has to be played before the answer rather than after —
+   one half of this that has to be played before the answer rather than after â
    the swap is what removes the card, and nothing can be shown leaving once it
    has left. */
 .station-card.is-arriving { animation: station-card-in 420ms ease-out; }
@@ -456,7 +456,7 @@
 
 /* And the star it was pressed on lands with it, which is the other half of
    marking the moment: the glint says which station, this says what was done to
-   it. It overshoots slightly and settles — the one place in the interface where
+   it. It overshoots slightly and settles â the one place in the interface where
    that is right, because this is the only control that is a decision to keep
    something rather than a step in a task. */
 .station-card.is-starring .station-star {
@@ -720,8 +720,16 @@
 /* An application's name in the list, with the station mark in front of it. The
    slot is the same width on every row, mark or no mark, so a list of mostly
    ordinary applications does not have one name indented and the rest not. */
+/* The name, with the station mark's slot in front of it. A block-level flex
+   box rather than an inline one: inline, it sits on a line box whose height
+   comes from the cell's own strut, and it is that strut — not the cell — that
+   decides where the name lands. The row with a mark in the slot took its
+   baseline from an icon and the rows without took theirs from text, so the
+   names sat a few pixels apart down the column while everything beside them
+   was centred. As a block there is no line box to sit on, and the cell's own
+   vertical-align centres it. */
 .app-name {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 0.4375rem;
 }
