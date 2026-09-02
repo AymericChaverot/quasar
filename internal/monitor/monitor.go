@@ -24,7 +24,11 @@ const (
 	healthInterval  = 30 * time.Second
 	metricsInterval = 60 * time.Second
 	taskInterval    = 60 * time.Second
-	retention       = 7 * 24 * time.Hour
+	// Retention is how long the plain time series are kept. Exported because
+	// the windows a chart offers have to stay inside it: a graph of thirty days
+	// over seven days of samples is seven days of line and three weeks of empty
+	// plot, which reads as an outage rather than as a window nobody kept.
+	Retention = 7 * 24 * time.Hour
 
 	// seriesRetention is how long a station's own series are kept once folded
 	// into hours. Longer than everything else because they cost so much less
@@ -170,7 +174,7 @@ func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyri
 			}
 		}
 		if time.Since(lastPrune) > time.Hour {
-			if err := db.PruneTimeSeries(database, time.Now().Add(-retention)); err != nil {
+			if err := db.PruneTimeSeries(database, time.Now().Add(-Retention)); err != nil {
 				log.Printf("monitor: trimming the time series: %v", err)
 			}
 			// A station's series are folded rather than dropped: the same
@@ -179,7 +183,7 @@ func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyri
 			// server last month, is worth more than the samples it was drawn
 			// from and costs a fraction of them.
 			if err := db.FoldStationSeries(database,
-				time.Now().Add(-retention), time.Now().Add(-seriesRetention)); err != nil {
+				time.Now().Add(-Retention), time.Now().Add(-seriesRetention)); err != nil {
 				log.Printf("monitor: folding the stations' series: %v", err)
 			}
 			if err := db.PruneLogs(database); err != nil {

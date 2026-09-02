@@ -38,6 +38,7 @@ type MetricPoint struct {
 	TS time.Time
 	V1 float64 // cpu %
 	V2 float64 // mem % (server) or mem MB (app)
+	V3 float64 // disk % (server only)
 }
 
 func RecordServerMetric(db *sql.DB, cpu, mem, disk float64) error {
@@ -77,13 +78,16 @@ func RecordAppMetric(db *sql.DB, appID string, cpu, memMB float64) error {
 
 func ServerMetrics(db *sql.DB, since time.Time, bucket time.Duration) ([]MetricPoint, error) {
 	secs := bucketSeconds(bucket)
-	return queryPoints(db, `SELECT CAST(strftime('%s', ts) / ? AS INTEGER) * ?, AVG(cpu), AVG(mem)
+	return queryPoints(db, `SELECT CAST(strftime('%s', ts) / ? AS INTEGER) * ?, AVG(cpu), AVG(mem), AVG(disk)
 		FROM metrics WHERE ts >= ? GROUP BY 1 ORDER BY 1`, secs, secs, since.UTC())
 }
 
 func AppMetrics(db *sql.DB, appID string, since time.Time, bucket time.Duration) ([]MetricPoint, error) {
+	// The literal zero keeps one scanner for both windows. An application's own
+	// disk use is not sampled a minute at a time — it is a walk of a directory
+	// tree, not a counter — so there is nothing to average here.
 	secs := bucketSeconds(bucket)
-	return queryPoints(db, `SELECT CAST(strftime('%s', ts) / ? AS INTEGER) * ?, AVG(cpu), AVG(mem_mb)
+	return queryPoints(db, `SELECT CAST(strftime('%s', ts) / ? AS INTEGER) * ?, AVG(cpu), AVG(mem_mb), 0
 		FROM app_metrics WHERE app_id = ? AND ts >= ? GROUP BY 1 ORDER BY 1`, secs, secs, appID, since.UTC())
 }
 
@@ -110,7 +114,7 @@ func queryPoints(db *sql.DB, query string, args ...any) ([]MetricPoint, error) {
 			p     MetricPoint
 			epoch int64
 		)
-		if err := rows.Scan(&epoch, &p.V1, &p.V2); err != nil {
+		if err := rows.Scan(&epoch, &p.V1, &p.V2, &p.V3); err != nil {
 			return nil, err
 		}
 		p.TS = time.Unix(epoch, 0).UTC()

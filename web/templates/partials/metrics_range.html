@@ -1,0 +1,22 @@
+{{/* Which window the history is drawn over.
+
+     Radio inputs rather than links or buttons, and this is why: the container
+     beside it polls every sixty seconds, and it pulls the checked value in with
+     hx-include on every one of those requests. So the choice travels with the
+     poll without a line of script holding it, and without the picker being
+     inside the fragment that gets replaced — which would take the focus with it
+     twice a minute.
+
+     Takes the URL its own change should fetch, because the same picker sits
+     over the server's history and over an application's. */}}
+{{define "metrics_range"}}
+<form id="metrics-range" class="range-pick"
+      hx-get="{{.}}" hx-target="#metrics-cards" hx-swap="innerHTML" hx-trigger="change">
+  <label class="chip chip-filter">
+    <input type="radio" name="range" value="24h" checked>24h
+  </label>
+  <label class="chip chip-filter">
+    <input type="radio" name="range" value="7d">7d
+  </label>
+</form>
+{{end}}

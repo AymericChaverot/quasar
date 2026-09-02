@@ -477,6 +477,7 @@ func TestExecuteTemplates(t *testing.T) {
 			{ID: 2, AppID: "abcd1234", Command: "false", LastStatus: "failed"},
 		}}},
 		{"tasks", map[string]any{"AppID": "abcd1234", "Tasks": []*db.Task(nil)}},
+		{"metrics_range", "/partials/metrics"},
 		{"metrics", []MetricsCard{
 			metricsCard("CPU · 24h", "%", []db.MetricPoint{
 				{TS: time.Now().Add(-2 * time.Minute), V1: 10, V2: 40},

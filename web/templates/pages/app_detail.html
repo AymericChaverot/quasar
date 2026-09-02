@@ -150,7 +150,14 @@
   <div hx-get="/partials/apps/{{.ID}}/stats" hx-trigger="load, every 5s" hx-swap="innerHTML">
     <div class="card h-20 animate-pulse"></div>
   </div>
-  <div class="mt-4" hx-get="/partials/apps/{{.ID}}/metrics" hx-trigger="load, every 60s" hx-swap="innerHTML"></div>
+  {{/* The same picker the dashboard's history carries, over this
+       application's own two measurements. */}}
+  <div class="mt-6 mb-3 flex items-center justify-between">
+    <h2 class="h-label mb-0!">History</h2>
+    {{template "metrics_range" (printf "/partials/apps/%s/metrics" .ID)}}
+  </div>
+  <div id="metrics-cards" hx-get="/partials/apps/{{.ID}}/metrics" hx-trigger="load, every 60s"
+       hx-include="#metrics-range" hx-swap="innerHTML"></div>
   {{/* Directly under the usage it bounds: above is what the application takes,
        here is the most it may. */}}
   {{if $.IsAdmin}}
