@@ -50,3 +50,66 @@
   fromHash();
   addEventListener("hashchange", fromHash);
 })();
+
+// The gate in front of the advanced tabs, on an application deployed from a
+// station.
+//
+// The station's own tab is the page for somebody who installed a station: they
+// wanted its controls, and the six tabs behind this button are the platform's
+// controls for every application on the server — the compose file, the routing,
+// the certificate. Nothing here hides anything; the tabs are in the page, they
+// are simply not on the strip until somebody has been told what they are and
+// said yes.
+//
+// The answer is kept in the browser rather than in the database, and against
+// this one application. It is a preference about how a page is read, held by
+// the person reading it: it belongs to a reader and a screen, not to the
+// application, and nothing on the server needs to know it. Cleared storage
+// means the question is asked once more, which is the right failure.
+(function () {
+  const unlock = document.getElementById("advanced-unlock");
+  const dialog = document.getElementById("advanced-dialog");
+  if (!unlock || !dialog) return;
+
+  const key = "quasar.advanced." + unlock.dataset.app;
+
+  function reveal() {
+    for (const el of document.querySelectorAll(".page-tab.is-advanced")) {
+      el.classList.remove("hidden");
+    }
+    unlock.remove();
+  }
+
+  // A browser with storage turned off is a browser that asks every time, which
+  // is worth far more than a page that will not open because a read threw.
+  function remembered() {
+    try {
+      return localStorage.getItem(key) === "1";
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function remember() {
+    try {
+      localStorage.setItem(key, "1");
+    } catch (e) {
+      /* asked again next time, and nothing worse */
+    }
+  }
+
+  if (remembered()) {
+    reveal();
+  } else {
+    unlock.addEventListener("click", () => dialog.showModal());
+    for (const id of ["advanced-cancel", "advanced-cancel-x"]) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener("click", () => dialog.close());
+    }
+    document.getElementById("advanced-confirm").addEventListener("click", function () {
+      remember();
+      reveal();
+      dialog.close();
+    });
+  }
+})();

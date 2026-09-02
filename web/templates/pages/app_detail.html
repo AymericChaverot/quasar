@@ -37,45 +37,6 @@
      to having pressed one. Admin-only, like the stream behind it. */}}
 {{if $.IsAdmin}}{{template "deploy_progress" .ID}}{{end}}
 
-{{/* The station this application was deployed from, if it came from one: a
-     control surface somebody wrote for this service in particular, above the
-     machinery Quasar provides for every service. */}}
-{{with $.Station}}<div class="mt-8">{{template "station_block" .}}</div>{{end}}
-
-{{/* Everything below here is the machinery Quasar provides for every
-     application: how it is built, where it is routed, what it keeps, what is in
-     its environment. On an ordinary application that is the page. On one
-     deployed from a station it is not what the page is for — somebody installed
-     a station because they wanted its controls and its status, and the rest is
-     exactly the sort of thing that persuades them they are not qualified to run
-     their own server. So it folds away.
-
-     It folds rather than disappears: all of it is still true, an admin still
-     needs it, and moving it to a page somewhere else would be worse than
-     leaving it open. One click and the application reads like every other. */}}
-{{if $.Station}}
-<details class="advanced-block mt-8">
-  {{/* The summary is the lid of a box rather than a line of text, and what it
-       opens is inside that box: the border carries on down the sides, the
-       corners between the two square off so they read as one thing, and the
-       chevron turns over. Without that, the sections below simply appeared and
-       looked like the page continuing — the click seemed to do nothing, and
-       whatever arrived seemed unrelated to it. */}}
-  <summary>
-    {{template "icon_cog"}}
-    <span class="advanced-label">Advanced options</span>
-    <span class="advanced-note">Everything Quasar gives every application: build, routing, storage, environment, logs.</span>
-    <span class="advanced-caret" aria-hidden="true">{{template "icon_chevron_down"}}</span>
-  </summary>
-  {{/* The first section's own top margin is spacing from whatever was above it
-       on the page; in here the summary is above it, and the box's padding is
-       that spacing. It has to be taken off as a utility rather than in
-       themes.css: that sheet is imported into `layer(components)`, and a
-       utility in a later layer beats it however specific the selector. */}}
-  <div class="advanced-body [&>*:first-child]:mt-0!">
-{{end}}
-
-
 {{/* The tab bar. Everything above it is what the application *is* — its name,
      whether it is up, what a deploy is doing right now — and stays on screen
      whichever tab is open. Everything below is one subject at a time.
@@ -85,26 +46,74 @@
      containers, the certificate and the resources, and the way to find out
      whether that was even the right application was to scroll back. The
      sections have not changed and none of them has moved out of the page; they
-     are grouped, and five of the six groups start closed.
+     are grouped, and all but one of the groups start closed.
 
      The strip is drawn like the site's own nav rather than like the station's
-     tab strip further up: these are two different levels of the same page, and
-     two identical strips would read as one confused one. A tab that would be
-     empty for a viewer is not drawn — Environment, Storage and Settings are all
-     admin-only in their entirety, and an empty tab is a promise the page does
-     not keep. */}}
+     tab strip inside the Station tab: those are two different levels of the
+     same page, and two identical strips would read as one confused one. A tab
+     that would be empty for a viewer is not drawn — Environment, Storage and
+     Settings are all admin-only in their entirety, and an empty tab is a
+     promise the page does not keep.
+
+     An application deployed from a station opens on the station, and the six
+     tabs behind this one are not on the strip at all until somebody asks for
+     them. Somebody installed a station because they wanted its controls, and a
+     row of tabs offering to rewrite the compose file is exactly the sort of
+     thing that persuades them they are not qualified to run their own server.
+     It is one button and one question, once, and the answer is remembered. */}}
 <div class="page-tabs" role="tablist" aria-label="Application sections">
-  <button type="button" class="page-tab is-on" role="tab" data-tab="overview" aria-selected="true">Overview</button>
-  {{if $.IsAdmin}}
-  <button type="button" class="page-tab" role="tab" data-tab="environment" aria-selected="false">Environment</button>
-  <button type="button" class="page-tab" role="tab" data-tab="storage" aria-selected="false">Storage</button>
-  <button type="button" class="page-tab" role="tab" data-tab="settings" aria-selected="false">Settings</button>
+  {{if $.Station}}
+  <button type="button" class="page-tab is-on" role="tab" data-tab="station" aria-selected="true">Station</button>
   {{end}}
-  <button type="button" class="page-tab" role="tab" data-tab="logs" aria-selected="false">Logs</button>
-  <button type="button" class="page-tab" role="tab" data-tab="history" aria-selected="false">History</button>
+  <button type="button" class="page-tab{{if not $.Station}} is-on{{end}}{{if $.Station}} is-advanced hidden{{end}}"
+          role="tab" data-tab="overview" aria-selected="{{if $.Station}}false{{else}}true{{end}}">Overview</button>
+  {{if $.IsAdmin}}
+  <button type="button" class="page-tab{{if $.Station}} is-advanced hidden{{end}}" role="tab" data-tab="environment" aria-selected="false">Environment</button>
+  <button type="button" class="page-tab{{if $.Station}} is-advanced hidden{{end}}" role="tab" data-tab="storage" aria-selected="false">Storage</button>
+  <button type="button" class="page-tab{{if $.Station}} is-advanced hidden{{end}}" role="tab" data-tab="settings" aria-selected="false">Settings</button>
+  {{end}}
+  <button type="button" class="page-tab{{if $.Station}} is-advanced hidden{{end}}" role="tab" data-tab="logs" aria-selected="false">Logs</button>
+  <button type="button" class="page-tab{{if $.Station}} is-advanced hidden{{end}}" role="tab" data-tab="history" aria-selected="false">History</button>
+
+  {{if $.Station}}
+  {{/* Not a tab: it opens nothing, it puts the rest of the strip on the strip.
+       At the far end, past every tab, because it is the last thing on the bar
+       rather than one of the things on it. */}}
+  <button type="button" id="advanced-unlock" class="page-tab-more" data-app="{{.ID}}">
+    {{template "icon_cog"}}Advanced options
+  </button>
+  {{end}}
 </div>
 
-<div class="page-pane" data-pane="overview">
+{{if $.Station}}
+{{/* The station this application was deployed from: a control surface somebody
+     wrote for this service in particular, and the reason this page opens here
+     rather than on the machinery Quasar provides for every service. */}}
+<div class="page-pane" data-pane="station">
+  {{with $.Station}}{{template "station_block" .}}{{end}}
+</div>
+
+{{/* Asked once, before the six tabs appear, and never again on this
+     application. It is a warning rather than a confirmation: nothing is about
+     to change, but what it uncovers can change everything the station is
+     managing on somebody's behalf. */}}
+<dialog id="advanced-dialog" class="modal" aria-labelledby="advanced-dialog-title">
+  <div class="modal-head">
+    <h2 id="advanced-dialog-title" class="modal-title">Show advanced options?</h2>
+    <button type="button" id="advanced-cancel-x" class="modal-close" aria-label="Close">{{template "icon_x"}}</button>
+  </div>
+  <div class="modal-body space-y-3">
+    <p class="text-sm">This application is managed by the <span class="mono">{{.StationID}}</span> station. Its own tab is everything you need to run it.</p>
+    <p class="muted text-sm">Behind the advanced tabs are the platform's own controls: how the application is built and routed, its environment, its compose file, its certificate and its storage. They are the same controls for every application on this server, and they know nothing about what the station is doing with them — editing one by hand can leave the station managing something that is no longer there.</p>
+  </div>
+  <div class="modal-foot flex items-center justify-end gap-3">
+    <button type="button" id="advanced-cancel" class="btn">Not now</button>
+    <button type="button" id="advanced-confirm" class="btn-primary">Show them</button>
+  </div>
+</dialog>
+{{end}}
+
+<div class="page-pane{{if $.Station}} hidden{{end}}" data-pane="overview">
 {{if eq .DeployType "git"}}
 <section class="mt-8">
   <h2 class="h-label mb-3">Build</h2>
@@ -307,10 +316,6 @@
   </div>
 </section>
 </div>
-{{if $.Station}}
-  </div>
-</details>
-{{end}}
 
 <script src="/static/js/app-detail.js" defer></script>
 <script src="/static/js/tabs.js" defer></script>

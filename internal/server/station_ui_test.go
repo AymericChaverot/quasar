@@ -272,12 +272,11 @@ func TestAMessageFloatsAndCanBeDismissed(t *testing.T) {
 	}
 }
 
-// An application deployed from a station is not the page an ordinary
-// application is. What somebody installed a station for is its own controls and
-// its own status; build, routing, storage and the rest are still true and still
-// needed, and they fold away rather than sitting between the station and the
-// bottom of the page.
-func TestAStationsApplicationFoldsAwayTheMachinery(t *testing.T) {
+// A station's application opens on the station and nothing else. The six tabs
+// of platform machinery are in the page — an admin still needs them — but they
+// are not on the strip until somebody has asked for them and been told what
+// they are.
+func TestAStationsApplicationOpensOnTheStation(t *testing.T) {
 	s := testServer(t)
 	app := AppView{App: &db.App{ID: "abcd1234", Name: "Server", Subdomain: "server", StationID: "demo"}}
 	block := &StationBlock{
@@ -297,23 +296,36 @@ func TestAStationsApplicationFoldsAwayTheMachinery(t *testing.T) {
 	}
 
 	page := draw(map[string]any{"Title": "Server", "App": app, "IsAdmin": true, "Station": block})
-	if !strings.Contains(page, "Advanced options") || !strings.Contains(page, "advanced-body") {
-		t.Errorf("a station's application still leads with the machinery:\n%s", page)
+	for _, want := range []string{
+		`data-tab="station" aria-selected="true"`, // the tab it opens on
+		`id="advanced-unlock"`,                    // and the one button offering the rest
+		"Advanced options",
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("a station's application does not lead with the station (%q missing):\n%s", want, page)
+		}
 	}
-	// Folded, not removed: an admin who needs the environment still has it.
+	// On the strip in the markup, off it until asked for.
+	if !strings.Contains(page, `is-advanced hidden" role="tab" data-tab="settings"`) {
+		t.Error("the advanced tabs are offered before the question is asked")
+	}
+	// Hidden, not removed: an admin who needs the environment still has it.
 	if !strings.Contains(page, "Deploy webhook") {
-		t.Error("folding the machinery away threw it away")
+		t.Error("putting the machinery behind a question threw it away")
 	}
 	// The status bar and the station itself stay where they are.
 	if !strings.Contains(page, `id="status-panel"`) || !strings.Contains(page, `id="station"`) {
-		t.Error("the two things the page is for are inside the fold")
+		t.Error("the two things the page is for are behind the question too")
 	}
 
-	// An ordinary application is untouched: there is nothing to fold, because
-	// the machinery is the whole page.
+	// An ordinary application is untouched: there is nothing to gate, because
+	// the machinery is the whole page, and it opens on Overview.
 	plain := draw(map[string]any{"Title": "Blog", "App": AppView{App: &db.App{ID: "b", Name: "Blog"}}, "IsAdmin": true})
 	if strings.Contains(plain, "Advanced options") {
-		t.Error("an ordinary application hides its own page behind a disclosure")
+		t.Error("an ordinary application hides its own page behind a question")
+	}
+	if !strings.Contains(plain, `data-tab="overview" aria-selected="true"`) {
+		t.Error("an ordinary application does not open on its overview")
 	}
 }
 
