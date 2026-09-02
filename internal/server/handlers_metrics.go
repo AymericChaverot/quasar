@@ -1,92 +1,62 @@
 package server
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
+	"quasar/internal/chart"
 	"quasar/internal/db"
 )
 
-// Spark is a server-rendered SVG sparkline: a day of samples, bucketed by the
-// query that read them, with native <title> tooltips as the hover layer (no
-// client JS).
-type Spark struct {
+// MetricsCard is one card in the History row: a day of one measurement,
+// charted, with the figure the window ended on beside its name.
+//
+// The latest value is carried on the card rather than left to the chart's own
+// legend because these are single-series charts, and a legend of one line is a
+// line that repeats the heading above it. It is the chart's wording all the
+// same — the plot's, not a second opinion — so the number beside the title and
+// the number under the pointer are always the same number.
+type MetricsCard struct {
 	Label  string
 	Latest string
-	Points string // polyline points
-	Area   string // closed polygon under the line
-	Dots   []SparkDot
-	Empty  bool
-}
-
-type SparkDot struct {
-	X, Y  float64
-	Title string
+	Chart  chart.View
 }
 
 const (
-	sparkW, sparkH = 240.0, 48.0
-	sparkPad       = 2.0
-
 	// The window every graph on the dashboard draws, and how finely it is cut.
 	// Sixty buckets over a day is one point every twenty-four minutes, which is
-	// as much detail as 240 pixels of sparkline can show and no more than the
+	// as much detail as this width of chart can show and no more than the
 	// database has to be asked for.
 	metricsWindow  = 24 * time.Hour
 	metricsBuckets = 60
 )
 
-func buildSpark(label, unit string, pts []db.MetricPoint, sel func(db.MetricPoint) float64, fixedMax float64) Spark {
-	s := Spark{Label: label}
-	if len(pts) < 2 {
-		s.Empty = true
-		return s
-	}
-	max := fixedMax
-	if max <= 0 {
-		for _, p := range pts {
-			if v := sel(p); v > max {
-				max = v
-			}
-		}
-		max *= 1.1
-		if max <= 0 {
-			max = 1
-		}
+// metricsCard charts one column of the samples.
+//
+// unit is appended to every figure, and fixedMax pins the top of the scale
+// where there is one to pin: a percentage says 100 and means it, where a
+// memory figure in megabytes has no ceiling anybody knows in advance and takes
+// whatever the day reached.
+func metricsCard(label, unit string, pts []db.MetricPoint, sel func(db.MetricPoint) float64, fixedMax float64) MetricsCard {
+	points := make([]chart.Point, 0, len(pts))
+	for _, p := range pts {
+		points = append(points, chart.Point{At: p.TS, Value: sel(p)})
 	}
 
-	s.Latest = fmt.Sprintf("%.1f%s", sel(pts[len(pts)-1]), unit)
-	step := (sparkW - 2*sparkPad) / float64(len(pts)-1)
-	var line strings.Builder
-	for i, p := range pts {
-		v := sel(p)
-		if v > max {
-			v = max
-		}
-		if v < 0 {
-			v = 0
-		}
-		x := sparkPad + float64(i)*step
-		y := sparkPad + (sparkH-2*sparkPad)*(1-v/max)
-		fmt.Fprintf(&line, "%.1f,%.1f ", x, y)
-		s.Dots = append(s.Dots, SparkDot{
-			X: x, Y: y,
-			Title: p.TS.Local().Format("15:04") + " · " + fmt.Sprintf("%.1f%s", sel(p), unit),
-		})
+	c := MetricsCard{Label: label}
+	c.Chart = chart.Build("area", []chart.Series{{Label: label, Points: points}}, unit, fixedMax)
+	c.Chart.Label = label
+	if len(c.Chart.Plots) == 1 {
+		c.Latest = c.Chart.Plots[0].Latest
 	}
-	s.Points = strings.TrimSpace(line.String())
-	lastX := sparkPad + float64(len(pts)-1)*step
-	s.Area = fmt.Sprintf("%.1f,%.1f %s %.1f,%.1f", sparkPad, sparkH-sparkPad, s.Points, lastX, sparkH-sparkPad)
-	return s
+	return c
 }
 
 func (s *Server) handleServerMetricsPartial(w http.ResponseWriter, r *http.Request) {
 	pts, _ := db.ServerMetrics(s.db, time.Now().Add(-metricsWindow), metricsWindow/metricsBuckets)
-	s.renderPartial(w, "sparks", []Spark{
-		buildSpark("CPU · 24h", "%", pts, func(p db.MetricPoint) float64 { return p.V1 }, 100),
-		buildSpark("Memory · 24h", "%", pts, func(p db.MetricPoint) float64 { return p.V2 }, 100),
+	s.renderPartial(w, "metrics", []MetricsCard{
+		metricsCard("CPU · 24h", "%", pts, func(p db.MetricPoint) float64 { return p.V1 }, 100),
+		metricsCard("Memory · 24h", "%", pts, func(p db.MetricPoint) float64 { return p.V2 }, 100),
 	})
 }
 
@@ -96,8 +66,8 @@ func (s *Server) handleAppMetricsPartial(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	pts, _ := db.AppMetrics(s.db, a.ID, time.Now().Add(-metricsWindow), metricsWindow/metricsBuckets)
-	s.renderPartial(w, "sparks", []Spark{
-		buildSpark("CPU · 24h", "%", pts, func(p db.MetricPoint) float64 { return p.V1 }, 0),
-		buildSpark("Memory · 24h", " MB", pts, func(p db.MetricPoint) float64 { return p.V2 }, 0),
+	s.renderPartial(w, "metrics", []MetricsCard{
+		metricsCard("CPU · 24h", "%", pts, func(p db.MetricPoint) float64 { return p.V1 }, 0),
+		metricsCard("Memory · 24h", " MB", pts, func(p db.MetricPoint) float64 { return p.V2 }, 0),
 	})
 }

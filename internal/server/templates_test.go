@@ -477,13 +477,13 @@ func TestExecuteTemplates(t *testing.T) {
 			{ID: 2, AppID: "abcd1234", Command: "false", LastStatus: "failed"},
 		}}},
 		{"tasks", map[string]any{"AppID": "abcd1234", "Tasks": []*db.Task(nil)}},
-		{"sparks", []Spark{
-			buildSpark("CPU · 24h", "%", []db.MetricPoint{
+		{"metrics", []MetricsCard{
+			metricsCard("CPU · 24h", "%", []db.MetricPoint{
 				{TS: time.Now().Add(-2 * time.Minute), V1: 10, V2: 40},
 				{TS: time.Now().Add(-time.Minute), V1: 25, V2: 42},
 				{TS: time.Now(), V1: 18, V2: 41},
 			}, func(p db.MetricPoint) float64 { return p.V1 }, 100),
-			buildSpark("Empty", "%", nil, func(p db.MetricPoint) float64 { return p.V1 }, 100),
+			metricsCard("Empty", "%", nil, func(p db.MetricPoint) float64 { return p.V1 }, 100),
 		}},
 		{"status_badge", "running"},
 		{"status_badge", "not deployed"},

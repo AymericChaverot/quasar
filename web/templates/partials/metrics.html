@@ -1,0 +1,18 @@
+{{/* The History row: one card per measurement, each a chart of the last day.
+     These were sparklines — 240 by 48, no scale, no clock, and a native
+     <title> over the exact pixel of a point as the only way to read a value
+     back. They are the same component a station charts its own measurements
+     with now, which is where the axis, the grid and the cursor come from. */}}
+{{define "metrics"}}
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+  {{range .}}
+  <div class="card p-4">
+    <div class="mb-2 flex items-baseline justify-between">
+      <span class="muted text-sm">{{.Label}}</span>
+      {{with .Latest}}<span class="mono text-sm">{{.}}</span>{{end}}
+    </div>
+    {{template "chart" .Chart}}
+  </div>
+  {{end}}
+</div>
+{{end}}
