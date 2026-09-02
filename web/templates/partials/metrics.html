@@ -3,9 +3,11 @@
 
      These were sparklines of a fixed day: 240 by 48, no scale, no clock, and a
      native <title> over the exact pixel of a point as the only way to read a
-     value back. They are the same component a station charts its own measurements
-     with now, which is where the axis, the grid and the cursor come from. */}}
+     value back. They are the same component a station charts its own
+     measurements with now, which is where the axis, the grid and the cursor
+     come from. */}}
 {{define "metrics"}}
+{{if .}}
 <div class="metrics-grid">
   {{range .}}
   <div class="card p-4{{if .Wide}} is-wide{{end}}">
@@ -17,4 +19,13 @@
   </div>
   {{end}}
 </div>
+{{else}}
+{{/* Nothing ticked. Drawing nothing at all would leave a heading with a gap
+     under it and no way to tell that from something that failed to load, so
+     the section says what it is: empty because that is what was asked for, and
+     one click from not being. */}}
+<div class="empty p-6 text-center">
+  <p class="muted text-sm">Nothing selected — tick a measurement above to chart it.</p>
+</div>
+{{end}}
 {{end}}

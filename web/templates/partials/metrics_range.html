@@ -1,18 +1,27 @@
-{{/* What the history is drawn over, and which of it is drawn.
+{{/* What a history is drawn over, and which of it is drawn.
 
      Radio inputs and checkboxes rather than links or buttons, and this is why:
-     the container beside it polls every sixty seconds, and it pulls the whole
-     form in with hx-include on every one of those requests. So both choices
-     travel with the poll without a line of script holding them, and without the
-     picker being inside the fragment that gets replaced — which would take the
-     focus with it twice a minute.
+     the container beside it polls, and it pulls the whole form in with
+     hx-include on every one of those requests. So both choices travel with the
+     poll without a line of script holding them, and without the picker being
+     inside the fragment that gets replaced â which would take the focus with it
+     twice a minute.
 
-     Takes the URL its own change should fetch and the measurements the page has
-     to offer, because the same picker sits over the server's history and over
-     an application's, and those are not the same list. */}}
+     Takes the URL its own change should fetch, the measurements the page has to
+     offer, and an ID: an application's page carries two of these, one over its
+     resources and one over its storage, and a fixed id would have each of them
+     answering for the other. The Show group is left out when there is only one
+     thing to show, since a single checkbox that cannot be unticked is furniture
+     rather than a control. */}}
 {{define "metrics_range"}}
-<form id="metrics-range" class="range-pick"
-      hx-get="{{.URL}}" hx-target="#metrics-cards" hx-swap="innerHTML" hx-trigger="change">
+<form id="{{.ID}}-range" class="range-pick"
+      hx-get="{{.URL}}" hx-target="#{{.ID}}-cards" hx-swap="innerHTML" hx-trigger="change">
+  {{/* Says the request came from the picker. An unticked checkbox sends
+       nothing at all, so without this a request asking for none of them and a
+       request from something that is not this form arrive identically — and the
+       first has to draw an empty section where the second draws the usual
+       one. */}}
+  <input type="hidden" name="picker" value="1">
   {{/* What the chips are answering, so they read as a sentence rather than as
        numbers parked next to a heading. Not a <label>: each names the group
        after it and not any one control in it. */}}
@@ -24,11 +33,18 @@
     <input type="radio" name="range" value="7d">7d
   </label>
 
+  {{/* `with` and not `if`: a page that has not said what it can show renders
+       the window picker alone rather than failing, and one measurement needs
+       no picker at all. */}}
+  {{with .Measurements}}
+  {{if gt (len .) 1}}
   <span class="range-label range-label-gap">Show</span>
-  {{range .Measurements}}
+  {{range .}}
   <label class="chip chip-filter">
-    <input type="checkbox" name="show" value="{{.Key}}" checked>{{.Name}}
+    <input type="checkbox" name="show" value="{{.Key}}"{{if .Checked}} checked{{end}}>{{.Name}}
   </label>
+  {{end}}
+  {{end}}
   {{end}}
 </form>
 {{end}}

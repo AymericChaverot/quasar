@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"quasar/internal/chart"
@@ -93,18 +94,38 @@ func metricsWindow(r *http.Request) (spec string, window time.Duration) {
 	return spec, window
 }
 
-// chosen is the measurements a request asked to see, in the order the page
-// offers them rather than the order the query string happens to list them —
-// unticking Memory should not move Disk, it should close the gap.
+// showMarker is the hidden field every picker submits. Unchecked boxes send
+// nothing at all, so without it a request asking for none of them and a request
+// from something that is not the picker are the same request — and the first
+// has to draw an empty section where the second has to draw the usual one.
+const showMarker = "picker"
+
+// showCookie is where one picker's selection is remembered. Per picker rather
+// than per page or per user: the dashboard's history, an application's
+// resources and an application's storage are three separate questions, and
+// answering one is not answering the others. Kept the way the theme is kept,
+// because it is the same kind of thing — a choice about how somebody reads this
+// interface, which should still be true tomorrow.
+func showCookie(id string) string { return "quasar_show_" + id }
+
+// chosen is the measurements to draw, in the order the page offers them rather
+// than the order they were asked for — unticking Memory should not move Disk,
+// it should close the gap.
 //
-// Nothing asked for means everything. A request with no `show` at all is the
-// page's first load, and one where every box has been unticked would otherwise
-// be a heading with nothing under it: an empty section reads as something
-// broken, where the full row reads as the state somebody can now change.
-func chosen(r *http.Request, offered []Measurement) []Measurement {
-	want := r.URL.Query()["show"]
-	if len(want) == 0 {
-		return offered
+// Where the answer comes from, in order: the picker if this request came from
+// one, the cookie it wrote last time, and failing both, all of them. Only the
+// first can mean none, and none means none — an empty section is what somebody
+// asked for when they unticked the last box, and quietly giving them the full
+// row back would be the interface disagreeing with its own controls.
+func chosen(r *http.Request, id string, offered []Measurement) []Measurement {
+	q := r.URL.Query()
+	want, asked := q["show"], q.Get(showMarker) != ""
+	if !asked {
+		c, _ := r.Cookie(showCookie(id))
+		if c == nil {
+			return offered
+		}
+		want = strings.Split(c.Value, ",")
 	}
 	out := make([]Measurement, 0, len(offered))
 	for _, m := range offered {
@@ -112,10 +133,29 @@ func chosen(r *http.Request, offered []Measurement) []Measurement {
 			out = append(out, m)
 		}
 	}
-	if len(out) == 0 {
-		return offered
-	}
 	return out
+}
+
+// remember writes the picker's selection back, so the next page load opens on
+// it. Only when the request came from the picker: a plain fetch of the partial
+// is not somebody making a choice, and must not overwrite the one they made.
+func (s *Server) remember(w http.ResponseWriter, r *http.Request, id string, want []Measurement) {
+	if r.URL.Query().Get(showMarker) == "" {
+		return
+	}
+	keys := make([]string, 0, len(want))
+	for _, m := range want {
+		keys = append(keys, m.Key)
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     showCookie(id),
+		Value:    strings.Join(keys, ","),
+		Path:     "/",
+		MaxAge:   365 * 24 * 3600,
+		HttpOnly: true,
+		Secure:   s.cfg.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
 // metricsCards draws one card per measurement, and gives the last of an odd
@@ -162,8 +202,14 @@ func metricsCard(wide bool, label, unit string, pts []db.MetricPoint, sel func(d
 
 func (s *Server) handleServerMetricsPartial(w http.ResponseWriter, r *http.Request) {
 	spec, window := metricsWindow(r)
+	want := chosen(r, ServerPicker, ServerMeasurements)
+	s.remember(w, r, ServerPicker, want)
+	if len(want) == 0 {
+		s.renderPartial(w, "metrics", nil)
+		return
+	}
 	pts, _ := db.ServerMetrics(s.db, time.Now().Add(-window), window/metricsBuckets)
-	s.renderPartial(w, "metrics", metricsCards(pts, chosen(r, ServerMeasurements), spec))
+	s.renderPartial(w, "metrics", metricsCards(pts, want, spec))
 }
 
 func (s *Server) handleAppMetricsPartial(w http.ResponseWriter, r *http.Request) {
@@ -172,6 +218,65 @@ func (s *Server) handleAppMetricsPartial(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	spec, window := metricsWindow(r)
+	want := chosen(r, AppPicker, AppMeasurements)
+	s.remember(w, r, AppPicker, want)
+	if len(want) == 0 {
+		s.renderPartial(w, "metrics", nil)
+		return
+	}
 	pts, _ := db.AppMetrics(s.db, a.ID, time.Now().Add(-window), window/metricsBuckets)
-	s.renderPartial(w, "metrics", metricsCards(pts, chosen(r, AppMeasurements), spec))
+	s.renderPartial(w, "metrics", metricsCards(pts, want, spec))
+}
+
+// StorageMeasurements is the one series an application's storage keeps. It is
+// a list of one so that the picker and the cards read it the same way
+// everything else does; the picker leaves out its Show group when there is only
+// one thing in it.
+var StorageMeasurements = []Measurement{
+	{Key: "size", Name: "Size", Unit: " MB", Value: func(p db.MetricPoint) float64 { return p.V1 }},
+}
+
+// handleAppStorageHistoryPartial charts what this application's data directory
+// has weighed.
+//
+// A different window from the resource charts on the same page, and it matters
+// which: CPU over a day is a shape, size over a day is a flat line. What this
+// answers is which application filled the disk, and that is a question about
+// last week — so the samples behind it are kept for a year rather than for
+// seven days.
+func (s *Server) handleAppStorageHistoryPartial(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	spec, window := metricsWindow(r)
+	pts, _ := db.AppSizes(s.db, a.ID, time.Now().Add(-window), window/metricsBuckets)
+	s.renderPartial(w, "metrics", metricsCards(pts, StorageMeasurements, spec))
+}
+
+// The pickers, named. A page and the partial behind it have to agree on which
+// selection is being remembered, and this is where they agree.
+const (
+	ServerPicker  = "server-metrics"
+	AppPicker     = "app-metrics"
+	StoragePicker = "app-storage"
+)
+
+// MeasurementChoice is one entry of a picker as the page draws it: what it
+// offers, and whether it is on. Checked comes from the cookie the partial
+// wrote, so the boxes open on the selection somebody left rather than on all
+// of them.
+type MeasurementChoice struct {
+	Measurement
+	Checked bool
+}
+
+// picker is what a page hands its picker template.
+func picker(r *http.Request, id string, offered []Measurement) []MeasurementChoice {
+	on := chosen(r, id, offered)
+	out := make([]MeasurementChoice, 0, len(offered))
+	for _, m := range offered {
+		out = append(out, MeasurementChoice{Measurement: m, Checked: slices.ContainsFunc(on, func(x Measurement) bool { return x.Key == m.Key })})
+	}
+	return out
 }

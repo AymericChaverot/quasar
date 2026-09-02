@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"html/template"
 	"io"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -477,7 +478,8 @@ func TestExecuteTemplates(t *testing.T) {
 			{ID: 2, AppID: "abcd1234", Command: "false", LastStatus: "failed"},
 		}}},
 		{"tasks", map[string]any{"AppID": "abcd1234", "Tasks": []*db.Task(nil)}},
-		{"metrics_range", map[string]any{"URL": "/partials/metrics", "Measurements": ServerMeasurements}},
+		{"metrics_range", map[string]any{"ID": ServerPicker, "URL": "/partials/metrics",
+			"Measurements": picker(httptest.NewRequest("GET", "/", nil), ServerPicker, ServerMeasurements)}},
 		{"metrics", metricsCards([]db.MetricPoint{
 			{TS: time.Now().Add(-2 * time.Minute), V1: 10, V2: 40, V3: 71},
 			{TS: time.Now().Add(-time.Minute), V1: 25, V2: 42, V3: 71},

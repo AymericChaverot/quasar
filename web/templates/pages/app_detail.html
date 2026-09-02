@@ -154,10 +154,10 @@
        application's own two measurements. */}}
   <div class="mt-6 mb-3 flex items-center justify-between">
     <h2 class="h-label mb-0!">History</h2>
-    {{template "metrics_range" (dict "URL" (printf "/partials/apps/%s/metrics" .ID) "Measurements" $.Measurements)}}
+    {{template "metrics_range" (dict "ID" "app-metrics" "URL" (printf "/partials/apps/%s/metrics" .ID) "Measurements" $.Measurements)}}
   </div>
-  <div id="metrics-cards" hx-get="/partials/apps/{{.ID}}/metrics" hx-trigger="load, every 60s"
-       hx-include="#metrics-range" hx-swap="innerHTML"></div>
+  <div id="app-metrics-cards" hx-get="/partials/apps/{{.ID}}/metrics" hx-trigger="load, every 60s"
+       hx-include="#app-metrics-range" hx-swap="innerHTML"></div>
   {{/* Directly under the usage it bounds: above is what the application takes,
        here is the most it may. */}}
   {{if $.IsAdmin}}
@@ -196,6 +196,20 @@
   <h2 class="h-label mb-3">Storage</h2>
   <div hx-get="/partials/apps/{{.ID}}/storage" hx-trigger="load" hx-swap="innerHTML">
     <div class="card h-20 animate-pulse"></div>
+  </div>
+</section>
+<section class="mt-8">
+  {{/* How this application's directory has grown, over the samples the monitor
+       records. It sits here rather than beside the CPU and memory charts
+       because it answers a different question: those are about load right now,
+       this is about the disk filling up over weeks. */}}
+  <div class="mb-3 flex items-center justify-between">
+    <h2 class="h-label mb-0!">Growth</h2>
+    {{template "metrics_range" (dict "ID" "app-storage" "URL" (printf "/partials/apps/%s/storage-history" .ID) "Measurements" $.StorageMeasurements)}}
+  </div>
+  <div id="app-storage-cards" hx-get="/partials/apps/{{.ID}}/storage-history" hx-trigger="load"
+       hx-include="#app-storage-range" hx-swap="innerHTML">
+    <div class="card h-48 animate-pulse"></div>
   </div>
 </section>
 <section class="mt-8">

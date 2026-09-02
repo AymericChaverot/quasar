@@ -40,7 +40,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		"Title": "Dashboard", "Domain": s.cfg.Domain,
 		// What the history picker has to offer, from the same list the
 		// partial behind it reads, so the two cannot drift apart.
-		"Measurements": ServerMeasurements,
+		"Measurements": picker(r, ServerPicker, ServerMeasurements),
 	})
 }
 
@@ -319,7 +319,9 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 		// What this page's history picker has to offer. An application keeps
 		// two of the three the server does: its disk is not sampled a minute
 		// at a time.
-		"Measurements": AppMeasurements,
+		"Measurements": picker(r, AppPicker, AppMeasurements),
+		// The storage tab keeps its own history, and its own picker with it.
+		"StorageMeasurements": picker(r, StoragePicker, StorageMeasurements),
 	}
 	// A station renders as one block at the top of this page, and only for an
 	// admin: fetching a panel runs somebody else's script with whatever the

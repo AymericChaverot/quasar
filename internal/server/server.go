@@ -424,6 +424,7 @@ func (s *Server) routes() {
 	// the server and links straight into its contents.
 	s.admin("GET /partials/system/volumes", s.handleSystemVolumesPartial)
 	s.admin("GET /partials/apps/{id}/storage", s.handleAppStoragePartial)
+	s.admin("GET /partials/apps/{id}/storage-history", s.handleAppStorageHistoryPartial)
 	s.viewer("GET /partials/apps", s.handleAppsPartial)
 	s.viewer("GET /partials/deploy-fields", s.handleDeployFields)
 	s.viewer("GET /partials/apps/{id}/stats", s.handleAppStatsPartial)
