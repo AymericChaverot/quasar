@@ -113,7 +113,7 @@ func TestAWindowInAnotherZoneStillFindsTheSamples(t *testing.T) {
 	east := time.FixedZone("UTC+9", 9*60*60)
 	since := time.Now().In(east).Add(-time.Hour)
 
-	if pts, err := AppMetrics(database, "app1", since); err != nil || len(pts) != 1 {
+	if pts, err := AppMetrics(database, "app1", since, time.Minute); err != nil || len(pts) != 1 {
 		t.Errorf("AppMetrics found %d samples in the last hour (%v)", len(pts), err)
 	}
 	if err := RecordStationSeries(database, "app1", "minecraft", "players", 4); err != nil {
@@ -128,7 +128,53 @@ func TestAWindowInAnotherZoneStillFindsTheSamples(t *testing.T) {
 	if err := PruneTimeSeries(database, time.Now().In(east).Add(-7*24*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	if pts, _ := AppMetrics(database, "app1", since); len(pts) != 1 {
+	if pts, _ := AppMetrics(database, "app1", since, time.Minute); len(pts) != 1 {
 		t.Error("a fresh sample was pruned by a window expressed in another zone")
+	}
+}
+
+// The window is bucketed by the query, so the rows the graph is drawn from are
+// the buckets and not the samples. Two things have to hold for that to be the
+// same graph: each bucket has to be the average of what fell in it, and a
+// stretch with no samples has to come back as no bucket rather than as a
+// bucket averaging the ones either side of it.
+func TestMetricsAreAveragedIntoBucketsWithGapsLeftOpen(t *testing.T) {
+	database := openTestDB(t)
+
+	// Two samples inside one ten-minute bucket, a bucket-wide gap, then one
+	// more. Written directly so the test owns ts; CURRENT_TIMESTAMP would put
+	// all four in the same second.
+	base := time.Now().UTC().Truncate(10 * time.Minute).Add(-time.Hour)
+	for _, s := range []struct {
+		offset time.Duration
+		cpu    float64
+	}{
+		{0, 10},
+		{2 * time.Minute, 30},
+		{20 * time.Minute, 70},
+	} {
+		if _, err := database.Exec("INSERT INTO app_metrics (app_id, ts, cpu, mem_mb) VALUES (?, ?, ?, 0)",
+			"app1", base.Add(s.offset).Format("2006-01-02 15:04:05"), s.cpu); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	pts, err := AppMetrics(database, "app1", base.Add(-time.Minute), 10*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pts) != 2 {
+		t.Fatalf("got %d buckets, want 2 — the empty ten minutes should not be one", len(pts))
+	}
+	if pts[0].V1 != 20 {
+		t.Errorf("first bucket averaged %v, want 20", pts[0].V1)
+	}
+	if pts[1].V1 != 70 {
+		t.Errorf("second bucket averaged %v, want 70", pts[1].V1)
+	}
+	// The bucket is stamped with its own start rather than with a sample in
+	// it, which is what keeps the points evenly spaced.
+	if gap := pts[1].TS.Sub(pts[0].TS); gap != 20*time.Minute {
+		t.Errorf("buckets are %v apart, want 20m", gap)
 	}
 }

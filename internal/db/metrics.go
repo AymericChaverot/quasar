@@ -59,12 +59,43 @@ func RecordAppMetric(db *sql.DB, appID string, cpu, memMB float64) error {
 // callers are all "the last day of it" and none of them means anything by the
 // zone, so the correction belongs here rather than at each of them.
 
-func ServerMetrics(db *sql.DB, since time.Time) ([]MetricPoint, error) {
-	return queryPoints(db, "SELECT ts, cpu, mem FROM metrics WHERE ts >= ? ORDER BY ts", since.UTC())
+// Both windows are averaged into buckets by the query rather than read whole
+// and averaged afterwards. The monitor writes a sample a minute, so a day is
+// 1440 rows, and every one of them was being carried out of the database,
+// decoded into a struct and then thrown away to draw sixty points. Grouping in
+// SQL means the database hands back the sixty: a fortieth of the rows for the
+// same graph, and the same arithmetic done where the rows already are.
+//
+// Buckets are cut on absolute time rather than on a count of rows, so a gap in
+// the samples stays a gap. An hour the monitor was not running is an hour with
+// no bucket at all, where averaging by index closes it up and draws a line
+// straight over the outage as though it had been measured.
+//
+// The bucket's own timestamp is its start, computed from the epoch rather than
+// taken from a row in it, which keeps the points evenly spaced whatever the
+// samples inside them happened to land on.
+
+func ServerMetrics(db *sql.DB, since time.Time, bucket time.Duration) ([]MetricPoint, error) {
+	secs := bucketSeconds(bucket)
+	return queryPoints(db, `SELECT CAST(strftime('%s', ts) / ? AS INTEGER) * ?, AVG(cpu), AVG(mem)
+		FROM metrics WHERE ts >= ? GROUP BY 1 ORDER BY 1`, secs, secs, since.UTC())
 }
 
-func AppMetrics(db *sql.DB, appID string, since time.Time) ([]MetricPoint, error) {
-	return queryPoints(db, "SELECT ts, cpu, mem_mb FROM app_metrics WHERE app_id = ? AND ts >= ? ORDER BY ts", appID, since.UTC())
+func AppMetrics(db *sql.DB, appID string, since time.Time, bucket time.Duration) ([]MetricPoint, error) {
+	secs := bucketSeconds(bucket)
+	return queryPoints(db, `SELECT CAST(strftime('%s', ts) / ? AS INTEGER) * ?, AVG(cpu), AVG(mem_mb)
+		FROM app_metrics WHERE app_id = ? AND ts >= ? GROUP BY 1 ORDER BY 1`, secs, secs, appID, since.UTC())
+}
+
+// bucketSeconds is the width of one bucket, in the unit the query divides by.
+// A width under a second would divide by zero, and a caller asking for one is
+// asking for every sample it has: a second is finer than anything is recorded
+// at, so a one-second bucket holds exactly one row.
+func bucketSeconds(bucket time.Duration) int64 {
+	if secs := int64(bucket / time.Second); secs > 1 {
+		return secs
+	}
+	return 1
 }
 
 func queryPoints(db *sql.DB, query string, args ...any) ([]MetricPoint, error) {
@@ -75,10 +106,14 @@ func queryPoints(db *sql.DB, query string, args ...any) ([]MetricPoint, error) {
 	defer rows.Close()
 	var out []MetricPoint
 	for rows.Next() {
-		var p MetricPoint
-		if err := rows.Scan(&p.TS, &p.V1, &p.V2); err != nil {
+		var (
+			p     MetricPoint
+			epoch int64
+		)
+		if err := rows.Scan(&epoch, &p.V1, &p.V2); err != nil {
 			return nil, err
 		}
+		p.TS = time.Unix(epoch, 0).UTC()
 		out = append(out, p)
 	}
 	return out, rows.Err()

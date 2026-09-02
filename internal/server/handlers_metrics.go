@@ -9,8 +9,9 @@ import (
 	"quasar/internal/db"
 )
 
-// Spark is a server-rendered SVG sparkline: 24h of samples, downsampled,
-// with native <title> tooltips as the hover layer (no client JS).
+// Spark is a server-rendered SVG sparkline: a day of samples, bucketed by the
+// query that read them, with native <title> tooltips as the hover layer (no
+// client JS).
 type Spark struct {
 	Label  string
 	Latest string
@@ -28,7 +29,13 @@ type SparkDot struct {
 const (
 	sparkW, sparkH = 240.0, 48.0
 	sparkPad       = 2.0
-	sparkBuckets   = 60
+
+	// The window every graph on the dashboard draws, and how finely it is cut.
+	// Sixty buckets over a day is one point every twenty-four minutes, which is
+	// as much detail as 240 pixels of sparkline can show and no more than the
+	// database has to be asked for.
+	metricsWindow  = 24 * time.Hour
+	metricsBuckets = 60
 )
 
 func buildSpark(label, unit string, pts []db.MetricPoint, sel func(db.MetricPoint) float64, fixedMax float64) Spark {
@@ -75,38 +82,8 @@ func buildSpark(label, unit string, pts []db.MetricPoint, sel func(db.MetricPoin
 	return s
 }
 
-// downsample averages points into at most n buckets to keep the SVG small.
-func downsample(pts []db.MetricPoint, n int) []db.MetricPoint {
-	if len(pts) <= n {
-		return pts
-	}
-	out := make([]db.MetricPoint, 0, n)
-	size := float64(len(pts)) / float64(n)
-	for i := 0; i < n; i++ {
-		lo, hi := int(float64(i)*size), int(float64(i+1)*size)
-		if hi > len(pts) {
-			hi = len(pts)
-		}
-		if lo >= hi {
-			continue
-		}
-		var agg db.MetricPoint
-		for _, p := range pts[lo:hi] {
-			agg.V1 += p.V1
-			agg.V2 += p.V2
-		}
-		count := float64(hi - lo)
-		agg.V1 /= count
-		agg.V2 /= count
-		agg.TS = pts[(lo+hi)/2].TS
-		out = append(out, agg)
-	}
-	return out
-}
-
 func (s *Server) handleServerMetricsPartial(w http.ResponseWriter, r *http.Request) {
-	pts, _ := db.ServerMetrics(s.db, time.Now().Add(-24*time.Hour))
-	pts = downsample(pts, sparkBuckets)
+	pts, _ := db.ServerMetrics(s.db, time.Now().Add(-metricsWindow), metricsWindow/metricsBuckets)
 	s.renderPartial(w, "sparks", []Spark{
 		buildSpark("CPU · 24h", "%", pts, func(p db.MetricPoint) float64 { return p.V1 }, 100),
 		buildSpark("Memory · 24h", "%", pts, func(p db.MetricPoint) float64 { return p.V2 }, 100),
@@ -118,8 +95,7 @@ func (s *Server) handleAppMetricsPartial(w http.ResponseWriter, r *http.Request)
 	if a == nil {
 		return
 	}
-	pts, _ := db.AppMetrics(s.db, a.ID, time.Now().Add(-24*time.Hour))
-	pts = downsample(pts, sparkBuckets)
+	pts, _ := db.AppMetrics(s.db, a.ID, time.Now().Add(-metricsWindow), metricsWindow/metricsBuckets)
 	s.renderPartial(w, "sparks", []Spark{
 		buildSpark("CPU · 24h", "%", pts, func(p db.MetricPoint) float64 { return p.V1 }, 0),
 		buildSpark("Memory · 24h", " MB", pts, func(p db.MetricPoint) float64 { return p.V2 }, 0),
