@@ -138,7 +138,10 @@ func (c *Client) AppDirSize(appID string) int64 {
 	// directories by count. WalkDir reads them from the directory listing and
 	// only stats what is asked about, which here is the files alone.
 	_ = filepath.WalkDir(c.AppDir(appID), func(_ string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil {
+			return nil //nolint:nilerr // one unreadable entry must not abandon the rest of the tree
+		}
+		if d.IsDir() {
 			return nil
 		}
 		if info, err := d.Info(); err == nil {
