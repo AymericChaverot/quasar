@@ -75,6 +75,36 @@
   <div class="advanced-body [&>*:first-child]:mt-0!">
 {{end}}
 
+
+{{/* The tab bar. Everything above it is what the application *is* — its name,
+     whether it is up, what a deploy is doing right now — and stays on screen
+     whichever tab is open. Everything below is one subject at a time.
+
+     This page was a single column of eleven sections, which meant the way to
+     reach the environment was to scroll past the build, the routing, the
+     containers, the certificate and the resources, and the way to find out
+     whether that was even the right application was to scroll back. The
+     sections have not changed and none of them has moved out of the page; they
+     are grouped, and five of the six groups start closed.
+
+     The strip is drawn like the site's own nav rather than like the station's
+     tab strip further up: these are two different levels of the same page, and
+     two identical strips would read as one confused one. A tab that would be
+     empty for a viewer is not drawn — Environment, Storage and Settings are all
+     admin-only in their entirety, and an empty tab is a promise the page does
+     not keep. */}}
+<div class="page-tabs" role="tablist" aria-label="Application sections">
+  <button type="button" class="page-tab is-on" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+  {{if $.IsAdmin}}
+  <button type="button" class="page-tab" role="tab" data-tab="environment" aria-selected="false">Environment</button>
+  <button type="button" class="page-tab" role="tab" data-tab="storage" aria-selected="false">Storage</button>
+  <button type="button" class="page-tab" role="tab" data-tab="settings" aria-selected="false">Settings</button>
+  {{end}}
+  <button type="button" class="page-tab" role="tab" data-tab="logs" aria-selected="false">Logs</button>
+  <button type="button" class="page-tab" role="tab" data-tab="history" aria-selected="false">History</button>
+</div>
+
+<div class="page-pane" data-pane="overview">
 {{if eq .DeployType "git"}}
 <section class="mt-8">
   <h2 class="h-label mb-3">Build</h2>
@@ -106,56 +136,77 @@
     <div class="card h-14 animate-pulse"></div>
   </div>
 </section>
-
-<div class="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
-  <section>
-    <h2 class="h-label mb-3">Container resources</h2>
-    <div hx-get="/partials/apps/{{.ID}}/stats" hx-trigger="load, every 5s" hx-swap="innerHTML">
-      <div class="card h-20 animate-pulse"></div>
-    </div>
-    <div class="mt-4" hx-get="/partials/apps/{{.ID}}/metrics" hx-trigger="load, every 60s" hx-swap="innerHTML"></div>
-    {{/* Directly under the usage it bounds: above is what the application takes,
-         here is the most it may. */}}
-    {{if $.IsAdmin}}
-    <div class="mt-4">{{template "limits_panel" .}}</div>
-    {{end}}
-  </section>
-
-  {{/* What the app keeps, and where. Admin-only for the same reason the
-       environment below it is: the files behind these mounts hold whatever the
-       application wrote, secrets included. */}}
+<section class="mt-8">
+  <h2 class="h-label mb-3">Container resources</h2>
+  <div hx-get="/partials/apps/{{.ID}}/stats" hx-trigger="load, every 5s" hx-swap="innerHTML">
+    <div class="card h-20 animate-pulse"></div>
+  </div>
+  <div class="mt-4" hx-get="/partials/apps/{{.ID}}/metrics" hx-trigger="load, every 60s" hx-swap="innerHTML"></div>
+  {{/* Directly under the usage it bounds: above is what the application takes,
+       here is the most it may. */}}
   {{if $.IsAdmin}}
-  <section>
-    <h2 class="h-label mb-3">Storage</h2>
-    <div hx-get="/partials/apps/{{.ID}}/storage" hx-trigger="load" hx-swap="innerHTML">
-      <div class="card h-20 animate-pulse"></div>
-    </div>
-  </section>
+  <div class="mt-4">{{template "limits_panel" .}}</div>
   {{end}}
-
-  {{/* Env content and the compose file hold the app's secrets, so a viewer
-       does not get to read them, let alone edit them. */}}
-  {{if $.IsAdmin}}
-  <section>
-    <h2 class="h-label mb-3">Environment</h2>
-    <form hx-post="/apps/{{.ID}}/env" hx-target="#env-feedback" hx-swap="innerHTML" class="space-y-3">
-      <textarea name="env_content" rows="6" spellcheck="false" placeholder="KEY=value"
-                class="input mono">{{.EnvContent}}</textarea>
-      {{if eq .DeployType "compose"}}
-      <textarea name="compose_yaml" rows="10" spellcheck="false"
-                class="input mono">{{.ComposeYAML}}</textarea>
-      {{end}}
-      <div class="flex items-center gap-3">
-        <button type="submit" class="btn">Save</button>
-        <span id="env-feedback"></span>
-        <span class="help mt-0!">Redeploy to apply changes.</span>
-      </div>
-    </form>
-  </section>
-  {{end}}
+</section>
 </div>
 
 {{if $.IsAdmin}}
+<div class="page-pane hidden" data-pane="environment">
+{{/* Env content and the compose file hold the app's secrets, so a viewer
+     does not get to read them, let alone edit them. */}}
+<section class="mt-8">
+  <h2 class="h-label mb-3">Environment</h2>
+  <form hx-post="/apps/{{.ID}}/env" hx-target="#env-feedback" hx-swap="innerHTML" class="space-y-3">
+    <textarea name="env_content" rows="6" spellcheck="false" placeholder="KEY=value"
+              class="input mono">{{.EnvContent}}</textarea>
+    {{if eq .DeployType "compose"}}
+    <textarea name="compose_yaml" rows="10" spellcheck="false"
+              class="input mono">{{.ComposeYAML}}</textarea>
+    {{end}}
+    <div class="flex items-center gap-3">
+      <button type="submit" class="btn">Save</button>
+      <span id="env-feedback"></span>
+      <span class="help mt-0!">Redeploy to apply changes.</span>
+    </div>
+  </form>
+</section>
+</div>
+
+<div class="page-pane hidden" data-pane="storage">
+{{/* What the app keeps, and where. Admin-only for the same reason the
+     environment below it is: the files behind these mounts hold whatever the
+     application wrote, secrets included. */}}
+<section class="mt-8">
+  <h2 class="h-label mb-3">Storage</h2>
+  <div hx-get="/partials/apps/{{.ID}}/storage" hx-trigger="load" hx-swap="innerHTML">
+    <div class="card h-20 animate-pulse"></div>
+  </div>
+</section>
+<section class="mt-8">
+  <h2 class="h-label mb-3">Backup dump command</h2>
+  <form hx-post="/apps/{{.ID}}/pre-backup" hx-target="#prebackup-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
+    <input name="pre_backup_cmd" type="text" value="{{.PreBackupCmd}}" class="input mono"
+           placeholder="pg_dump -U &quot;$POSTGRES_USER&quot; &quot;$POSTGRES_DB&quot;">
+    {{/* The note belongs to the row above it, so the two are one item of the
+         stack rather than two spaced apart. */}}
+    <div>
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn">Save</button>
+        <span id="prebackup-feedback"></span>
+      </div>
+      <p class="help">
+        Run in the container before each backup; its output is archived as <span class="mono">dump.sql</span>.
+        Set this for anything holding a database: copying a running database's files gives an archive
+        that may not reload. The command runs with the container's own environment, so reference
+        <span class="mono">$POSTGRES_USER</span> and friends instead of hardcoding credentials.
+        A failing command fails the backup. Empty means the data directory is copied as-is.
+      </p>
+    </div>
+  </form>
+</section>
+</div>
+
+<div class="page-pane hidden" data-pane="settings">
 <div class="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
   <section>
     <h2 class="h-label mb-3">Custom domains</h2>
@@ -169,7 +220,6 @@
       </div>
     </form>
   </section>
-
   <section>
     <h2 class="h-label mb-3">Deploy webhook</h2>
     <div class="card space-y-2 p-4">
@@ -178,9 +228,6 @@
       <p class="help">Keep this URL secret — anyone who has it can redeploy the app.</p>
     </div>
   </section>
-</div>
-
-<div class="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
   <section>
     <h2 class="h-label mb-3">Health check</h2>
     <form hx-post="/apps/{{.ID}}/health" hx-target="#health-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
@@ -192,30 +239,6 @@
       </div>
     </form>
   </section>
-
-  <section>
-    <h2 class="h-label mb-3">Backup dump command</h2>
-    <form hx-post="/apps/{{.ID}}/pre-backup" hx-target="#prebackup-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
-      <input name="pre_backup_cmd" type="text" value="{{.PreBackupCmd}}" class="input mono"
-             placeholder="pg_dump -U &quot;$POSTGRES_USER&quot; &quot;$POSTGRES_DB&quot;">
-      {{/* The note belongs to the row above it, so the two are one item of the
-           stack rather than two spaced apart. */}}
-      <div>
-        <div class="flex items-center gap-3">
-          <button type="submit" class="btn">Save</button>
-          <span id="prebackup-feedback"></span>
-        </div>
-        <p class="help">
-          Run in the container before each backup; its output is archived as <span class="mono">dump.sql</span>.
-          Set this for anything holding a database: copying a running database's files gives an archive
-          that may not reload. The command runs with the container's own environment, so reference
-          <span class="mono">$POSTGRES_USER</span> and friends instead of hardcoding credentials.
-          A failing command fails the backup. Empty means the data directory is copied as-is.
-        </p>
-      </div>
-    </form>
-  </section>
-
   <section>
     <h2 class="h-label mb-3">Edge protection</h2>
     <form hx-post="/apps/{{.ID}}/protection" hx-target="#protection-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
@@ -243,14 +266,33 @@
       </div>
     </form>
   </section>
-
   <section>
     <h2 class="h-label mb-3">Password protection</h2>
     {{template "basic_auth_panel" .}}
   </section>
 </div>
+<section class="mt-10 border-t pt-6" style="border-color: var(--border)">
+  <h2 class="h-label h-label-danger mb-3">Danger zone</h2>
+  <button hx-post="/apps/{{.ID}}/delete"
+          hx-confirm="Delete {{.Name}}? Its container, images metadata and data directory will be removed permanently."
+          class="btn-danger">
+    {{template "icon_trash"}}Delete application
+  </button>
+</section>
+</div>
 {{end}}
 
+<div class="page-pane hidden" data-pane="logs">
+<section class="mt-8">
+  <div class="mb-3 flex items-center justify-between">
+    <h2 class="h-label mb-0!">Live logs</h2>
+    <a href="/logs?app={{.ID}}" class="link text-sm">Search history</a>
+  </div>
+  {{template "log_pane" (printf "/apps/%s/logs" .ID)}}
+</section>
+</div>
+
+<div class="page-pane hidden" data-pane="history">
 <section class="mt-8">
   <h2 class="h-label mb-3">Tasks</h2>
   <div id="tasks-pane" hx-get="/partials/apps/{{.ID}}/tasks" hx-trigger="load" hx-swap="innerHTML">
@@ -264,31 +306,13 @@
     <div class="card h-16 animate-pulse"></div>
   </div>
 </section>
-
-<section class="mt-8">
-  <div class="mb-3 flex items-center justify-between">
-    <h2 class="h-label mb-0!">Live logs</h2>
-    <a href="/logs?app={{.ID}}" class="link text-sm">Search history</a>
-  </div>
-  {{template "log_pane" (printf "/apps/%s/logs" .ID)}}
-</section>
-
-{{if $.IsAdmin}}
-<section class="mt-10 border-t pt-6" style="border-color: var(--border)">
-  <h2 class="h-label h-label-danger mb-3">Danger zone</h2>
-  <button hx-post="/apps/{{.ID}}/delete"
-          hx-confirm="Delete {{.Name}}? Its container, images metadata and data directory will be removed permanently."
-          class="btn-danger">
-    {{template "icon_trash"}}Delete application
-  </button>
-</section>
-{{end}}
-
+</div>
 {{if $.Station}}
   </div>
 </details>
 {{end}}
 
 <script src="/static/js/app-detail.js" defer></script>
+<script src="/static/js/tabs.js" defer></script>
 {{end}}
 {{end}}

@@ -675,3 +675,54 @@ input[type="checkbox"]:focus-visible {
 .chart-readout li.is-absent { opacity: 0.45; }
 .chart-name { color: var(--text-muted, var(--text-faint)); }
 .chart-value { margin-left: auto; }
+
+/* --- Page tabs ------------------------------------------------------------- */
+
+/* The tab bar an application's page is read through. It is drawn from the site
+   nav rather than from the station's own tab strip: a station's strip is a set
+   of boxed tabs inside its block, and repeating that shape one level out would
+   put two identical strips on the same page with nothing to say which governs
+   what. This one is the page's own navigation, so it looks like navigation —
+   mono caps, an accent bar under the open one, exactly as the header marks the
+   page you are on. */
+.page-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 2rem;
+  border-bottom: var(--border-w) solid var(--border);
+}
+
+.page-tab {
+  position: relative;
+  cursor: pointer;
+  padding: 0 0 0.625rem;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--text-faint);
+  transition: color 0.12s;
+}
+.page-tab:hover { color: var(--text); }
+.page-tab.is-on { color: var(--text); }
+/* On the strip's own rule rather than above it, so the mark and the border are
+   one line and not two. */
+.page-tab.is-on::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: calc(-1 * var(--border-w));
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+/* Each section inside a pane keeps the top margin it had when the page was one
+   column; the first of them does not need it, because the strip above has
+   already left the gap. */
+.page-pane { margin-top: 2rem; }
+.page-pane > :first-child { margin-top: 0; }
