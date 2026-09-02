@@ -258,6 +258,25 @@
   <section>
     <h2 class="h-label mb-3">Edge protection</h2>
     <form hx-post="/apps/{{.ID}}/protection" hx-target="#protection-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
+      {{/* Everything in this form is a Traefik middleware, so it reaches
+           exactly what Traefik routes: this application's subdomain and its
+           custom domains. A stack that publishes a host port of its own — a
+           database, a game server — is answered by the container directly, and
+           nothing set here is in that path.
+
+           The Routing section says this too, and says it about the whole
+           application. It is repeated here because this is where somebody
+           types an allow-list and believes it holds, and since the page grew
+           tabs the two are no longer on the same screen. */}}
+      {{if .Compose.Published}}
+      <p class="text-sm" style="color: var(--warn)">
+        These settings reach what Traefik routes — this application's domain — and nothing else.
+        The stack publishes
+        {{range $i, $p := .Compose.Published}}{{if $i}}, {{end}}<span class="mono">{{$p}}</span>{{end}}
+        straight onto the host, where Traefik never sees the connection — no rate limit and no
+        address list applies to those ports.
+      </p>
+      {{end}}
       <div>
         <label class="label mb-1!">Rate limit (requests/second per client)</label>
         <input name="rate_limit" type="number" min="0" value="{{.RateLimit}}" class="input mono w-32!">
