@@ -18,7 +18,7 @@
 <section class="mb-10">
   <div class="mb-3 flex items-center justify-between">
     <h2 class="h-label mb-0!">History</h2>
-    {{template "metrics_range" "/partials/metrics"}}
+    {{template "metrics_range" (dict "URL" "/partials/metrics" "Measurements" $.Measurements)}}
   </div>
   <div id="metrics-cards" hx-get="/partials/metrics" hx-trigger="load, every 60s"
        hx-include="#metrics-range" hx-swap="innerHTML">

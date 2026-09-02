@@ -810,3 +810,8 @@ input[type="checkbox"]:focus-visible {
   font-size: 0.75rem;
   color: var(--text-faint);
 }
+
+/* The second group of chips in the same picker. A gap wide enough that "Last
+   24h 7d" and "Show CPU Memory Disk" read as two questions rather than as one
+   run of five controls. */
+.range-label-gap { margin-left: 0.875rem; }

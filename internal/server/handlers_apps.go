@@ -36,7 +36,12 @@ func randomHex(n int) string {
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "dashboard", map[string]any{"Title": "Dashboard", "Domain": s.cfg.Domain})
+	s.render(w, r, "dashboard", map[string]any{
+		"Title": "Dashboard", "Domain": s.cfg.Domain,
+		// What the history picker has to offer, from the same list the
+		// partial behind it reads, so the two cannot drift apart.
+		"Measurements": ServerMeasurements,
+	})
 }
 
 // catalog is the catalogue as this install presents it: the one Quasar ships,
@@ -311,6 +316,10 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{
 		"Title": a.Name,
 		"App":   s.appDetailView(r, a),
+		// What this page's history picker has to offer. An application keeps
+		// two of the three the server does: its disk is not sampled a minute
+		// at a time.
+		"Measurements": AppMeasurements,
 	}
 	// A station renders as one block at the top of this page, and only for an
 	// admin: fetching a panel runs somebody else's script with whatever the
