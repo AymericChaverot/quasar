@@ -25,19 +25,28 @@
       {{range .}}
       <tr>
         <td class="pr-0!">
-          <div class="flex flex-col gap-0.5">
-            {{if not .First}}
-            <button hx-post="/apps/{{.ID}}/move" hx-vals='{"dir": "up"}' hx-target="#apps-pane" hx-swap="innerHTML"
-                    class="reorder-btn" aria-label="Move {{.Name}} up" title="Move up">
-              <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 4l5 6H3z"/></svg>
-            </button>
-            {{end}}
-            {{if not .Last}}
-            <button hx-post="/apps/{{.ID}}/move" hx-vals='{"dir": "down"}' hx-target="#apps-pane" hx-swap="innerHTML"
-                    class="reorder-btn" aria-label="Move {{.Name}} down" title="Move down">
-              <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 12L3 6h10z"/></svg>
-            </button>
-            {{end}}
+          {{/* Both slots are drawn on every row; only the moves that exist hold
+               a button. The first application cannot go up and the last cannot
+               go down, and leaving those out entirely made their rows half the
+               height of the others — and slid the one arrow they do have into
+               the other one's place. */}}
+          <div class="reorder">
+            <span class="reorder-slot">
+              {{if not .First}}
+              <button hx-post="/apps/{{.ID}}/move" hx-vals='{"dir": "up"}' hx-target="#apps-pane" hx-swap="innerHTML"
+                      class="reorder-btn" aria-label="Move {{.Name}} up" title="Move up">
+                <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 4l5 6H3z"/></svg>
+              </button>
+              {{end}}
+            </span>
+            <span class="reorder-slot">
+              {{if not .Last}}
+              <button hx-post="/apps/{{.ID}}/move" hx-vals='{"dir": "down"}' hx-target="#apps-pane" hx-swap="innerHTML"
+                      class="reorder-btn" aria-label="Move {{.Name}} down" title="Move down">
+                <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 12L3 6h10z"/></svg>
+              </button>
+              {{end}}
+            </span>
           </div>
         </td>
         <td>

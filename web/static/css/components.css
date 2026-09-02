@@ -815,3 +815,35 @@ input[type="checkbox"]:focus-visible {
    24h 7d" and "Show CPU Memory Disk" read as two questions rather than as one
    run of five controls. */
 .range-label-gap { margin-left: 0.875rem; }
+
+/* --- Reordering the application list ---------------------------------------- */
+
+/* The two buttons that move an application up and down its list.
+
+   Both slots are always drawn, and only one of them holds a button on the first
+   row and on the last: those two moves do not exist. The space is kept anyway,
+   for two reasons. A row with one button would otherwise be half the height of
+   a row with two, so the list would step as the eye went down it; and the one
+   button that is there would slide into the other's place, so "down" would sit
+   where every other row's "up" is. */
+.reorder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.reorder-slot {
+  display: flex;
+  width: 1.25rem;
+  height: 1rem;
+}
+
+.reorder-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  color: var(--text-faint);
+  border-radius: var(--radius);
+}
+.reorder-btn:hover { color: var(--text); background: var(--surface-2); }
