@@ -1,8 +1,15 @@
 /* --- Chrome ---------------------------------------------------------------- */
 
+/* The header stands on the same light the page does, so it is a veil over that
+   light rather than an opaque band across the top of it. Every wash in
+   themes.css has its source above the viewport, and an opaque header would cut
+   each one off at 3.5rem and start it again below — a hard seam exactly where
+   the page is supposed to be brightest. Translucent, the light carries through
+   the bar and the two read as one surface. */
 .site-header {
   border-bottom: var(--border-w) solid var(--border);
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+  backdrop-filter: blur(12px);
 }
 
 /* Wordmark and mark travel together and sit slightly apart from the nav, held

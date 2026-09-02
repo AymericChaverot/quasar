@@ -15,6 +15,57 @@ body {
   font-family: var(--font-body);
 }
 
+/* --- The ground ------------------------------------------------------------
+   The light the page is lit by: one fixed layer behind everything, drawn once
+   here and filled in per theme from `--bg-light`, the way colour already is.
+
+   Until now the background was `--bg` and nothing else. Nebula alone had a wash
+   over it, written by hand into its own extras sheet, which meant six themes
+   were a flat fill and the seventh was a special case. The machinery now lives
+   in one place and a theme only says what colour its light is.
+
+   Every theme builds the value the same way: two arcs, one cutting the
+   top-right corner and one the bottom-left, each a radial gradient centred on
+   the *opposite* corner with its colour in a band well past the far edge — so
+   what lands on the page is a long shallow curve following the two edges it
+   runs between, bowed away from the corner it lights rather than around it.
+   Deliberately not a matched pair: the upper arc is the brighter of the two.
+   Two equal corners read as a frame drawn around the content; an uneven pair
+   reads as a room with a window in it. On the light themes, where nothing can
+   be added to a sheet already white, the same two arcs shade rather than light,
+   which is the only form a vignette can take on that ground.
+
+   `position: fixed`, so the light belongs to the window rather than to the
+   document: scrolling a long log moves the text across a still ground instead
+   of dragging the arcs along with it. Pointer-transparent and at a negative
+   z-index, so it can never intercept a click or a scroll meant for the page,
+   and `--bg` itself is propagated from body to the canvas and paints below it.
+   `body::after` is deliberately left alone: that is the veil, the layer in
+   front of the content, and it is where Terminal's scanlines belong.
+
+   The light is faintly visible through anything filled with `--ground`, since
+   that token is a veil at 60% rather than an aplat — an empty table lets 40% of
+   what is behind it through. That is the intended reading and the reason the
+   veil was written that way. */
+
+/* The layer is oversized and turned a few degrees anticlockwise, which is the
+   whole reason the two arcs read as light falling across the page rather than
+   as a border drawn around it: level, a pair of arcs parallel to the edges is a
+   frame, and off the level by twelve degrees it is a direction. The inset is
+   negative because a rotated rectangle no longer covers the box it was cut
+   from — at this angle the corners would come up bare — so it is cut 30% larger
+   on every side and the overhang is what fills them. Nothing here is
+   interactive, so the extra area costs a little paint and nothing else. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -30%;
+  transform: rotate(-12deg);
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--bg-light, none);
+}
+
 /* Scrollbars. Left to the platform they come out a white trough with a grey
    thumb — a light-mode widget parked down the side of a near-black log pane on
    every theme but Paper, and the one part of the page that never got the memo.

@@ -83,29 +83,12 @@
 
 /* --- Nebula ---------------------------------------------------------------- */
 
-/* The object the theme is named after, standing in for a background image: a
-   cool wash bleeding down from behind the header, so the page has a light
-   source instead of being a flat sheet of near-black. Deliberately not tinted
-   with the accent — a sulfur haze over near-black goes olive, and it would
-   also blunt the accent everywhere it actually carries meaning. Cool ground,
-   warm accent. Fixed and pointer-transparent, and behind everything: it must
-   never intercept a click or a scroll meant for the content. */
-[data-theme="nebula"] body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(48rem 26rem at 50% -8rem, color-mix(in srgb, var(--info) 11%, transparent), transparent 72%),
-    radial-gradient(34rem 20rem at 88% 4rem, color-mix(in srgb, var(--info) 6%, transparent), transparent 70%);
-}
-
-/* The header sits over that wash, so it needs its own ground to stay readable
-   rather than the translucent surface the other themes use. */
+/* Nebula's wash is the strongest of the seven and lands directly behind the
+   bar, so the header is thinned a little further and drawn from the darker of
+   the two surfaces — enough that the cyan reads through it rather than being
+   held at arm's length by a lighter ground. */
 [data-theme="nebula"] .site-header {
   background: color-mix(in srgb, var(--surface) 82%, transparent);
-  backdrop-filter: blur(12px);
 }
 
 

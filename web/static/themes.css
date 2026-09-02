@@ -71,6 +71,13 @@
   --radius: 4px;
   --radius-badge: 9999px;
   --border-w: 1px;
+  /* The object the theme is named after, standing in for a background image.
+     Deliberately not tinted with the accent — a sulfur haze over near-black
+     goes olive, and it would also blunt the accent everywhere it actually
+     carries meaning. Cool ground, warm accent. */
+  --bg-light:
+    radial-gradient(100% 100% at 0% 100%, transparent 88%, color-mix(in srgb, var(--info) 9%, transparent) 108%, transparent 136%),
+    radial-gradient(100% 100% at 100% 0%, transparent 90%, color-mix(in srgb, var(--info) 6%, transparent) 110%, transparent 138%);
   --log-bg: #050506;
   --font-body: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Menlo, monospace;
@@ -96,6 +103,12 @@
   --radius: 0;
   --radius-badge: 0;
   --border-w: 2px;
+  /* Held lower than every other theme: this green over pure black is the most
+     saturated pair in the file, and what reads as a whisper anywhere else reads
+     as a glow here. */
+  --bg-light:
+    radial-gradient(100% 100% at 0% 100%, transparent 88%, color-mix(in srgb, var(--accent) 5%, transparent) 108%, transparent 136%),
+    radial-gradient(100% 100% at 100% 0%, transparent 90%, color-mix(in srgb, var(--accent) 3%, transparent) 110%, transparent 138%);
   --log-bg: #000000;
   --font-body: var(--font-mono);
 }
@@ -122,6 +135,11 @@
   --radius: 0;
   --radius-badge: 0;
   --border-w: 1px;
+  /* One cold instrument light and one hazard ember, which is how the key art
+     lights everything: a warm source and a cold one, and nothing in between. */
+  --bg-light:
+    radial-gradient(100% 100% at 0% 100%, transparent 88%, color-mix(in srgb, var(--info) 6%, transparent) 108%, transparent 136%),
+    radial-gradient(100% 100% at 100% 0%, transparent 90%, color-mix(in srgb, var(--accent) 5%, transparent) 110%, transparent 138%);
   --log-bg: #08080a;
 }
 
@@ -146,6 +164,13 @@
   --radius: 6px;
   --radius-badge: 9999px;
   --border-w: 1px;
+  /* An aurora, which is the one image the palette is named for. Frost above and
+     green below, its own two colours and no third. Carried stronger than the
+     near-black themes need, since the ground here is a mid slate rather than a
+     hole. */
+  --bg-light:
+    radial-gradient(100% 100% at 0% 100%, transparent 88%, color-mix(in srgb, var(--accent) 12%, transparent) 108%, transparent 136%),
+    radial-gradient(100% 100% at 100% 0%, transparent 90%, color-mix(in srgb, var(--ok) 8%, transparent) 110%, transparent 138%);
   --log-bg: #272c36;
 }
 
@@ -170,6 +195,12 @@
   --radius: 6px;
   --radius-badge: 9999px;
   --border-w: 1px;
+  /* Two neon tubes off screen, magenta above and cyan below, the way the colour
+     arrives in the artwork this is taken from — never as a lit object, always
+     as a bloom around one. */
+  --bg-light:
+    radial-gradient(100% 100% at 0% 100%, transparent 88%, color-mix(in srgb, var(--accent) 12%, transparent) 108%, transparent 136%),
+    radial-gradient(100% 100% at 100% 0%, transparent 90%, color-mix(in srgb, var(--info) 8%, transparent) 110%, transparent 138%);
   --log-bg: #0d0520;
 }
 
@@ -193,6 +224,13 @@
   --radius: 6px;
   --radius-badge: 9999px;
   --border-w: 1px;
+  /* Light cannot be added to a sheet that is already white, so the two corners
+     are shaded rather than lit — the same pair of arcs every other theme
+     carries, read in the negative, and the only form a vignette can take on
+     this ground. */
+  --bg-light:
+    radial-gradient(100% 100% at 0% 100%, transparent 88%, color-mix(in srgb, var(--text) 3%, transparent) 108%, transparent 136%),
+    radial-gradient(100% 100% at 100% 0%, transparent 90%, color-mix(in srgb, var(--text) 2%, transparent) 110%, transparent 138%);
   --log-bg: #1c1917;
 }
 
@@ -217,5 +255,11 @@
   --radius: 4px;
   --radius-badge: 9999px;
   --border-w: 1px;
+  /* The same shaded pair as Paper, a step stronger: this ground is a warm ochre
+     rather than a near-white, and it takes more before a corner reads as having
+     any weight at all. */
+  --bg-light:
+    radial-gradient(100% 100% at 0% 100%, transparent 88%, color-mix(in srgb, var(--text) 4%, transparent) 108%, transparent 136%),
+    radial-gradient(100% 100% at 100% 0%, transparent 90%, color-mix(in srgb, var(--text) 3%, transparent) 110%, transparent 138%);
   --log-bg: #002b36;
 }
