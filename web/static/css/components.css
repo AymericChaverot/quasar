@@ -16,7 +16,7 @@
    It is a veil and not an aplat, which is the whole of --ground-veil. Painted
    at full strength these boxes stopped reading as ground and started reading as
    objects: an empty list or a table is the page carrying on, and one filled
-   with solid --bg over Nebula's wash is a darker rectangle sitting on it —
+   with solid --bg over Nebula's wash is a darker rectangle sitting on it â
    louder than the cards it was meant to sit quietly beside. At this strength it
    still governs what is behind it, without becoming a thing in front of it. And
    inside a card the fill is the card's own colour, so there it costs nothing at
@@ -85,8 +85,8 @@
   color: var(--text);
 }
 
-/* Ligatures are off in anything typed into. JetBrains Mono joins "//" — the
-   start of every URL and of half the values in an .env file — into one glyph,
+/* Ligatures are off in anything typed into. JetBrains Mono joins "//" â the
+   start of every URL and of half the values in an .env file â into one glyph,
    and mid-edit the pair shows as a gap and a single slash, which reads as a
    character the field just ate. What goes in a field here is a value some
    other program parses byte for byte, so it is shown byte for byte. */
@@ -115,8 +115,8 @@
 .input::placeholder { color: var(--text-faint); }
 
 /* The clear button a search field grows once there is something to clear.
-   Chrome draws its own — a blue cross, the one colour on the page that belongs
-   to no theme — so it is replaced by the same X the rest of the interface uses.
+   Chrome draws its own â a blue cross, the one colour on the page that belongs
+   to no theme â so it is replaced by the same X the rest of the interface uses.
    The glyph is a mask rather than an image, which is what lets it be painted
    from a variable and follow the theme; the SVG inside is only a stencil, so
    the colour it carries never shows. Firefox draws no such button at all, and
@@ -149,18 +149,18 @@
 /* Radios and checkboxes are the last controls the browser still draws itself,
    and a native blue tick on a themed surface is the loudest sign that a page
    was assembled rather than designed. They follow the accent and the theme's
-   corner radius like everything else — square on Terminal and Marathon,
+   corner radius like everything else â square on Terminal and Marathon,
    rounded on Nord.
 
    The 1rem box is a whole even number of pixels on purpose. At the 15px this
    used to be, centring a 6px dot leaves 4.5px on each side, so the dot lands
    half a pixel off the device grid and the browser smears it across two
-   columns — geometrically centred, visibly not. An even box keeps the dot,
+   columns â geometrically centred, visibly not. An even box keeps the dot,
    the tick and the ring on whole pixels at both border widths.
 
    The explicit vertical-align is the fix for a box that jumped as it was
    ticked. An inline-grid with nothing in it takes its baseline from its bottom
-   margin edge; one with a child — the tick, which only exists while checked —
+   margin edge; one with a child â the tick, which only exists while checked â
    takes it from the child instead. So an unchecked box sat a pixel or two above
    a checked one, and the control moved under the pointer at the moment somebody
    clicked it. Aligning to the middle takes the baseline out of it entirely. */
@@ -359,7 +359,7 @@ input[type="checkbox"]:focus-visible {
   color: var(--err);
 }
 
-/* Not a failure — the one thing a catalogue entry needs said before it is
+/* Not a failure â the one thing a catalogue entry needs said before it is
    created: a URL to fill in, or a server the subdomain will never reach. */
 .alert-note {
   border: var(--border-w) solid color-mix(in srgb, var(--warn) 45%, transparent);
@@ -375,8 +375,8 @@ input[type="checkbox"]:focus-visible {
 
 /* Built on <dialog>, so the escape key, the focus trap and the inert page
    behind come from the browser rather than from script. The panel is the
-   dialog element itself and carries no padding of its own — its three bands
-   pad themselves — which is what lets a click be tested against the element:
+   dialog element itself and carries no padding of its own â its three bands
+   pad themselves â which is what lets a click be tested against the element:
    anything landing on the dialog and not on a band landed on the backdrop.
 
    The height is capped rather than fixed. A catalogue of six entries should be
@@ -414,7 +414,7 @@ input[type="checkbox"]:focus-visible {
    Three things have to be in each transition list for the closing half to run
    at all. `display` because the rule above takes the panel to none the instant
    the attribute goes, and `overlay` because the browser drops it out of the top
-   layer just as fast — both are discrete properties, so `allow-discrete` is
+   layer just as fast â both are discrete properties, so `allow-discrete` is
    what defers them to the end of the transition instead of applying them at
    once. @starting-style supplies the other half: without a style to start from,
    an element that has just been inserted into the top layer has nothing to move
@@ -575,8 +575,8 @@ input[type="checkbox"]:focus-visible {
 
 /* --- Charts ---------------------------------------------------------------- */
 
-/* A chart, drawn on the server. Everything about it that varies — the points,
-   the bars, the colours — arrives as attributes; what is here is only the
+/* A chart, drawn on the server. Everything about it that varies â the points,
+   the bars, the colours â arrives as attributes; what is here is only the
    things that are the same on every chart, so that a station theming its own
    series does it by naming colours rather than by writing CSS.
 
@@ -586,7 +586,7 @@ input[type="checkbox"]:focus-visible {
    by the same component now, and chrome that leant on that sheet would be
    chrome a station could reach. So they live here with the rest of the
    components, and the one thing a station still reaches into is the surface its
-   readout sits on — through a variable, with the ordinary surface as the
+   readout sits on â through a variable, with the ordinary surface as the
    fallback. */
 .chart {
   display: block;
@@ -682,7 +682,7 @@ input[type="checkbox"]:focus-visible {
    nav rather than from the station's own tab strip: a station's strip is a set
    of boxed tabs inside its block, and repeating that shape one level out would
    put two identical strips on the same page with nothing to say which governs
-   what. This one is the page's own navigation, so it looks like navigation —
+   what. This one is the page's own navigation, so it looks like navigation â
    mono caps, an accent bar under the open one, exactly as the header marks the
    page you are on. */
 .page-tabs {
@@ -729,7 +729,7 @@ input[type="checkbox"]:focus-visible {
 
 /* The button at the end of the strip that puts the rest of the strip on it.
    Deliberately not a .page-tab: it opens no pane, and drawn as one it would
-   read as a seventh tab that never lights up. It is an outline instead —
+   read as a seventh tab that never lights up. It is an outline instead â
    quiet, at the far end, and gone the moment it has been pressed. */
 .page-tab-more {
   display: inline-flex;
@@ -756,7 +756,7 @@ input[type="checkbox"]:focus-visible {
 
 /* A window picker: the chips the filters already use, driven by radio inputs
    so the choice travels with every poll through hx-include instead of being
-   held in script. The input is not drawn — the chip around it is the control —
+   held in script. The input is not drawn â the chip around it is the control â
    but it keeps its place in the tab order, so the pair is still reachable and
    still announced as a set of choices. */
 .range-pick {
@@ -780,12 +780,33 @@ input[type="checkbox"]:focus-visible {
   outline-offset: 2px;
 }
 
-/* The history cards. Laid out by how many there are rather than by a column
-   count written into the page: the server keeps three measurements and an
-   application two, and one rule that fits either is one less thing for the two
-   to disagree about. */
+/* The history cards. Two to a row, and an odd one out takes the whole of the
+   next row rather than half of it with an empty column beside it. The server
+   keeps three measurements and an application two, so one rule lays out both
+   without either page having to say how many it has â and the card that ends
+   up full width is the disk, which is the slowest of the three and the one
+   worth the extra room. */
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  grid-template-columns: 1fr;
   gap: 1rem;
+}
+@media (min-width: 40rem) {
+  .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* The card the server marked as the odd one out. It says so itself rather
+     than being picked out here by its position, because the chart inside it is
+     drawn to a wider viewBox to match and the two have to agree — a card that
+     spanned without the wider drawing would come out twice as tall with an axis
+     twice the size. */
+  .metrics-grid > .is-wide { grid-column: 1 / -1; }
+}
+
+/* What the chips beside it are answering. Aligned to their centre rather than
+   to the baseline: the chips are boxes and the word is not, and a baseline
+   would leave it sitting low against them. */
+.range-label {
+  align-self: center;
+  margin-right: 0.125rem;
+  font-size: 0.75rem;
+  color: var(--text-faint);
 }

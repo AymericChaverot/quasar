@@ -77,10 +77,19 @@ type Series struct {
 // is a sparkline, and there is already one of those.
 const (
 	chartW, chartH = 640.0, 180.0
-	chartPadL      = 46.0
-	chartPadR      = 10.0
-	chartPadT      = 10.0
-	chartPadB      = 22.0
+
+	// chartWide is the same chart across a whole row instead of half of one.
+	// Only the width changes, and it changes in exactly the proportion the box
+	// does, which is the whole point: an SVG scales its type with everything
+	// else, so a chart drawn at 640 units and shown twice as wide comes out
+	// twice as tall with an axis twice the size. Doubling the units and leaving
+	// the height alone puts the scale factor back where it was, and the wide
+	// card ends up the same height as the narrow ones with type the same size.
+	chartWide = 1280.0
+	chartPadL = 46.0
+	chartPadR = 10.0
+	chartPadT = 10.0
+	chartPadB = 22.0
 
 	// chartGridLines is how many horizontal rules the plot is divided by,
 	// counting the axis itself. Three reads as a scale; more reads as graph
@@ -211,7 +220,17 @@ type Time struct {
 // where the panel declared one, which is what keeps a percentage chart honest
 // at 3% instead of redrawing itself as if 3 were a lot.
 func Build(kind string, series []Series, unit string, fixedMax float64) View {
-	v := View{Kind: kind, W: chartW, H: chartH, Legend: len(series) > 1}
+	return build(chartW, kind, series, unit, fixedMax)
+}
+
+// BuildWide is Build for a chart given a whole row rather than half of one.
+// See chartWide.
+func BuildWide(kind string, series []Series, unit string, fixedMax float64) View {
+	return build(chartWide, kind, series, unit, fixedMax)
+}
+
+func build(w float64, kind string, series []Series, unit string, fixedMax float64) View {
+	v := View{Kind: kind, W: w, H: chartH, Legend: len(series) > 1}
 
 	from, to, ok := span(series)
 	if !ok {
@@ -229,13 +248,13 @@ func Build(kind string, series []Series, unit string, fixedMax float64) View {
 	}
 
 	v.Grid = grid(top, unit)
-	v.Times = times(from, to)
+	v.Times = times(w, from, to)
 
 	// Bars are drawn from their centres, so the ends of the window need half a
 	// bar of room on each side or the first one sits on the value labels and
 	// the last one runs out of the plot. One width for the whole chart, from
 	// the longest series, so that series drawn together line up.
-	bar := barWidth(longest(series), len(series), kind)
+	bar := barWidth(w, longest(series), len(series), kind)
 	inset := 0.0
 	if kind == "bar" || kind == "stacked" {
 		inset = bar / 2
@@ -249,7 +268,7 @@ func Build(kind string, series []Series, unit string, fixedMax float64) View {
 		return chartPadT + (chartH-chartPadT-chartPadB)*(1-clamp(value/top))
 	}
 	x := func(at time.Time) float64 {
-		left, right := chartPadL+inset, chartW-chartPadR-inset
+		left, right := chartPadL+inset, w-chartPadR-inset
 		if !to.After(from) {
 			return (left + right) / 2
 		}
@@ -266,7 +285,7 @@ func Build(kind string, series []Series, unit string, fixedMax float64) View {
 	// single series would then be reading the wrong column for the others.
 	cols, at := columns(series), momentLabel(from, to)
 	v.Cursor = Cursor{
-		Left: chartPadL, Right: chartW - chartPadR,
+		Left: chartPadL, Right: w - chartPadR,
 		Top: chartPadT, Bottom: chartH - chartPadB,
 	}
 	column := make(map[time.Time]int, len(cols))
@@ -449,28 +468,28 @@ func grid(top float64, unit string) []Grid {
 
 // times is the labels under the axis: the ends, and the middle when the window
 // is wide enough that the ends alone say little.
-func times(from, to time.Time) []Time {
+func times(w float64, from, to time.Time) []Time {
 	label := func(t time.Time) string {
 		if to.Sub(from) > 48*time.Hour {
 			return t.Local().Format("2 Jan")
 		}
 		return t.Local().Format("15:04")
 	}
-	mid := chartPadL + (chartW-chartPadL-chartPadR)/2
+	mid := chartPadL + (w-chartPadL-chartPadR)/2
 	return []Time{
 		{X: chartPadL, Label: label(from), Anchor: "start"},
 		{X: mid, Label: label(from.Add(to.Sub(from) / 2)), Anchor: "middle"},
-		{X: chartW - chartPadR, Label: label(to), Anchor: "end"},
+		{X: w - chartPadR, Label: label(to), Anchor: "end"},
 	}
 }
 
 // barWidth keeps bars apart at any density: wide enough to read when there are
 // a dozen, thin enough not to overlap when there are three hundred.
-func barWidth(points, seriesCount int, kind string) float64 {
+func barWidth(w float64, points, seriesCount int, kind string) float64 {
 	if points < 1 {
 		return 1
 	}
-	slot := (chartW - chartPadL - chartPadR) / float64(points)
+	slot := (w - chartPadL - chartPadR) / float64(points)
 	if kind == "bar" && seriesCount > 1 {
 		slot /= float64(seriesCount)
 	}

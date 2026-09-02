@@ -8,7 +8,14 @@
 {{define "metrics"}}
 <div class="metrics-grid">
   {{range .}}
-  <div class="card p-4">
+  {{/* The wide card is padded wider by exactly what the row costs it: the
+       grid gap plus one card's padding. Without that its content box is not
+       two narrow ones but two plus the gap between them, and a chart drawn to
+       twice the viewBox comes out a few percent taller than the two above it
+       with type a few percent larger. 2.5rem is 1rem of its own padding plus
+       half the 1rem gap plus one 1rem padding, and the arithmetic is in fixed
+       pixels, so it holds at every width. */}}
+  <div class="card {{if .Wide}}py-4 px-10 is-wide{{else}}p-4{{end}}">
     <div class="mb-2 flex items-baseline justify-between">
       <span class="muted text-sm">{{.Label}}</span>
       {{with .Latest}}<span class="mono text-sm">{{.}}</span>{{end}}

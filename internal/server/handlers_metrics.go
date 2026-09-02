@@ -21,6 +21,12 @@ type MetricsCard struct {
 	Label  string
 	Latest string
 	Chart  chart.View
+
+	// Wide is a card given a whole row rather than half of one, which the odd
+	// one out of a set gets. It is said here rather than worked out in CSS from
+	// the position of the card, because the chart inside it is drawn to a wider
+	// viewBox to match and the two have to be the same decision.
+	Wide bool
 }
 
 // metricsRanges are the windows the picker offers, in the order it offers
@@ -60,13 +66,26 @@ func metricsWindow(r *http.Request) (spec string, window time.Duration) {
 // memory figure in megabytes has no ceiling anybody knows in advance and takes
 // whatever the window reached.
 func metricsCard(label, unit string, pts []db.MetricPoint, sel func(db.MetricPoint) float64, fixedMax float64) MetricsCard {
+	return card(false, label, unit, pts, sel, fixedMax)
+}
+
+// wideMetricsCard is metricsCard across a whole row.
+func wideMetricsCard(label, unit string, pts []db.MetricPoint, sel func(db.MetricPoint) float64, fixedMax float64) MetricsCard {
+	return card(true, label, unit, pts, sel, fixedMax)
+}
+
+func card(wide bool, label, unit string, pts []db.MetricPoint, sel func(db.MetricPoint) float64, fixedMax float64) MetricsCard {
 	points := make([]chart.Point, 0, len(pts))
 	for _, p := range pts {
 		points = append(points, chart.Point{At: p.TS, Value: sel(p)})
 	}
 
-	c := MetricsCard{Label: label}
-	c.Chart = chart.Build("area", []chart.Series{{Label: label, Points: points}}, unit, fixedMax)
+	build := chart.Build
+	if wide {
+		build = chart.BuildWide
+	}
+	c := MetricsCard{Label: label, Wide: wide}
+	c.Chart = build("area", []chart.Series{{Label: label, Points: points}}, unit, fixedMax)
 	c.Chart.Label = label
 	if len(c.Chart.Plots) == 1 {
 		c.Latest = c.Chart.Plots[0].Latest
@@ -85,7 +104,7 @@ func (s *Server) handleServerMetricsPartial(w http.ResponseWriter, r *http.Reque
 		// only ever in one direction, which is exactly why a week of it is
 		// worth more than a live figure: a disk that will be full on Thursday
 		// looks no different today from one that will not.
-		metricsCard("Disk · "+spec, "%", pts, func(p db.MetricPoint) float64 { return p.V3 }, 100),
+		wideMetricsCard("Disk · "+spec, "%", pts, func(p db.MetricPoint) float64 { return p.V3 }, 100),
 	})
 }
 

@@ -12,6 +12,10 @@
 {{define "metrics_range"}}
 <form id="metrics-range" class="range-pick"
       hx-get="{{.}}" hx-target="#metrics-cards" hx-swap="innerHTML" hx-trigger="change">
+  {{/* What the two chips are answering, so they read as a sentence rather than
+       as two numbers parked next to a heading. Not a <label>: it names the pair
+       and not either one of them. */}}
+  <span class="range-label">Last</span>
   <label class="chip chip-filter">
     <input type="radio" name="range" value="24h" checked>24h
   </label>
