@@ -368,6 +368,7 @@
   <h2 class="h-label h-label-danger mb-3">Danger zone</h2>
   <button hx-post="/apps/{{.ID}}/delete"
           hx-confirm="Delete {{.Name}}? Its container, images metadata and data directory will be removed permanently."
+          data-confirm-type="{{.Name}}"
           class="btn-danger">
     {{template "icon_trash"}}Delete application
   </button>

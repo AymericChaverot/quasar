@@ -343,6 +343,11 @@ input[type="checkbox"]:focus-visible {
   color: #fff;
 }
 .btn-danger-solid:hover { background: color-mix(in srgb, var(--err) 85%, #000); }
+.btn-danger-solid:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: var(--err);
+}
 
 /* Inline icon, sized to sit beside text; color follows currentColor. */
 .ico {
@@ -565,6 +570,8 @@ input[type="checkbox"]:focus-visible {
   background: color-mix(in srgb, var(--err) 16%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--err) 35%, transparent);
 }
+.confirm-type:not([hidden]) { display: block; padding-top: 0.5rem; }
+
 .modal-confirm.is-danger .confirm-final {
   display: block;
   font-weight: 600;

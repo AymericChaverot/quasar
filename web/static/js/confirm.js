@@ -12,6 +12,10 @@
 // a button drawn as dangerous turns the whole dialog red and says the action
 // cannot be taken back. For those, Cancel has the focus, so an Enter pressed
 // out of habit does nothing.
+//
+// An action worth more than a click — deleting an application — also carries
+// data-confirm-type, and the dialog will not go ahead until that word, its
+// name, has been typed into it.
 (function () {
   var dialog = document.getElementById("confirm-dialog");
   if (!dialog || typeof dialog.showModal !== "function") return;
@@ -20,7 +24,19 @@
   var message = document.getElementById("confirm-message");
   var ok = document.getElementById("confirm-ok");
   var cancelButton = dialog.querySelector(".modal-foot [data-confirm-cancel]");
+  var typeBox = dialog.querySelector(".confirm-type");
+  var typeWord = document.getElementById("confirm-type-word");
+  var typeInput = document.getElementById("confirm-type-input");
   var proceed = null;
+  var mustType = "";
+
+  // Held back until the word asked for is typed exactly, where one is.
+  function armed() {
+    return !mustType || typeInput.value === mustType;
+  }
+  function syncArmed() {
+    ok.disabled = !armed();
+  }
 
   // What the clicked control says, if it is short enough to be a verb.
   function labelOf(el) {
@@ -36,9 +52,15 @@
     ok.textContent = label || "Confirm";
     ok.className = danger ? "btn-danger-solid" : "btn-primary";
     dialog.classList.toggle("is-danger", danger);
+    var holder = trigger && trigger.closest("[data-confirm-type]");
+    mustType = holder ? holder.dataset.confirmType : "";
+    typeBox.hidden = !mustType;
+    typeWord.textContent = mustType;
+    typeInput.value = "";
+    syncArmed();
     proceed = onYes;
     dialog.showModal();
-    (danger ? cancelButton : ok).focus();
+    (mustType ? typeInput : danger ? cancelButton : ok).focus();
   }
 
   function answer(yes) {
@@ -48,7 +70,15 @@
     if (yes && go) go();
   }
 
-  ok.addEventListener("click", function () { answer(true); });
+  ok.addEventListener("click", function () { if (armed()) answer(true); });
+  typeInput.addEventListener("input", syncArmed);
+  // Enter in the field goes ahead once the word is right, and does nothing
+  // before: the field is where the hands are.
+  typeInput.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (armed()) answer(true);
+  });
   dialog.querySelectorAll("[data-confirm-cancel]").forEach(function (b) {
     b.addEventListener("click", function () { answer(false); });
   });

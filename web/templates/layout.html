@@ -98,6 +98,13 @@
         {{/* Only for a dangerous action: said once here rather than in each of
              their questions, which already say what goes. */}}
         <p class="confirm-final text-sm">This can't be undone.</p>
+        {{/* For the few actions worth a second look, asked by a
+             data-confirm-type on the button: its value has to be typed before
+             the dialog lets the action through. */}}
+        <label class="confirm-type" hidden>
+          <span class="muted text-xs">Type <span id="confirm-type-word" class="mono select-all" style="color: var(--text)"></span> to confirm</span>
+          <input id="confirm-type-input" type="text" class="input mono mt-1" autocomplete="off" spellcheck="false">
+        </label>
       </div>
     </div>
     <div class="modal-foot flex items-center justify-end gap-3">
