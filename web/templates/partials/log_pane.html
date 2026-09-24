@@ -6,7 +6,7 @@
      mid-read is worse than falling behind, and offers a way back. */}}
 {{define "log_pane"}}
 <div class="log-pane-wrap relative" hx-ext="sse" sse-connect="{{.}}">
-  {{template "log_bg_toggle"}}
+  {{template "log_toggles"}}
   <div id="log-pane" sse-swap="message" hx-swap="beforeend" class="log-pane"></div>
   <button type="button" id="log-tail" class="btn absolute bottom-3 right-3 py-1! text-xs" hidden>
     Jump to latest
@@ -15,10 +15,15 @@
 <script src="/static/js/log-pane.js" defer></script>
 {{end}}
 
-{{/* Turns off the backgrounds programs paint in their output, on every log
-     view at once; log-bg.js keeps it and remembers it. */}}
-{{define "log_bg_toggle"}}
-<label class="log-bg-toggle" title="Colours a program paints behind its text. Turn them off if they make a log hard to read.">
-  <input type="checkbox" data-log-bg-toggle checked> Backgrounds
-</label>
+{{/* Turn off the colours and the backgrounds programs paint in their output,
+     on every log view at once; log-toggles.js keeps them and remembers them. */}}
+{{define "log_toggles"}}
+<div class="log-toggles">
+  <label class="log-toggle" title="Colours a program gives its text. Turn them off if they make a log hard to read.">
+    <input type="checkbox" data-log-toggle="colors" checked> Colors
+  </label>
+  <label class="log-toggle" title="Colours a program paints behind its text. Turn them off if they make a log hard to read.">
+    <input type="checkbox" data-log-toggle="bg" checked> Backgrounds
+  </label>
+</div>
 {{end}}

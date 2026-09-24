@@ -46,22 +46,11 @@
   --ansi-bright-white: #ffffff;
 }
 
-.ansi-black   { color: var(--ansi-black); }
-.ansi-red     { color: var(--ansi-red); }
-.ansi-green   { color: var(--ansi-green); }
-.ansi-yellow  { color: var(--ansi-yellow); }
-.ansi-blue    { color: var(--ansi-blue); }
-.ansi-magenta { color: var(--ansi-magenta); }
-.ansi-cyan    { color: var(--ansi-cyan); }
-.ansi-white   { color: var(--ansi-white); }
-.ansi-bright-black   { color: var(--ansi-bright-black); }
-.ansi-bright-red     { color: var(--ansi-bright-red); }
-.ansi-bright-green   { color: var(--ansi-bright-green); }
-.ansi-bright-yellow  { color: var(--ansi-bright-yellow); }
-.ansi-bright-blue    { color: var(--ansi-bright-blue); }
-.ansi-bright-magenta { color: var(--ansi-bright-magenta); }
-.ansi-bright-cyan    { color: var(--ansi-bright-cyan); }
-.ansi-bright-white   { color: var(--ansi-bright-white); }
+/* The colour a program gave its text, from the palette above or as it sent
+   it. Dropped when the reader has turned colours off (log-toggles.js), which
+   leaves the pane's own text colour. */
+.ansi-fg { color: var(--ansi-fg); }
+[data-log-colors="off"] .ansi-fg { color: inherit; }
 
 .ansi-bold      { font-weight: 600; }
 .ansi-dim       { opacity: 0.6; }
@@ -134,14 +123,19 @@
 .log-swatch.is-on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
 
 /* Backgrounds a program painted, which block art is made of. Off when the
-   reader has turned them off (log-bg.js), for output whose backgrounds read
+   reader has turned them off (log-toggles.js), for output whose backgrounds read
    badly on the theme in use. */
 .ansi-bg { background: var(--ansi-bg); }
 [data-log-bg="off"] .ansi-bg { background: none; }
 
-/* The switch for them, over the top corner of a pane: out of the way of the
-   lines, which a pane is read from the bottom of. */
-.log-bg-toggle {
+/* The switches for colours and backgrounds, together over the top corner of a
+   pane: out of the way of the lines, which a pane is read from the bottom of. */
+.log-toggles {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.log-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -150,7 +144,7 @@
   cursor: pointer;
   user-select: none;
 }
-.log-pane-wrap .log-bg-toggle {
+.log-pane-wrap .log-toggles {
   position: absolute;
   top: 0.5rem;
   right: 1.25rem;
