@@ -447,6 +447,24 @@ go build ./...
 go test ./...
 ```
 
+## Documentation
+
+The user documentation lives in [`docs/`](docs/), next to the code it
+describes: a [ZenithDocs](https://github.com/AymericChaverot/zenith-docs)
+project, with the pages as Markdown in `docs/content/` and the sidebar order in
+each folder's `meta.json`. It is published under `/docs` on the website, whose
+build fetches `docs/` from the latest release — so a page describes what people
+can install, and a change to it goes live with the next tag.
+
+```bash
+cd docs
+npm install
+npm run dev          # http://localhost:4322/docs/
+npm run gen:icons    # after adding a page: each one has its own sidebar icon
+```
+
+Internal design notes, which are not documentation, are in [`notes/`](notes/).
+
 ## CI/CD & releases
 
 - `ci.yml`: build + vet + test + Docker build on every push/PR.
