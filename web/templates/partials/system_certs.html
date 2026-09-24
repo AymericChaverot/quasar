@@ -45,8 +45,9 @@
     Deleting one restarts Traefik so it drops the copy it holds in memory — a few seconds during
     which no site is served.
     {{if and .IsAdmin (not .CertsWritable)}}
-    Deletion is unavailable because Traefik's store is mounted read-only; bind-mount its directory
-    into the dashboard read-write to enable it.
+    Deletion is unavailable because this server's system stack predates it: the dashboard only
+    reaches Traefik's store read-only. The notice at the top of this page says how to bring the
+    stack up to date.
     {{end}}
   </p>
   {{else}}

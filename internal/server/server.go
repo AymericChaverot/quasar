@@ -421,6 +421,7 @@ func (s *Server) routes() {
 	// concurrently because the browser asks for all four at once.
 	s.viewer("GET /partials/system/environment", s.handleSystemEnvPartial)
 	s.viewer("GET /partials/system/certs", s.handleSystemCertsPartial)
+	s.admin("GET /partials/system/stack", s.handleSystemStackPartial)
 	s.viewer("GET /partials/system/storage", s.handleSystemStoragePartial)
 	s.viewer("GET /partials/system/app-sizes", s.handleSystemAppSizesPartial)
 	// Admin-only like the explorer it leads into: the list names every volume on

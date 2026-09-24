@@ -1,0 +1,31 @@
+{{/* What the server's system stack lacks compared with the compose file this
+     version shipped with. Empty when nothing does, so the page shows nothing
+     at all on an install that is up to date.
+
+     The dashboard updates itself by swapping its own image; the mounts and
+     permissions around it, and the socket proxy and Traefik, come from
+     /opt/quasar/docker-compose.yml, which changes only when the operator
+     pulls it. Without this notice, an old install simply has features that do
+     nothing — a certificate that cannot be deleted, a volume that cannot be
+     edited — with no word as to why. */}}
+{{define "system_stack"}}
+{{if .Drift}}
+<section class="alert-note space-y-3">
+  <p class="font-medium">This server's system stack is older than {{.Version}}</p>
+  <p>
+    The dashboard updates by replacing its own image, but its mounts, the socket proxy and
+    Traefik come from <span class="mono">/opt/quasar/docker-compose.yml</span>, which only changes
+    when it is pulled. Compared with the file {{.Version}} ships with:
+  </p>
+  <ul class="mono list-disc space-y-1 pl-5 text-xs">
+    {{range .Drift}}<li>{{.}}</li>{{end}}
+  </ul>
+  <p>Until then, what depends on it does not work — deleting an unused certificate, for one. On the server, run:</p>
+  <code class="mono block break-all rounded p-2 text-xs" style="background: var(--surface-2); color: var(--text)">cd /opt/quasar &amp;&amp; git pull --ff-only &amp;&amp; docker compose up -d</code>
+  <p class="text-xs">
+    Traefik, the socket proxy and the dashboard are recreated: sites are unreachable for a few
+    seconds, and this page comes back on its own. Applications' containers are not touched.
+  </p>
+</section>
+{{end}}
+{{end}}

@@ -305,7 +305,7 @@ func (s *Server) handleCertDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	path, writable := s.acmePath()
 	if !writable {
-		redirectSystem(w, r, "Traefik's certificate store is mounted read-only. Update docker-compose.yml to bind-mount "+s.cfg.TraefikDir+" into the dashboard, then restart the stack.")
+		redirectSystem(w, r, "Traefik's certificate store is mounted read-only: this server's system stack predates certificate deletion. On the server, run: cd /opt/quasar && git pull --ff-only && docker compose up -d")
 		return
 	}
 	if err := certs.Delete(path, target.Domain); err != nil {
