@@ -183,3 +183,14 @@ func toByte(c float64) int {
 	}
 	return int(math.Round(math.Max(0, math.Min(1, c)) * 255))
 }
+
+// LogColorPalette is the colours offered in an application's settings: twelve
+// hues evenly round the circle at the lightness and chroma Quasar colours
+// applications with, so a colour picked there sits with the others.
+func LogColorPalette() []string {
+	out := make([]string, 0, 12)
+	for i := range 12 {
+		out = append(out, oklchHex(logColorLightness, logColorChroma, math.Mod(firstLogHue+float64(i)*30, 360)))
+	}
+	return out
+}

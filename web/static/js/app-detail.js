@@ -40,3 +40,29 @@
     last = now;
   });
 })();
+
+// The log colour setting: a swatch fills the field, and the field — typed in
+// or filled — colours the name beside it and marks its swatch, so the choice
+// is seen before it is saved.
+(function () {
+  function sync(box) {
+    var field = box.querySelector('input[name="log_color"]');
+    var value = field.value.trim().toLowerCase();
+    if (!/^#[0-9a-f]{6}$/.test(value)) return;
+    box.querySelector('.log-app').style.setProperty('--app', value);
+    box.querySelectorAll('.log-swatch').forEach(function (s) {
+      s.classList.toggle('is-on', s.dataset.color === value);
+    });
+  }
+  document.addEventListener('click', function (e) {
+    var swatch = e.target.closest && e.target.closest('.log-swatch');
+    if (!swatch) return;
+    var box = swatch.closest('[data-log-color]');
+    box.querySelector('input[name="log_color"]').value = swatch.dataset.color;
+    sync(box);
+  });
+  document.addEventListener('input', function (e) {
+    var box = e.target.closest && e.target.closest('[data-log-color]');
+    if (box) sync(box);
+  });
+})();

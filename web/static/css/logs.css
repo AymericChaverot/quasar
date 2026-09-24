@@ -112,3 +112,20 @@
 [data-theme="solarized"] .log-app {
   color: color-mix(in oklab, var(--app, var(--text)) 65%, black);
 }
+
+/* The log colour setting in an application's settings: swatches drawn like
+   the rest of the page's controls, the one in use ringed in the accent. */
+.log-color { display: flex; flex-direction: column; gap: 0.75rem; }
+.log-swatches { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+.log-swatch {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius);
+  border: var(--border-w) solid color-mix(in srgb, var(--swatch) 60%, var(--border));
+  background: var(--swatch);
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.log-swatch:hover { transform: scale(1.08); }
+.log-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.log-swatch.is-on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }

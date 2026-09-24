@@ -194,6 +194,25 @@ func (s *Server) handleAppHealth(w http.ResponseWriter, r *http.Request) {
 	s.renderPartial(w, "env_saved", nil)
 }
 
+// handleAppLogColor sets the colour the application is drawn in on the Logs
+// page. Nothing is redeployed: nothing but that page reads it.
+func (s *Server) handleAppLogColor(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	color := strings.TrimSpace(r.FormValue("log_color"))
+	if !db.IsHexColor(color) {
+		http.Error(w, "the colour must be #rrggbb", http.StatusBadRequest)
+		return
+	}
+	if err := db.UpdateAppLogColor(s.db, a.ID, color); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.renderPartial(w, "env_saved", nil)
+}
+
 // Docker's own floors for a limit. Below them the Engine refuses the container
 // outright, so a form that accepted 2 MB would only produce a deploy that fails
 // later — or, worse, a live change rejected by a daemon the operator never sees.

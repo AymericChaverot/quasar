@@ -288,6 +288,32 @@
     </form>
   </section>
   <section>
+    <h2 class="h-label mb-3">Log colour</h2>
+    <form hx-post="/apps/{{.ID}}/log-color" hx-target="#log-color-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
+      {{/* Not the browser's colour input, whose picker is the operating
+           system's and looks like nothing else on the page: a row of swatches
+           in the colours Quasar gives applications, and a field for any other. */}}
+      <div class="log-color" data-log-color>
+        <div class="log-swatches" role="group" aria-label="Colours">
+          {{$current := .LogColor}}
+        {{range logPalette}}
+          <button type="button" class="log-swatch{{if eq . $current}} is-on{{end}}" style="--swatch: {{.}}" data-color="{{.}}" aria-label="{{.}}"></button>
+          {{end}}
+        </div>
+        <div class="flex items-center gap-3">
+          <input name="log_color" type="text" value="{{.LogColor}}" required pattern="#[0-9a-fA-F]{6}" maxlength="7"
+                 class="input mono w-28!" aria-label="Colour, as #rrggbb">
+          <span class="log-app text-sm" style="--app: {{.LogColor}}">{{.Name}}</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn">Save</button>
+        <span id="log-color-feedback"></span>
+        <span class="help mt-0!">How this application is told apart on the Logs page. Used nowhere else.</span>
+      </div>
+    </form>
+  </section>
+  <section>
     <h2 class="h-label mb-3">Edge protection</h2>
     <form hx-post="/apps/{{.ID}}/protection" hx-target="#protection-feedback" hx-swap="innerHTML" class="card space-y-3 p-4">
       {{/* Everything in this form is a Traefik middleware, so it reaches
