@@ -7,16 +7,28 @@ sidebar:
 
 ## Live logs
 
-The **Logs** tab of an application streams its container output as it is written.
+The **Logs** tab of an application streams its container output as it is written. It opens on the latest line and follows new ones; scroll up to stop following, and **Jump to latest** to go back.
 
 For a compose stack, each container also has its own log view, reached from **Stack containers** in the Overview tab.
+
+### Colours and backgrounds
+
+Logs are shown with the colours programs give them, including the backgrounds that ASCII art and banners are drawn with. Two switches at the top of every log view turn them off when they are hard to read on your theme:
+
+- **Colors**: the colour of the text.
+- **Backgrounds**: the colour behind it.
+
+The choice applies to every log view and is remembered by your browser.
 
 ## Searching past logs
 
 Quasar keeps a copy of every application's output. To search it, click **Search history** in the Logs tab, or open **Logs** in the navigation.
 
 - Filter by application, or search all of them.
-- Search for any text, such as `error` or `exception`.
+- Search for any text, such as `error` or `exception`. The number of matching lines is shown above the results.
+- Results come 100 lines at a time, newest first. Use the pager under the list, or type a page number into the current page's box.
+
+Each application has its own colour on this page, so lines from different applications are easy to tell apart. Change it in the application's **Settings** tab → **Log colour**; it only affects the Logs page.
 
 The copy keeps the last 7 days, and at most 50,000 lines per application.
 
