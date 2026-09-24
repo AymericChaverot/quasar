@@ -29,9 +29,10 @@
       <line class="stroke-draw" x1="9" y1="9" x2="15" y2="15"/>
     </svg>
   </div>
-  {{/* The heading is the present participle of something in flight, so it is
-       swept while the update runs and stilled the moment there is an outcome. */}}
-  <h1 id="update-brand" class="auth-brand shimmer">Updating</h1>
+  {{/* The heading is the present participle of something in flight, and says
+       so with its ellipsis rather than a sweep: the phase line below is already
+       swept, and one per action is enough. It is replaced by the outcome. */}}
+  <h1 id="update-brand" class="auth-brand">Updating…</h1>
   <p class="auth-sub"><span class="mono">{{.Current}}</span> → <span class="mono">{{.Target}}</span></p>
 
   <div class="card auth-card space-y-4">

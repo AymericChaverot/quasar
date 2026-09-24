@@ -38,16 +38,17 @@
   }
 
   // Everything that was moving because work was under way stops together with
-  // the work. Leaving the heading swept under a cross would say the update is
-  // still going, which is the one thing the outcome has just settled.
-  function still() {
-    brandEl.classList.remove('shimmer');
+  // the work, and the heading says how it ended: "Updating…" over a cross
+  // would say the update is still going, which is the one thing the outcome
+  // has just settled.
+  function still(heading) {
+    brandEl.textContent = heading;
     phaseEl.classList.remove('shimmer');
   }
 
   function fail(msg) {
     finished = true;
-    still();
+    still('Update failed');
     meter.hidden = true;
     markEl.classList.add('is-failed');
     glowEl.classList.add('is-failed', 'is-flare');
@@ -68,7 +69,7 @@
 
   function done(v) {
     finished = true;
-    still();
+    still('Updated');
     stage('done', 'done', 'done');
     progress(100);
     markEl.classList.add('is-ok');
