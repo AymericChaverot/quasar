@@ -464,8 +464,10 @@ func probeOnce(url string) error {
 }
 
 // syncSource makes apps/<id>/source hold the code to build and returns its
-// path: a clone when there is nothing checked out, a fast-forward to the
-// branch head when pull is set, and otherwise the commit already on disk.
+// path: a clone when there is nothing checked out — or when what is checked
+// out is another repository or another branch than the app now names — a
+// fast-forward to the branch head when pull is set, and otherwise the commit
+// already on disk.
 //
 // The clone URL stays exactly as the operator entered it. Credentials reach
 // git through the environment instead (see gitRun), which is what keeps the
@@ -475,33 +477,98 @@ func (c *Client) syncSource(ctx context.Context, a *db.App, pull bool) (string, 
 	src := c.sourceDir(a.ID)
 	c.stage(a.ID, phaseFetch)
 
-	var args []string
-	switch _, err := os.Stat(filepath.Join(src, ".git")); {
-	case err != nil:
+	if _, err := os.Stat(filepath.Join(src, ".git")); err != nil {
 		// No checkout to build from, so this clones whether or not an update
 		// was asked for.
-		// Nothing to keep, and a leftover that will not go is reported by the
-		// clone that trips over it a line later.
-		_ = os.RemoveAll(src)
-		args = []string{"clone", "--depth", "1"}
-		if a.GitBranch != "" {
-			args = append(args, "--branch", a.GitBranch)
-		}
-		args = append(args, a.GitURL, src)
-		c.note(a.ID, "cloning %s (%s)", a.GitURL, a.GitBranch)
-	case pull:
-		args = []string{"-C", src, "pull", "--ff-only"}
-		c.note(a.ID, "pulling %s", a.GitBranch)
-	default:
+		return src, c.cloneSource(ctx, a, src)
+	}
+	// The app was moved to another repository or branch since this was
+	// cloned. Pulling would advance the old one, and a redeploy would rebuild
+	// it, so both start again from the new source instead.
+	if why := checkoutMismatch(ctx, src, a); why != "" {
+		c.note(a.ID, "%s, so it is cloned again", why)
+		return src, c.cloneSource(ctx, a, src)
+	}
+	if !pull {
 		c.note(a.ID, "building the commit already checked out")
 		return src, nil // rebuild the commit already there
 	}
-	if err := c.gitRun(ctx, func(line string) { c.output(a.ID, line) }, a.GitURL, args...); err != nil {
+	c.note(a.ID, "pulling %s", a.GitBranch)
+	if err := c.gitRun(ctx, func(line string) { c.output(a.ID, line) }, a.GitURL, "-C", src, "pull", "--ff-only"); err != nil {
 		return "", err
 	}
 	c.note(a.ID, "at %s", headCommit(ctx, src))
 	c.dropStoredCredential(ctx, src, a.GitURL)
 	return src, nil
+}
+
+// cloneSource puts a fresh clone of the app's repository at src.
+//
+// The clone lands beside src first and only replaces it once it has worked. A
+// repository that cannot be reached — a typo in a new URL, a branch that does
+// not exist, a token that lacks access — then fails the deploy and leaves the
+// checkout the running app was built from where it was, which a stack still
+// needs in order to be stopped or restarted.
+func (c *Client) cloneSource(ctx context.Context, a *db.App, src string) error {
+	next := src + ".next"
+	// A leftover from a clone that died halfway; nothing in it is worth keeping.
+	_ = os.RemoveAll(next)
+	args := []string{"clone", "--depth", "1"}
+	if a.GitBranch != "" {
+		args = append(args, "--branch", a.GitBranch)
+	}
+	args = append(args, a.GitURL, next)
+	c.note(a.ID, "cloning %s (%s)", redactURLs(a.GitURL), a.GitBranch)
+	if err := c.gitRun(ctx, func(line string) { c.output(a.ID, line) }, a.GitURL, args...); err != nil {
+		_ = os.RemoveAll(next)
+		return err
+	}
+	if err := os.RemoveAll(src); err != nil {
+		_ = os.RemoveAll(next)
+		return fmt.Errorf("removing the previous checkout: %w", err)
+	}
+	if err := os.Rename(next, src); err != nil {
+		return fmt.Errorf("moving the new checkout into place: %w", err)
+	}
+	c.note(a.ID, "at %s", headCommit(ctx, src))
+	c.dropStoredCredential(ctx, src, a.GitURL)
+	return nil
+}
+
+// checkoutMismatch says why the checkout at src is not the one the app names,
+// or returns "" when it is.
+//
+// Credentials are left out of the comparison: a checkout cloned by an earlier
+// version may still carry a token in its remote, and that alone is no reason
+// to clone again — dropStoredCredential deals with it.
+func checkoutMismatch(ctx context.Context, src string, a *db.App) string {
+	out, err := exec.CommandContext(ctx, "git", "-C", src, "remote", "get-url", "origin").Output()
+	if err != nil {
+		return "the checkout does not say which repository it came from"
+	}
+	if withoutCredentials(strings.TrimSpace(string(out))) != withoutCredentials(a.GitURL) {
+		return "the checkout is of another repository"
+	}
+	if a.GitBranch == "" {
+		return ""
+	}
+	out, err = exec.CommandContext(ctx, "git", "-C", src, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return "the checkout does not say which branch it is on"
+	}
+	switch head := strings.TrimSpace(string(out)); {
+	case head == a.GitBranch:
+		return ""
+	case head == "HEAD" && gitHasRef(ctx, src, "refs/tags/"+a.GitBranch):
+		// Cloned from a tag, which leaves no branch checked out.
+		return ""
+	}
+	return "the checkout is of another branch"
+}
+
+// gitHasRef reports whether a checkout has the given ref.
+func gitHasRef(ctx context.Context, src, ref string) bool {
+	return exec.CommandContext(ctx, "git", "-C", src, "rev-parse", "-q", "--verify", ref).Run() == nil
 }
 
 // dropStoredCredential rewrites a remote that carries credentials back to the

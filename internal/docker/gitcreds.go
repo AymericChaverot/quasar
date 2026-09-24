@@ -167,6 +167,12 @@ func redactURLs(s string) string {
 	return credentialInURL.ReplaceAllString(s, "${1}***@")
 }
 
+// withoutCredentials is a URL with its userinfo removed altogether, for
+// comparing two URLs that name the same repository.
+func withoutCredentials(s string) string {
+	return credentialInURL.ReplaceAllString(s, "${1}")
+}
+
 // CheckGitAccess reports whether Quasar can reach a repository with what it
 // has stored, by doing what a deploy does and nothing more.
 //
