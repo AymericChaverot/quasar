@@ -62,6 +62,19 @@ type AppView struct {
 // domain when the app claims the apex via the "@" subdomain.
 func (v AppView) Host() string { return appHost(v.App, v.Domain) }
 
+// Repo is where a git app's repository can be read, or nil for an app that
+// was not deployed from one — or from one with no page, like a local path.
+func (v AppView) Repo() *RepoLink {
+	if v.DeployType != "git" {
+		return nil
+	}
+	link, ok := repoLinkOf(v.GitURL)
+	if !ok {
+		return nil
+	}
+	return &link
+}
+
 // basicAuthMinLength is the shortest password accepted for edge protection.
 const basicAuthMinLength = 4
 
