@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -71,18 +72,34 @@ func (e *stackEnv) UnmarshalYAML(n *yaml.Node) error {
 // Nothing is reported for a container that is not there at all — a
 // development machine runs none of them — and nothing is an error: a check
 // that cannot be made is a check not worth alarming anyone over.
+//
+// The three containers are inspected at once, since the System page waits on
+// the answer: one round trip over the socket proxy rather than three.
 func (c *Client) StackDrift(ctx context.Context, compose []byte, installDir string) []string {
+	names := []string{"quasar-socket-proxy", "quasar-traefik", "quasar-dashboard"}
+	found := make([]*runningService, len(names))
+	var wg sync.WaitGroup
+	for i, name := range names {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			info, err := c.api.ContainerInspect(ctx, name)
+			if err != nil || info.Config == nil {
+				return
+			}
+			svc := runningService{Image: info.Config.Image, Env: info.Config.Env}
+			for _, m := range info.Mounts {
+				svc.Mounts = append(svc.Mounts, runningMount{Source: m.Source, Destination: m.Destination, RW: m.RW})
+			}
+			found[i] = &svc
+		}()
+	}
+	wg.Wait()
 	running := map[string]runningService{}
-	for _, name := range []string{"quasar-socket-proxy", "quasar-traefik", "quasar-dashboard"} {
-		info, err := c.api.ContainerInspect(ctx, name)
-		if err != nil || info.Config == nil {
-			continue
+	for i, svc := range found {
+		if svc != nil {
+			running[names[i]] = *svc
 		}
-		svc := runningService{Image: info.Config.Image, Env: info.Config.Env}
-		for _, m := range info.Mounts {
-			svc.Mounts = append(svc.Mounts, runningMount{Source: m.Source, Destination: m.Destination, RW: m.RW})
-		}
-		running[name] = svc
 	}
 	return stackDrift(compose, installDir, running)
 }

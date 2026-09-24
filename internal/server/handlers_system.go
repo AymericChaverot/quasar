@@ -16,12 +16,14 @@ import (
 	"sync"
 	"time"
 
+	"quasar"
 	"quasar/internal/backup"
 	"quasar/internal/certs"
 	"quasar/internal/db"
 	"quasar/internal/docker"
 	"quasar/internal/offsite"
 	"quasar/internal/secrets"
+	"quasar/internal/version"
 	"quasar/internal/vps"
 )
 
@@ -334,7 +336,25 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 	if msg := r.URL.Query().Get("msg"); msg != "" {
 		data["Saved"] = msg
 	}
+	if s.isAdmin(r) {
+		data["Drift"] = s.stackDrift(r)
+		data["Version"] = version.Version
+	}
 	s.render(w, r, "system", data)
+}
+
+// stackDrift is what the running system stack lacks compared with the compose
+// file this version shipped with; see docker.StackDrift.
+//
+// Rendered with the page rather than fetched after it, unlike the sections
+// further down: it is one round trip over the socket proxy, and a notice that
+// arrived late would push the whole page down just as it was being read. The
+// deadline is what keeps that from ever costing more — a socket proxy that
+// does not answer loses the notice, not the page.
+func (s *Server) stackDrift(r *http.Request) []string {
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+	return s.dock.StackDrift(ctx, quasar.ComposeFile, filepath.Dir(s.cfg.AppsDir))
 }
 
 // handleCleanup removes everything Docker is holding that no application, no

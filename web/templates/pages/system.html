@@ -7,9 +7,10 @@
 
 <div class="space-y-10">
 
-  {{/* First, because it explains whatever below it does not work. Replaced by
+  {{/* First, because it explains whatever below it does not work, and drawn
+       with the page so it cannot push the rest down on arrival. It is
        nothing at all on an install that is up to date. */}}
-  {{if .IsAdmin}}<div hx-get="/partials/system/stack" hx-trigger="load" hx-swap="outerHTML" class="hidden"></div>{{end}}
+  {{if .IsAdmin}}{{template "system_stack" .}}{{end}}
 
   <section class="space-y-4">
     <h2 class="h-label">Software update</h2>
