@@ -12,7 +12,6 @@
        class="link mono text-sm">{{.Host}}</a>
   </div>
   <div class="flex items-center gap-3">
-    {{if $.IsAdmin}}<a href="/apps/{{.ID}}/terminal" class="btn">{{template "icon_terminal"}}Terminal</a>{{end}}
     {{/* Where the tabs above come from, said out loud: this page does more
          than an ordinary application's, and the reason is one word. */}}
     {{with .StationID}}
@@ -35,6 +34,9 @@
     {{/* A git app is two very different deployments behind one label, so the
          one it actually is belongs next to it. */}}
     {{if .Build.Mode}}<span class="chip">{{if eq .Build.Mode "compose"}}docker compose{{else}}Dockerfile{{end}}</span>{{end}}
+    {{/* Last, after the tags that describe the app: the one control in the
+         row, where the eye ends up. */}}
+    {{if $.IsAdmin}}<a href="/apps/{{.ID}}/terminal" class="btn">{{template "icon_terminal"}}Terminal</a>{{end}}
   </div>
 </div>
 
