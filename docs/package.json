@@ -10,7 +10,7 @@
     "gen:icons": "node scripts/gen-icons.mjs"
   },
   "dependencies": {
-    "astro": "^7.3.2",
+    "astro": "^7.3.5",
     "yaml": "^2.9.1",
     "zenith-docs": "github:AymericChaverot/zenith-docs#v0.2.1"
   },
