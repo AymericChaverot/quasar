@@ -10,8 +10,10 @@ import (
 type LogLine struct {
 	AppID   string
 	AppName string
-	TS      time.Time
-	Line    string
+	// AppColor is the application's colour on the Logs page.
+	AppColor string
+	TS       time.Time
+	Line     string
 }
 
 // maxLogLineLen caps a single stored line so one runaway line can't dominate
@@ -68,7 +70,7 @@ func AppendLogs(database *sql.DB, appID string, entries []LogEntry) error {
 // reaches older ones a page at a time.
 func SearchLogs(database *sql.DB, appID, query string, limit, offset int) ([]LogLine, error) {
 	rows, err := database.Query(`
-		SELECT app_logs.app_id, apps.name, app_logs.ts, app_logs.line
+		SELECT app_logs.app_id, apps.name, apps.log_color, app_logs.ts, app_logs.line
 		FROM app_logs
 		JOIN apps ON apps.id = app_logs.app_id
 		WHERE (? = '' OR app_logs.app_id = ?)
@@ -82,7 +84,7 @@ func SearchLogs(database *sql.DB, appID, query string, limit, offset int) ([]Log
 	var out []LogLine
 	for rows.Next() {
 		var l LogLine
-		if err := rows.Scan(&l.AppID, &l.AppName, &l.TS, &l.Line); err != nil {
+		if err := rows.Scan(&l.AppID, &l.AppName, &l.AppColor, &l.TS, &l.Line); err != nil {
 			return nil, err
 		}
 		out = append(out, l)

@@ -7,7 +7,9 @@
       {{range .Lines}}
       <tr>
         <td class="mono muted whitespace-nowrap text-xs">{{.TS.Format "2006-01-02 15:04:05"}}</td>
-        <td><a href="/apps/{{.AppID}}" class="hover:underline">{{.AppName}}</a></td>
+        {{/* In the application's own colour, which is all this page uses it
+             for: interleaved lines are told apart by it before they are read. */}}
+        <td class="whitespace-nowrap"><a href="/apps/{{.AppID}}" class="log-app hover:underline" style="--app: {{.AppColor}}">{{.AppName}}</a></td>
         {{/* Pre-rendered: the stored line still carries whatever escape
              sequences the container wrote, and reads here as it does live. */}}
         <td class="log-cell mono break-all text-xs">{{.HTML}}</td>

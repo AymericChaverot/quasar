@@ -77,3 +77,12 @@ func TestLogsSearchOnePageHasNoPager(t *testing.T) {
 		t.Error("a single page of lines draws a pager")
 	}
 }
+
+// Each line's application is named in its own colour.
+func TestLogsSearchColoursTheApplication(t *testing.T) {
+	s := logHistory(t, 1)
+	body := searchLogs(s, "/partials/logs").Body.String()
+	if !strings.Contains(body, `class="log-app hover:underline" style="--app: #`) {
+		t.Errorf("the application is not drawn in its colour:\n%s", body)
+	}
+}

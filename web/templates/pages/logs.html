@@ -7,7 +7,9 @@
     <select id="app" name="app" class="input">
       <option value="">All applications</option>
       {{range .Apps}}
-      <option value="{{.ID}}" {{if eq $.App .ID}}selected{{end}}>{{.Name}}</option>
+      {{/* A select option holds text and nothing else, so the colour comes as a
+           dot character, and the option is drawn in it. */}}
+      <option value="{{.ID}}" style="color: {{.LogColor}}" {{if eq $.App .ID}}selected{{end}}>● {{.Name}}</option>
       {{end}}
     </select>
   </div>

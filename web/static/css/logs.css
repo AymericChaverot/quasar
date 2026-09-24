@@ -99,3 +99,16 @@
    palette would be washed out against it. */
 .log-cell { background: var(--log-bg); color: #d4d4d8; }
 [data-theme="terminal"] .log-cell { color: var(--text); }
+
+/* An application's name on the Logs page, in the colour it was given. The
+   colours are chosen to stand out on a dark page, which leaves them too light
+   to read on the two light themes; there they are taken a third of the way to
+   black, which keeps the hue and brings back the contrast. */
+.log-app {
+  color: var(--app, var(--text));
+  font-weight: 500;
+}
+[data-theme="paper"] .log-app,
+[data-theme="solarized"] .log-app {
+  color: color-mix(in oklab, var(--app, var(--text)) 65%, black);
+}
