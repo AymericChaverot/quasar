@@ -13,12 +13,30 @@
   <section class="space-y-4">
     <h2 class="h-label">Appearance</h2>
     <form method="post" action="/theme" class="card space-y-4 p-4">
-      <div class="space-y-2">
+      {{/* Each choice carries a small picture of the dashboard drawn in its own
+           theme: the variables are scoped by data-theme, so a box with that
+           attribute is painted exactly as the whole page would be. A name and
+           a line of description say far less about a palette than one look. */}}
+      <div class="theme-grid">
         {{range .Themes}}
-        <label class="flex items-center gap-3 text-sm">
-          <input type="radio" name="theme" value="{{.ID}}" {{if eq .ID $.Theme}}checked{{end}}>
-          <span class="w-40">{{.Name}}</span>
-          <span class="faint">{{.Description}}</span>
+        <label class="theme-option">
+          <input type="radio" name="theme" value="{{.ID}}" class="sr-only" {{if eq .ID $.Theme}}checked{{end}}>
+          <span class="theme-preview" data-theme="{{.ID}}" aria-hidden="true">
+            <span class="tp-nav"><span class="tp-brand"></span><span class="tp-link"></span><span class="tp-link"></span></span>
+            <span class="tp-body">
+              <span class="tp-card">
+                <span class="tp-line tp-strong"></span>
+                <span class="tp-line"></span>
+                <span class="tp-badges"><span class="tp-dot tp-ok"></span><span class="tp-dot tp-warn"></span><span class="tp-dot tp-err"></span></span>
+              </span>
+              <span class="tp-card tp-chart">
+                <svg viewBox="0 0 60 24" preserveAspectRatio="none"><polyline points="0,20 10,15 20,17 30,8 40,11 50,4 60,6" fill="none" stroke="var(--chart)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+              </span>
+              <span class="tp-button"></span>
+            </span>
+          </span>
+          <span class="theme-name">{{.Name}}</span>
+          <span class="faint text-xs">{{.Description}}</span>
         </label>
         {{end}}
       </div>
