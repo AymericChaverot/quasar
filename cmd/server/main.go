@@ -103,9 +103,9 @@ func main() {
 		seq.OK("migration", migrations...)
 	}
 
-	apps, err := db.ListApps(database, keyring)
-	if err != nil {
-		seq.Warn("database", cfg.DBPath, "listing applications: "+err.Error())
+	apps, listErr := db.ListApps(database, keyring)
+	if listErr != nil {
+		seq.Warn("database", cfg.DBPath, "listing applications: "+listErr.Error())
 	} else {
 		seq.OK("database", cfg.DBPath, plural(len(apps), "application"), plural(db.CountEnabledStations(database), "station")+" installed")
 	}
@@ -148,6 +148,9 @@ func main() {
 		seq.Fatal("http", err)
 	}
 	seq.Ready("listening on " + cfg.ListenAddr)
+	if listErr == nil {
+		go logPlatformState(database, dock, apps, engine.DockerVersion != "unknown")
+	}
 	serve(ln, srv)
 }
 
