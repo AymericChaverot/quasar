@@ -102,7 +102,7 @@ func (s *Server) handleAppDeployLog(w http.ResponseWriter, r *http.Request) {
 // build printed. An SSE frame is newline-delimited, so the result must carry
 // none of its own or it would split into two events and truncate the line.
 func renderDeployLine(l docker.DeployLine) string {
-	open := "<div>"
+	open := lineOpen(l.Text)
 	if l.Note {
 		open = `<div class="log-note">`
 	}

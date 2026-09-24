@@ -157,3 +157,23 @@
   background: color-mix(in srgb, var(--surface) 90%, transparent);
   z-index: 1;
 }
+
+/* Log output is laid out with spaces — columns, indentation, pictures — and
+   collapsing them undoes it. Long lines still wrap. */
+.log-pane > div,
+.log-cell { white-space: pre-wrap; }
+
+/* A line drawn in box, block, shape or braille characters (see lineOpen):
+   rows set touching so the picture holds together, and never wrapped, which
+   would tear it.
+
+   In a system monospace face rather than the interface's: the JetBrains Mono
+   shipped here is its latin subset, with none of those characters, so each
+   fell back to another font a fraction narrower than the spaces round it — and
+   a row with more of them came out shorter, bending the picture. Every face in
+   this list draws the whole line at one width. */
+.log-pane > .log-art {
+  font-family: "Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace;
+  line-height: 1;
+  white-space: pre;
+}

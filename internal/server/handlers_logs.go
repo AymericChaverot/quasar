@@ -88,7 +88,7 @@ func streamLogLines(w http.ResponseWriter, r *http.Request, follow func(send fun
 		// is newline-delimited, so a rendered line must not carry one — it
 		// would split into two events and truncate the line.
 		rendered := strings.ReplaceAll(string(renderLogEntry(l.TS, l.Text)), "\n", " ")
-		if !sse(w, "data: <div>%s</div>\n\n", rendered) {
+		if !sse(w, "data: %s%s</div>\n\n", lineOpen(l.Text), rendered) {
 			return
 		}
 		flusher.Flush()

@@ -190,3 +190,22 @@ func TestRenderLogEntryWithoutTimestamp(t *testing.T) {
 		t.Errorf("renderLogEntry(zero) = %q, want %q", got, "hello")
 	}
 }
+
+// A line drawn in any of the characters pictures are made of is set apart for
+// the pane to draw solid; a line of ordinary text, ASCII art included, is not.
+func TestLineOpenMarksDrawnLines(t *testing.T) {
+	for line, want := range map[string]string{
+		"  ▄▄▀▀██  ":          `<div class="log-art">`,
+		"░▒▓ progress":        `<div class="log-art">`,
+		"listening on :8080":  "<div>",
+		"╚══ box drawing ══╝": `<div class="log-art">`,
+		"⣿⣿⡇ braille":         `<div class="log-art">`,
+		"■ square":            `<div class="log-art">`,
+		` _   _  / \ | |`:     "<div>",
+		"café, naïve — “ok”":  "<div>",
+	} {
+		if got := lineOpen(line); got != want {
+			t.Errorf("lineOpen(%q) = %q, want %q", line, got, want)
+		}
+	}
+}

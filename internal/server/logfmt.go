@@ -324,3 +324,26 @@ func (s sgrStyle) attr() string {
 	}
 	return strings.Join(parts, " ")
 }
+
+// isArtRune reports whether r is one of the characters text-mode pictures are
+// drawn with: box drawing (─│╔═╗, the "ANSI Shadow" banners), block elements
+// (▀▄█░▒▓), geometric shapes (■●) and braille (⣿, which image-to-text tools
+// draw in). None is in the latin subset of the face the pane is set in.
+func isArtRune(r rune) bool {
+	return r >= 0x2500 && r <= 0x25FF || r >= 0x2800 && r <= 0x28FF
+}
+
+// lineOpen is the element a streamed line goes in. A line drawn in those
+// characters — a banner, a table's borders, a progress graph — is marked so
+// the pane can set it in one face, solid, with no gap between lines. Otherwise
+// each character falls back to a font of its own width and the rows bend, and
+// at the spacing text is read at, a picture comes apart into stripes.
+//
+// A banner drawn in plain ASCII (the classic _ | / \ kind) needs none of this:
+// the pane's face has every character in it, and its spaces are kept.
+func lineOpen(line string) string {
+	if strings.IndexFunc(line, isArtRune) >= 0 {
+		return `<div class="log-art">`
+	}
+	return "<div>"
+}
