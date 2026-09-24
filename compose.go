@@ -15,3 +15,11 @@ import _ "embed"
 //
 //go:embed docker-compose.yml
 var ComposeFile []byte
+
+// TraefikConfig is traefik/traefik.yml as this version shipped it, with the
+// {{ACME_EMAIL}} placeholder Traefik fills in as it starts. Compared with the
+// file on the server, it tells an install whose file still carries the email
+// setup.sh used to write into it.
+//
+//go:embed traefik/traefik.yml
+var TraefikConfig []byte

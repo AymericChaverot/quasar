@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -75,7 +76,7 @@ func (e *stackEnv) UnmarshalYAML(n *yaml.Node) error {
 //
 // The three containers are inspected at once, since the System page waits on
 // the answer: one round trip over the socket proxy rather than three.
-func (c *Client) StackDrift(ctx context.Context, compose []byte, installDir string) []string {
+func (c *Client) StackDrift(ctx context.Context, compose []byte, installDir string) StackState {
 	names := []string{"quasar-socket-proxy", "quasar-traefik", "quasar-dashboard"}
 	found := make([]*runningService, len(names))
 	var wg sync.WaitGroup
@@ -96,12 +97,31 @@ func (c *Client) StackDrift(ctx context.Context, compose []byte, installDir stri
 	}
 	wg.Wait()
 	running := map[string]runningService{}
+	seen := map[string]bool{}
 	for i, svc := range found {
 		if svc != nil {
 			running[names[i]] = *svc
+			seen[names[i]] = true
 		}
 	}
-	return stackDrift(compose, installDir, running)
+	return StackState{Drift: stackDrift(compose, installDir, running), Seen: seen}
+}
+
+// StackState is what StackDrift found.
+type StackState struct {
+	// Drift says, a line each, what the running containers lack.
+	Drift []string
+	// Seen names the containers that could be read. A container with no line
+	// in Drift is only known to be up to date if it is here too: one that did
+	// not answer in time has no line either.
+	Seen map[string]bool
+}
+
+// UpToDate reports whether the container was read and lacks nothing.
+func (s StackState) UpToDate(container string) bool {
+	return s.Seen[container] && !slices.ContainsFunc(s.Drift, func(line string) bool {
+		return strings.HasPrefix(line, container+" ")
+	})
 }
 
 // stackDrift is StackDrift on containers already read, keyed by name.
@@ -184,4 +204,16 @@ func missingMount(entry, installDir string, mounts []runningMount) string {
 		return "does not mount " + src + " (read-only) at " + dst
 	}
 	return "does not mount " + src + " at " + dst
+}
+
+// TraefikConfigCarriesEmail reports whether onDisk is the shipped traefik.yml
+// with email written in place of its placeholder — what setup.sh used to do
+// at install, and nothing else. Such a file is safe to restore once Traefik
+// fills the email in itself; a file edited in any other way is the operator's,
+// and is left out of it.
+func TraefikConfigCarriesEmail(onDisk, shipped []byte, email string) bool {
+	if email == "" || bytes.Equal(onDisk, shipped) {
+		return false
+	}
+	return bytes.Equal(onDisk, bytes.ReplaceAll(shipped, []byte("{{ACME_EMAIL}}"), []byte(email)))
 }

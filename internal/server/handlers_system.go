@@ -337,7 +337,9 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 		data["Saved"] = msg
 	}
 	if s.isAdmin(r) {
-		data["Drift"] = s.stackDrift(r)
+		stack := s.stackDrift(r)
+		data["Drift"] = stack.Drift
+		data["TraefikRestore"] = s.traefikConfigCarriesEmail(stack)
 		data["Version"] = version.Version
 		data["Command"] = stackUpdateCommand
 	}
@@ -358,7 +360,7 @@ const stackUpdateCommand = "sudo sh -c 'cd /opt/quasar && git pull --ff-only && 
 // arrived late would push the whole page down just as it was being read. The
 // deadline is what keeps that from ever costing more — a socket proxy that
 // does not answer loses the notice, not the page.
-func (s *Server) stackDrift(r *http.Request) []string {
+func (s *Server) stackDrift(r *http.Request) docker.StackState {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 	defer cancel()
 	return s.dock.StackDrift(ctx, quasar.ComposeFile, filepath.Dir(s.cfg.AppsDir))
@@ -634,4 +636,25 @@ func (s *Server) handleBackupSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	http.Redirect(w, r, "/system?msg=Backup settings saved.", http.StatusSeeOther)
+}
+
+// traefikConfigCarriesEmail reports whether the server's traefik.yml still has
+// the Let's Encrypt email setup.sh used to write into it, and nothing else
+// changed — a file that can be restored as shipped, since Traefik now fills
+// the email in from .env as it starts.
+//
+// Only once the running Traefik is known to start that way. Restored any
+// earlier, the file would hand the next Traefik restart a literal
+// {{ACME_EMAIL}}, and a container that could not be read in time is not known
+// to be anything.
+func (s *Server) traefikConfigCarriesEmail(stack docker.StackState) bool {
+	if !stack.UpToDate("quasar-traefik") {
+		return false
+	}
+	path := filepath.Join(s.cfg.HostRootPath, filepath.Dir(s.cfg.AppsDir), "traefik", "traefik.yml")
+	onDisk, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return docker.TraefikConfigCarriesEmail(onDisk, quasar.TraefikConfig, os.Getenv("ACME_EMAIL"))
 }

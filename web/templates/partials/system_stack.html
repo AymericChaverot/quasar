@@ -35,4 +35,20 @@
   </p>
 </section>
 {{end}}
+{{/* The last step of the move away from setup.sh writing the email into
+     traefik.yml: shown only once Traefik fills it in itself, which is what
+     makes restoring the file safe. */}}
+{{if .TraefikRestore}}
+<section class="alert-note space-y-3">
+  <p class="font-medium">traefik.yml still carries the Let's Encrypt email</p>
+  <p>
+    setup.sh used to write it into <span class="mono">/opt/quasar/traefik/traefik.yml</span>, which
+    leaves that file modified in git — and the day it changes in the repository, updating this
+    server stops on it. Traefik now reads the email from <span class="mono">.env</span> as it
+    starts, so the file can go back to how it ships:
+  </p>
+  <code class="mono block break-all rounded p-2 text-xs" style="background: var(--surface-2); color: var(--text)">sudo git -C /opt/quasar checkout -- traefik/traefik.yml</code>
+  <p class="text-xs">Nothing restarts, and nothing changes for Traefik: the email it uses stays the same.</p>
+</section>
+{{end}}
 {{end}}

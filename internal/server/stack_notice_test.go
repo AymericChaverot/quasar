@@ -40,3 +40,21 @@ func TestStackNoticeAbsentWhenUpToDate(t *testing.T) {
 		t.Errorf("an up-to-date install renders %q", html)
 	}
 }
+
+// Once Traefik fills the email in itself, an install whose traefik.yml still
+// carries it is told how to restore the file.
+func TestStackNoticeOffersToRestoreTraefikConfig(t *testing.T) {
+	s := testServer(t)
+	var buf bytes.Buffer
+	data := map[string]any{"TraefikRestore": true, "Version": "v1.2.3", "Command": stackUpdateCommand}
+	if err := s.pages["system"].ExecuteTemplate(&buf, "system_stack", data); err != nil {
+		t.Fatal(err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, "sudo git -C /opt/quasar checkout -- traefik/traefik.yml") {
+		t.Error("the notice does not say how to restore traefik.yml")
+	}
+	if strings.Contains(html, "older than") {
+		t.Error("an install with no drift is told its stack is old")
+	}
+}

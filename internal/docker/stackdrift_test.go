@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bytes"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -107,5 +108,46 @@ func TestStackDriftIgnoresAdditionsAndPins(t *testing.T) {
 func TestStackDriftNoneWithoutContainers(t *testing.T) {
 	if got := stackDrift(quasar.ComposeFile, "/opt/quasar", nil); len(got) != 0 {
 		t.Errorf("no containers reported drift: %q", got)
+	}
+}
+
+func TestTraefikConfigCarriesEmail(t *testing.T) {
+	shipped := quasar.TraefikConfig
+	filled := bytes.ReplaceAll(shipped, []byte("{{ACME_EMAIL}}"), []byte("ops@example.com"))
+	edited := append(bytes.Clone(filled), []byte("\n# my own note\n")...)
+	cases := []struct {
+		name   string
+		onDisk []byte
+		email  string
+		want   bool
+	}{
+		{"as setup.sh left it", filled, "ops@example.com", true},
+		{"already restored", shipped, "ops@example.com", false},
+		{"edited beyond the email", edited, "ops@example.com", false},
+		{"another email than .env's", filled, "someone@example.com", false},
+		{"no email to compare with", filled, "", false},
+	}
+	for _, c := range cases {
+		if got := TraefikConfigCarriesEmail(c.onDisk, shipped, c.email); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// Up to date means read and lacking nothing; a container that did not answer
+// is not known to be anything.
+func TestStackStateUpToDate(t *testing.T) {
+	s := StackState{
+		Drift: []string{"quasar-dashboard does not mount /opt/quasar/traefik at /opt/quasar/traefik"},
+		Seen:  map[string]bool{"quasar-dashboard": true, "quasar-traefik": true},
+	}
+	if !s.UpToDate("quasar-traefik") {
+		t.Error("a container read with nothing missing is not up to date")
+	}
+	if s.UpToDate("quasar-dashboard") {
+		t.Error("a container with drift is up to date")
+	}
+	if s.UpToDate("quasar-socket-proxy") {
+		t.Error("a container that was not read is up to date")
 	}
 }
