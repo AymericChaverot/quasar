@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"quasar/internal/auth"
@@ -146,7 +148,53 @@ func main() {
 		seq.Fatal("http", err)
 	}
 	seq.Ready("listening on " + cfg.ListenAddr)
-	log.Fatal(http.Serve(ln, srv))
+	serve(ln, srv)
+}
+
+// shutdownGrace is how long requests in flight get to finish once the
+// dashboard is asked to stop. Under the ten seconds `docker stop` waits before
+// it kills the process, so the last line in the log is the dashboard's own.
+const shutdownGrace = 8 * time.Second
+
+// serve answers requests until the process is asked to stop, and says so: a
+// dashboard that went away on its own and one that was stopped look the same
+// in `docker ps`, and only the log can tell them apart.
+func serve(ln net.Listener, handler http.Handler) {
+	// Every request's context descends from this one, so cancelling it ends
+	// the streams that would otherwise never finish on their own — live logs,
+	// deploy progress — and the shutdown does not sit out its whole grace
+	// period waiting for them.
+	base, endStreams := context.WithCancel(context.Background())
+	hs := &http.Server{Handler: handler, BaseContext: func(net.Listener) context.Context { return base }}
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
+	served := make(chan error, 1)
+	go func() { served <- hs.Serve(ln) }()
+
+	select {
+	case err := <-served:
+		log.Fatal(err)
+	case sig := <-stop:
+		event.Info("shutdown", "received "+signalName(sig), "stopping")
+		started := time.Now()
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
+		defer cancel()
+		endStreams()
+		if err := hs.Shutdown(ctx); err != nil {
+			event.Warning("shutdown", "closed the requests still open after "+shutdownGrace.String())
+		}
+		event.Info("shutdown", "stopped in "+time.Since(started).Round(time.Millisecond).String())
+	}
+}
+
+func signalName(sig os.Signal) string {
+	switch sig {
+	case syscall.SIGTERM:
+		return "SIGTERM"
+	case os.Interrupt:
+		return "SIGINT"
+	}
+	return sig.String()
 }
 
 func plural(n int, noun string) string {
