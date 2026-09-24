@@ -1,6 +1,13 @@
 package server
 
-import "testing"
+import (
+	"bytes"
+	"strings"
+	"testing"
+
+	"quasar/internal/db"
+	"quasar/internal/docker"
+)
 
 func TestRepoLinkOf(t *testing.T) {
 	cases := []struct {
@@ -52,5 +59,33 @@ func TestRepoLinkOfNoPage(t *testing.T) {
 		if got, ok := repoLinkOf(raw); ok {
 			t.Errorf("repoLinkOf(%q) = %+v, want no link", raw, got)
 		}
+	}
+}
+
+// The page links the repository under the app's own address, drawn as its
+// forge, and never repeats a token the clone URL was saved with.
+func TestAppDetailLinksRepository(t *testing.T) {
+	s := testServer(t)
+	v := AppView{
+		App: &db.App{
+			ID: "beef0001", Name: "API", Subdomain: "api", DeployType: "git",
+			GitURL: "https://oauth2:glpat-secret@gitlab.com/team/api.git", GitBranch: "main",
+		},
+		Status: docker.AppStatus{State: "running"},
+		Domain: "example.com",
+	}
+	var buf bytes.Buffer
+	if err := s.pages["app_detail"].ExecuteTemplate(&buf, "layout", map[string]any{"Title": "API", "App": v}); err != nil {
+		t.Fatal(err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, `href="https://gitlab.com/team/api"`) {
+		t.Error("page does not link the repository")
+	}
+	if !strings.Contains(html, "· main") {
+		t.Error("page does not name the branch")
+	}
+	if strings.Contains(html, "glpat-secret") {
+		t.Error("page shows the token saved in the clone URL")
 	}
 }

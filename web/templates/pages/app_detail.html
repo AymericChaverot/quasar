@@ -10,6 +10,15 @@
     <h1 class="page-title">{{.Name}}</h1>
     <a href="https://{{.Host}}" target="_blank" rel="noopener"
        class="link mono text-sm">{{.Host}}</a>
+    {{/* Where a git app comes from, under where it goes: the repository on
+         its forge, and the branch a deploy builds from. */}}
+    {{$branch := .GitBranch}}
+    {{with .Repo}}
+    <a href="{{.URL}}" target="_blank" rel="noopener" title="{{.URL}}"
+       class="link mono text-sm mt-1 flex w-fit items-center gap-1.5">
+      {{template "forge_icon" .Forge}}<span>{{.Label}}</span>{{with $branch}}<span class="opacity-60">· {{.}}</span>{{end}}
+    </a>
+    {{end}}
   </div>
   <div class="flex items-center gap-3">
     {{if $.IsAdmin}}<a href="/apps/{{.ID}}/terminal" class="btn">{{template "icon_terminal"}}Terminal</a>{{end}}
