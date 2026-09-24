@@ -24,6 +24,7 @@ import (
 	"github.com/moby/go-archive"
 
 	"quasar/internal/db"
+	"quasar/internal/event"
 	"quasar/internal/notify"
 )
 
@@ -173,22 +174,48 @@ func (c *Client) runAsync(a *db.App, source string, plan []deployPhase, fn func(
 		ctx, cancel := context.WithTimeout(context.Background(), deployTimeout)
 		defer cancel()
 		tag, err := fn(ctx)
+		took := time.Since(started).Round(time.Second)
 		if err != nil {
-			log.Printf("deploy %s (%s): %v", a.Name, a.ID, err)
+			event.Error("deploy", a.Name, "failed after "+took.String(), deployCause(source), err.Error())
 			if recErr := db.FinishDeployment(c.dbc, depID, "failed", err.Error(), tag); recErr != nil {
 				log.Printf("deploy %s: recording the failure: %v", a.ID, recErr)
 			}
 			notify.Send(c.dbc, fmt.Sprintf("Quasar: deploy failed for %s (%s): %v", a.Name, a.Subdomain, err))
-			c.note(a.ID, "deploy failed after %s: %v", time.Since(started).Round(time.Second), err)
+			c.note(a.ID, "deploy failed after %s: %v", took, err)
 			run.finish(err.Error())
 			return
 		}
+		event.Info("deploy", a.Name, "deployed in "+took.String(), tag, deployCause(source))
 		if err := db.FinishDeployment(c.dbc, depID, "success", "", tag); err != nil {
 			log.Printf("deploy %s: recording the success: %v", a.ID, err)
 		}
-		c.note(a.ID, "deployed in %s", time.Since(started).Round(time.Second))
+		c.note(a.ID, "deployed in %s", took)
 		run.finish("")
 	}()
+}
+
+// deployCause says, for the event log, what set a deploy off.
+func deployCause(source string) string {
+	switch source {
+	case "manual":
+		return "redeployed"
+	case "update":
+		return "updated"
+	case "create":
+		return "first deploy"
+	case "source":
+		return "source changed"
+	case "api":
+		return "from the API"
+	case "webhook":
+		return "from a webhook"
+	case "rollback":
+		return "rolled back"
+	}
+	if station, ok := strings.CutPrefix(source, "station "); ok {
+		return "by station " + station
+	}
+	return source
 }
 
 // deploy runs the full deployment for the app's type and returns the image tag
@@ -302,7 +329,7 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 			// bind its port a moment from now, so the reason belongs in the log
 			// before that happens.
 			if err := c.api.ContainerStop(ctx, id, container.StopOptions{}); err != nil {
-				log.Printf("deploy %s: stopping the previous container %s: %v", a.ID, id[:12], err)
+				event.Warning("deploy", a.Name, "the previous container "+id[:12]+" will not stop", err.Error())
 			}
 		}
 	}
@@ -317,7 +344,7 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 			// and an app that is simply down. If it does not work, that is the
 			// single most important line in the log.
 			if err := c.api.ContainerStart(undo, id, container.StartOptions{}); err != nil {
-				log.Printf("deploy %s: ROLLBACK FAILED, container %s is still stopped: %v", a.ID, id[:12], err)
+				event.Error("deploy", a.Name, "ROLLBACK FAILED — container "+id[:12]+" is still stopped", err.Error())
 			}
 		}
 	}
