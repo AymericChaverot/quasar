@@ -214,3 +214,25 @@ func TestSyncSourceKeepsATagCheckout(t *testing.T) {
 		t.Errorf("a checkout of the tag it was cloned from reads as a mismatch: %s", why)
 	}
 }
+
+func TestCheckGitSource(t *testing.T) {
+	origin := originRepo(t)
+	gitIn(t, origin, "tag", "v1.0")
+	gitIn(t, origin, "branch", "feature/main")
+	c := &Client{}
+	ctx := context.Background()
+
+	for _, ref := range []string{"main", "v1.0", "feature/main"} {
+		if err := c.CheckGitSource(ctx, origin, ref); err != nil {
+			t.Errorf("CheckGitSource(%q): %v", ref, err)
+		}
+	}
+	// "main" is also the tail of "feature/main"; neither is taken for the
+	// other, and a name that is only a suffix is not found.
+	if err := c.CheckGitSource(ctx, origin, "ain"); err == nil {
+		t.Error("CheckGitSource accepted a branch that does not exist")
+	}
+	if err := c.CheckGitSource(ctx, filepath.Join(t.TempDir(), "missing"), "main"); err == nil {
+		t.Error("CheckGitSource accepted a repository that does not exist")
+	}
+}

@@ -197,6 +197,35 @@ func (c *Client) CheckGitAccess(ctx context.Context, repoURL string) (string, er
 	return fmt.Sprintf("Authenticated against %s as %s.", db.GitHostOf(repoURL), cred.Account()), nil
 }
 
+// CheckGitSource reports whether a deploy could clone branch from repoURL,
+// before an app is moved onto it: that the repository answers with what is
+// stored for it, and that it has a branch or tag by that name.
+//
+// It is what keeps a typo out of the app's settings. Caught here, it is a
+// message beside the field; caught by the deploy, it is a failed deploy of an
+// app that was working, found by whoever next looks at it.
+func (c *Client) CheckGitSource(ctx context.Context, repoURL, branch string) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	found := false
+	out := func(line string) {
+		// ls-remote prints "<sha>\trefs/heads/<name>" for each match; the
+		// pattern matches any ref ending in the name, so the whole name is
+		// checked rather than trusting the match.
+		_, ref, ok := strings.Cut(line, "\t")
+		if ok && (ref == "refs/heads/"+branch || ref == "refs/tags/"+branch) {
+			found = true
+		}
+	}
+	if err := c.gitRun(ctx, out, repoURL, "ls-remote", "--heads", "--tags", repoURL, branch); err != nil {
+		return fmt.Errorf("%s", redactURLs(firstLine(err.Error())))
+	}
+	if !found {
+		return fmt.Errorf("the repository has no branch or tag named %q", branch)
+	}
+	return nil
+}
+
 // firstLine keeps a git failure to the line that says what went wrong. The
 // rest is advice aimed at someone sitting at a terminal.
 func firstLine(s string) string {
