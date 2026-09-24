@@ -19,6 +19,7 @@ Two of these can be turned off in `/opt/quasar/docker-compose.yml`:
 - Passwords are hashed with bcrypt.
 - Session cookies are HTTP-only, Secure and SameSite=Lax.
 - Two-factor authentication is available for every account. See [users](/server/users/).
+- An address that fails too many sign-ins is refused for a while. See [sign-in protection](/server/users/#sign-in-protection).
 
 ## Secrets
 
@@ -53,6 +54,24 @@ Those ports bypass Traefik: no TLS, no password protection, no rate limit, no ad
 :::
 
 A compose file with its own `traefik.*` labels is run as written, without any change.
+
+## Cloudflare
+
+A server on the internet gets sign-in attempts from strangers within hours. Putting Cloudflare's proxy in front of it is a simple extra layer: it hides the server's address, and absorbs floods and known bad traffic before they reach it. Quasar works behind it without any setting.
+
+To set it up, with your domain on Cloudflare:
+
+1. Create the DNS records for `<DOMAIN>` and `*.<DOMAIN>` as **DNS only** (grey cloud) first, and let Quasar get its certificates.
+2. Switch both records to **Proxied** (orange cloud).
+3. In **SSL/TLS**, choose **Full (strict)**: Cloudflare then only talks to your server over HTTPS, with the certificate Quasar got.
+
+Behind the proxy, Quasar reads each visitor's own address from the `CF-Connecting-IP` header — for the audit log, the dashboard log and [sign-in protection](/server/users/#sign-in-protection). It only trusts that header on connections that really come from [Cloudflare's addresses](https://www.cloudflare.com/ips/), so it can't be forged by calling the server directly.
+
+:::warning
+- The proxy only carries web traffic. Ports published by a stack, such as a game server, need a **DNS only** record, which shows the server's address.
+- The proxy doesn't stop anyone who already knows that address. To close that gap, allow ports 80 and 443 only from Cloudflare's addresses in your server's firewall.
+- On the free plan, Cloudflare refuses uploads over 100 MB, including through the storage explorer.
+:::
 
 ## Stations
 

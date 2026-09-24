@@ -33,6 +33,23 @@ Viewers also can't open container terminals, download backups or the master key,
 
 From then on, signing in asks for a code. To turn it off, confirm with your password.
 
+## Sign-in protection
+
+After too many wrong passwords or 2FA codes, an address is refused for a while: by default, **5 failures within 15 minutes** lock it out for **15 minutes**.
+
+- While it is refused, the password isn't even checked, so guessing stops being useful.
+- Failures are counted per address, not per account: someone guessing at `admin` can't lock you out from elsewhere.
+- A successful sign-in clears the address's count.
+- Every lockout is recorded in the audit log and the [dashboard log](/server/dashboard-log/).
+
+**Settings → Sign-in protection** (admins only) sets the number of attempts (3 to 100) and the lock duration (1 minute to 24 hours), and lists the addresses refused right now, each with an **Unblock** button.
+
+Locks are kept in memory: restarting the dashboard lifts them all.
+
+:::note
+Behind Cloudflare's proxy, Quasar counts each visitor under their own address, not Cloudflare's. See [Cloudflare](/reference/security/#cloudflare).
+:::
+
 ## Sessions
 
 - A session lasts 7 days.
@@ -40,4 +57,4 @@ From then on, signing in asks for a code. To turn it off, confirm with your pass
 
 ## Appearance
 
-**Settings → Appearance** picks the dashboard theme: Nebula (dark, default), Marathon, Nord, Synthwave, Terminal, Paper or Solarized (light).
+**Settings → Appearance** picks the dashboard theme: Nebula (dark, default), Marathon, Nord, Synthwave, Terminal, Paper or Solarized (light). Each theme is shown as a small preview of the dashboard painted in it.
