@@ -16,12 +16,10 @@
     </tbody>
   </table>
 </div>
-{{if .Truncated}}
-<p class="help mt-2">Showing the most recent matches only — narrow your search to see older lines.</p>
-{{end}}
+{{template "pager" .Pager}}
 {{else}}
 <div class="empty p-6 text-center">
-  <p class="muted text-sm">No matching log lines.</p>
+  <p class="muted text-sm">{{if gt .Page 1}}No older log lines.{{else}}No matching log lines.{{end}}</p>
 </div>
 {{end}}
 {{end}}

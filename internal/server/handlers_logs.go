@@ -10,8 +10,8 @@ import (
 	"quasar/internal/docker"
 )
 
-// logSearchLimit caps how many matching lines a single search returns.
-const logSearchLimit = 300
+// logPageSize is how many lines the Logs page shows at a time.
+const logPageSize = 100
 
 // handleLogsPage renders the cross-app log search page.
 func (s *Server) handleLogsPage(w http.ResponseWriter, r *http.Request) {
@@ -21,6 +21,7 @@ func (s *Server) handleLogsPage(w http.ResponseWriter, r *http.Request) {
 		"Apps":  apps,
 		"App":   r.URL.Query().Get("app"),
 		"Query": r.URL.Query().Get("q"),
+		"Page":  pageOf(r),
 	})
 }
 
@@ -33,20 +34,33 @@ type LogLineView struct {
 }
 
 // handleLogsSearchPartial runs a search over persisted log history, across
-// every app or scoped to one, optionally filtered by a substring.
+// every app or scoped to one, optionally filtered by a substring, a page at a
+// time.
 func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request) {
-	lines, err := db.SearchLogs(s.db, r.URL.Query().Get("app"), r.URL.Query().Get("q"), logSearchLimit, 0)
+	query := r.URL.Query()
+	page := pageOf(r)
+	// One line past the page, which says whether there is an older one.
+	lines, err := db.SearchLogs(s.db, query.Get("app"), query.Get("q"), logPageSize+1, (page-1)*logPageSize)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	hasOlder := len(lines) > logPageSize
+	lines = lines[:min(len(lines), logPageSize)]
 	views := make([]LogLineView, 0, len(lines))
 	for _, l := range lines {
 		views = append(views, LogLineView{LogLine: l, HTML: renderLogLine(l.Line)})
 	}
+	// The address bar follows the results — a new search as much as another
+	// page — so a reload shows what is on screen. Replaced rather than
+	// pushed: stepping through pages is not worth a history entry each.
+	if r.Header.Get("HX-Request") != "" {
+		w.Header().Set("HX-Replace-Url", pageURL("/logs", query, page))
+	}
 	s.renderPartial(w, "logs_results", map[string]any{
-		"Lines":     views,
-		"Truncated": len(lines) == logSearchLimit,
+		"Lines": views,
+		"Page":  page,
+		"Pager": pagerFor("/logs", query, page, hasOlder).withPartial("/partials/logs", query, "#log-results"),
 	})
 }
 

@@ -4,13 +4,13 @@
 {{if or .Newer .Older}}
 <nav class="pager" aria-label="Pages">
   {{if .Newer}}
-  <a href="{{.Newer}}" class="btn"{{if .Target}} hx-get="{{.NewerPartial}}" hx-target="{{.Target}}" hx-swap="innerHTML" hx-push-url="{{.Newer}}"{{end}}>← Newer</a>
+  <a href="{{.Newer}}" class="btn"{{if .Target}} hx-get="{{.NewerPartial}}" hx-target="{{.Target}}" hx-swap="innerHTML"{{end}}>← Newer</a>
   {{else}}
   <span class="btn" aria-disabled="true">← Newer</span>
   {{end}}
   <span class="mono muted text-xs">Page {{.Page}}</span>
   {{if .Older}}
-  <a href="{{.Older}}" class="btn"{{if .Target}} hx-get="{{.OlderPartial}}" hx-target="{{.Target}}" hx-swap="innerHTML" hx-push-url="{{.Older}}"{{end}}>Older →</a>
+  <a href="{{.Older}}" class="btn"{{if .Target}} hx-get="{{.OlderPartial}}" hx-target="{{.Target}}" hx-swap="innerHTML"{{end}}>Older →</a>
   {{else}}
   <span class="btn" aria-disabled="true">Older →</span>
   {{end}}

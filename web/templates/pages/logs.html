@@ -18,7 +18,7 @@
   <button type="submit" class="btn-primary">Search</button>
 </form>
 
-<div id="log-results" hx-get="/partials/logs?app={{.App | urlquery}}&q={{.Query | urlquery}}" hx-trigger="load" hx-swap="innerHTML">
+<div id="log-results" hx-get="/partials/logs?app={{.App | urlquery}}&q={{.Query | urlquery}}&page={{.Page}}" hx-trigger="load" hx-swap="innerHTML">
   <div class="card h-20 animate-pulse"></div>
 </div>
 {{end}}
