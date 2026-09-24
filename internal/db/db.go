@@ -304,9 +304,11 @@ var migrations = []string{
 	// Nothing is starred until somebody stars it, which is the right answer
 	// for an install that already has its stations.
 	"ALTER TABLE stations ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0",
-	// Kept last because it is the newest: the list is read as a history of
-	// what the schema has had to grow.
 	"ALTER TABLE deployments ADD COLUMN compose_yaml TEXT NOT NULL DEFAULT ''",
+	// Empty until Open gives the application one; see AssignLogColors. Kept
+	// last because it is the newest: the list is read as a history of what the
+	// schema has had to grow.
+	"ALTER TABLE apps ADD COLUMN log_color TEXT NOT NULL DEFAULT ''",
 }
 
 func Open(path string) (*sql.DB, error) {
@@ -331,6 +333,12 @@ func Open(path string) (*sql.DB, error) {
 		if _, err := db.Exec(m); err != nil && !alreadyApplied(err) {
 			log.Printf("db: migration %q: %v", m, err)
 		}
+	}
+	// Applications from before colours existed, or added by anything that
+	// does not go through InsertApp, get theirs here. Logged like a migration:
+	// a Logs page without colours is no reason to keep the dashboard down.
+	if err := AssignLogColors(db); err != nil {
+		log.Printf("db: assigning log colours: %v", err)
 	}
 	return db, nil
 }

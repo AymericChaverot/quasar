@@ -64,6 +64,10 @@ type App struct {
 	// this" is the first thing any of its actions needs to know.
 	StationParams string
 
+	// LogColor is the #rrggbb colour the application is drawn in on the Logs
+	// page, and nowhere else. See logcolor.go.
+	LogColor string
+
 	CreatedAt time.Time
 }
 
@@ -92,7 +96,7 @@ func (a *App) CustomDomainList() []string {
 	return out
 }
 
-const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, compose_service, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, station_id, station_params, created_at"
+const appCols = "id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, compose_service, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, sort_order, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, station_id, station_params, log_color, created_at"
 
 // scanApp reads one row and decrypts its at-rest-encrypted columns, so every
 // *App leaving the db package carries plaintext EnvContent/ComposeYAML —
@@ -103,7 +107,7 @@ func scanApp(row interface{ Scan(...any) error }, k *secrets.Keyring) (*App, err
 		&a.GitBranch, &a.GitBuild, &a.ComposeYAML, &a.ComposeService, &a.Port, &a.EnvContent, &a.DataMount,
 		&a.WebhookSecret, &a.CPULimit, &a.MemLimitMB, &a.CustomDomains,
 		&a.HealthPath, &a.BasicAuthUser, &a.BasicAuthHash, &a.SortOrder,
-		&a.PreBackupCmd, &a.RateLimit, &a.IPAllowCIDRs, &a.SecurityHeaders, &a.StationID, &a.StationParams, &a.CreatedAt)
+		&a.PreBackupCmd, &a.RateLimit, &a.IPAllowCIDRs, &a.SecurityHeaders, &a.StationID, &a.StationParams, &a.LogColor, &a.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -134,13 +138,20 @@ func InsertApp(db *sql.DB, k *secrets.Keyring, a *App) error {
 	if err != nil {
 		return fmt.Errorf("encrypt pre-backup command: %w", err)
 	}
+	if a.LogColor == "" {
+		taken, err := takenLogColors(db)
+		if err != nil {
+			return fmt.Errorf("log colours: %w", err)
+		}
+		a.LogColor = nextLogColor(taken)
+	}
 	// New apps go to the bottom of the manually ordered list.
-	_, err = db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, compose_service, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, station_id, station_params, sort_order)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM apps))`,
+	_, err = db.Exec(`INSERT INTO apps (id, name, subdomain, deploy_type, image_ref, git_url, git_branch, git_build, compose_yaml, compose_service, port, env_content, data_mount, webhook_secret, cpu_limit, mem_limit_mb, custom_domains, health_path, basic_auth_user, basic_auth_hash, pre_backup_cmd, rate_limit, ip_allow_cidrs, security_headers, station_id, station_params, log_color, sort_order)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM apps))`,
 		a.ID, a.Name, a.Subdomain, a.DeployType, a.ImageRef, a.GitURL, a.GitBranch, a.GitBuild, composeYAML, a.ComposeService,
 		a.Port, envContent, a.DataMount, a.WebhookSecret, a.CPULimit, a.MemLimitMB, a.CustomDomains,
 		a.HealthPath, a.BasicAuthUser, a.BasicAuthHash, preBackup,
-		a.RateLimit, a.IPAllowCIDRs, a.SecurityHeaders, a.StationID, a.StationParams)
+		a.RateLimit, a.IPAllowCIDRs, a.SecurityHeaders, a.StationID, a.StationParams, a.LogColor)
 	return err
 }
 
