@@ -505,6 +505,7 @@ func (s *Server) handleMasterKeyDownload(w http.ResponseWriter, r *http.Request)
 	// Handing out the key that opens every stored secret is the single most
 	// sensitive thing this dashboard can do, so it is always on the record.
 	s.audit(r, "master-key.download", "", "")
+	event.Warning("security", "master key downloaded", "by "+s.actor(r), "from "+clientIP(r))
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="quasar-master.key"`)
 	if _, err := w.Write(key); err != nil {

@@ -1,11 +1,13 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"quasar/internal/auth"
+	"quasar/internal/event"
 )
 
 // settingsError re-renders the settings page with a message, so a failed user
@@ -24,6 +26,7 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "user.create", username, role)
+	event.Info("users", fmt.Sprintf("%q created", username), role, "by "+s.actor(r))
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
@@ -45,6 +48,7 @@ func (s *Server) handleUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "user.role", target, "set to "+role)
+	event.Info("users", fmt.Sprintf("%q is now %s", target, role), "by "+s.actor(r))
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
@@ -58,6 +62,7 @@ func (s *Server) handleUserPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "user.password-reset", target, "")
+	event.Info("users", fmt.Sprintf("%q had their password reset", target), "by "+s.actor(r))
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
@@ -75,6 +80,7 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "user.delete", target, "")
+	event.Info("users", fmt.Sprintf("%q deleted", target), "by "+s.actor(r))
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
@@ -89,6 +95,7 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "token.create", name, role)
+	event.Info("api token", fmt.Sprintf("%q created", name), role, "by "+s.actor(r))
 
 	data := s.settingsData(r)
 	data["NewToken"] = secret
@@ -108,6 +115,7 @@ func (s *Server) handleTokenDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "token.delete", name, "")
+	event.Info("api token", fmt.Sprintf("%q revoked", name), "by "+s.actor(r))
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 

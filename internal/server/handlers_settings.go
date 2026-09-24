@@ -8,6 +8,7 @@ import (
 
 	"quasar/internal/auth"
 	"quasar/internal/db"
+	"quasar/internal/event"
 	"quasar/internal/monitor"
 	"quasar/internal/notify"
 )
@@ -157,6 +158,7 @@ func (s *Server) handle2FAEnable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "2fa.enable", "", "")
+	event.Info("security", s.actor(r)+" turned 2FA on", "from "+clientIP(r))
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
@@ -169,6 +171,7 @@ func (s *Server) handle2FADisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "2fa.disable", "", "")
+	event.Warning("security", s.actor(r)+" turned 2FA off", "from "+clientIP(r))
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
@@ -302,6 +305,7 @@ func (s *Server) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "password.change", "", "")
+	event.Info("security", s.actor(r)+" changed their password", "from "+clientIP(r))
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }
 
