@@ -180,3 +180,11 @@
   line-height: 1;
   white-space: pre;
 }
+
+/* A picture carries one time, not one a row: every row's is hidden but the
+   last of a run of them, which says when the whole was printed. Hidden rather
+   than removed, so the column keeps its width and the picture its place.
+   Set in the pane's own face rather than the picture's, like every other
+   time in it. */
+.log-pane > .log-art .log-ts { font-family: var(--font-mono); }
+.log-pane > .log-art:has(+ .log-art) .log-ts { visibility: hidden; }
