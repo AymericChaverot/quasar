@@ -80,3 +80,16 @@ func PruneAudit(db *sql.DB) error {
 		)`, MaxAuditEntries)
 	return err
 }
+
+// CountAudit is how many entries ListAudit would find with no limit.
+func CountAudit(db *sql.DB, query string) (int, error) {
+	var n int
+	err := db.QueryRow(`
+		SELECT COUNT(*)
+		FROM audit_log
+		WHERE ? = ''
+		   OR actor LIKE '%' || ? || '%'
+		   OR action LIKE '%' || ? || '%'
+		   OR target LIKE '%' || ? || '%'`, query, query, query, query).Scan(&n)
+	return n, err
+}

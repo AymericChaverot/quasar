@@ -136,3 +136,16 @@ func PruneLogs(database *sql.DB) error {
 	}
 	return rows.Err()
 }
+
+// CountLogs is how many lines SearchLogs would find with no limit: what the
+// Logs page needs to say how many pages there are.
+func CountLogs(database *sql.DB, appID, query string) (int, error) {
+	var n int
+	err := database.QueryRow(`
+		SELECT COUNT(*)
+		FROM app_logs
+		JOIN apps ON apps.id = app_logs.app_id
+		WHERE (? = '' OR app_logs.app_id = ?)
+		  AND (? = '' OR app_logs.line LIKE '%' || ? || '%')`, appID, appID, query, query).Scan(&n)
+	return n, err
+}

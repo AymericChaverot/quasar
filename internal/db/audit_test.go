@@ -122,3 +122,15 @@ func TestListAuditPageWalksTheTrail(t *testing.T) {
 		t.Errorf("pages read %q, want every entry once, newest first (edcba)", got)
 	}
 }
+
+// The count agrees with what the list finds, search included.
+func TestCountAuditMatchesTheSearch(t *testing.T) {
+	database := openTestDB(t)
+	RecordAudit(database, AuditEntry{Actor: "alice", Action: "app.delete", Target: "Web"})
+	RecordAudit(database, AuditEntry{Actor: "bob", Action: "login"})
+	for query, want := range map[string]int{"": 2, "alice": 1, "login": 1, "nothing": 0} {
+		if n, err := CountAudit(database, query); err != nil || n != want {
+			t.Errorf("CountAudit(%q) = %d, %v; want %d", query, n, err, want)
+		}
+	}
+}

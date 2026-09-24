@@ -168,3 +168,24 @@ func TestSearchLogsPagesLinesOfTheSameInstant(t *testing.T) {
 		t.Errorf("pages read %q, want every line once, newest first (54321)", got)
 	}
 }
+
+// The count agrees with what the search finds, scope and filter included.
+func TestCountLogsMatchesTheSearch(t *testing.T) {
+	database := openTestDB(t)
+	k := testKeyring(t)
+	for _, id := range []string{"app1", "app2"} {
+		if err := InsertApp(database, k, &App{ID: id, Name: id, Subdomain: id, DeployType: "image", ImageRef: "nginx"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	AppendLogs(database, "app1", []LogEntry{{Line: "hello"}, {Line: "an error"}})
+	AppendLogs(database, "app2", []LogEntry{{Line: "another error"}})
+	for _, tc := range []struct {
+		app, query string
+		want       int
+	}{{"", "", 3}, {"app1", "", 2}, {"", "error", 2}, {"app2", "hello", 0}} {
+		if n, err := CountLogs(database, tc.app, tc.query); err != nil || n != tc.want {
+			t.Errorf("CountLogs(%q, %q) = %d, %v; want %d", tc.app, tc.query, n, err, tc.want)
+		}
+	}
+}
