@@ -1,18 +1,19 @@
 {{define "content"}}
-<div class="mb-8 flex flex-wrap items-end justify-between gap-4">
-  <div>
-    <h1 class="page-title">Audit</h1>
-    <p class="muted mt-1 text-sm">Who did what, and from where. Append-only.</p>
-  </div>
-  <form method="get" action="/audit" class="flex items-end gap-2">
-    <div>
-      <label for="q" class="label mb-1!">Filter</label>
-      <input id="q" name="q" type="text" value="{{.Query}}" placeholder="user, action or target" class="input mono w-64!">
-    </div>
-    <button type="submit" class="btn">Search</button>
-    {{if .Query}}<a href="/audit" class="btn">Clear</a>{{end}}
-  </form>
+{{/* Laid out like Logs, which it is the other half of: what the applications
+     said, and what was done to them. */}}
+<div class="mb-8">
+  <h1 class="page-title">Audit</h1>
+  <p class="help mt-2!">Who did what, and from where. Append-only.</p>
 </div>
+
+<form method="get" action="/audit" class="mb-6 flex flex-wrap items-end gap-4">
+  <div class="min-w-64 flex-1">
+    <label for="q" class="label mb-1!">Search</label>
+    <input id="q" name="q" type="text" value="{{.Query}}" placeholder="user, action or target" class="input mono">
+  </div>
+  <button type="submit" class="btn-primary">Search</button>
+  {{if .Query}}<a href="/audit" class="btn">Clear</a>{{end}}
+</form>
 
 {{if .Entries}}
 <div class="table-wrap">
@@ -23,12 +24,15 @@
     <tbody>
       {{range .Entries}}
       <tr>
-        <td class="mono muted whitespace-nowrap">{{.TS.Format "2006-01-02 15:04:05"}}</td>
-        <td class="mono">{{.Actor}}</td>
-        <td class="mono">{{.Action}}</td>
-        <td class="mono muted">{{.Target}}</td>
-        <td class="muted text-sm">{{.Detail}}</td>
-        <td class="mono muted text-sm">{{.IP}}</td>
+        <td class="mono muted whitespace-nowrap text-xs">{{.TS.Format "2006-01-02 15:04:05"}}</td>
+        <td class="mono whitespace-nowrap">{{.Actor}}</td>
+        <td class="mono whitespace-nowrap">{{.Action}}</td>
+        {{/* Targets and details can be a path, a list of permissions or a
+             command with no space to break at; left alone, one such row
+             widens the table past its frame and pushes the IP out of it. */}}
+        <td class="mono muted min-w-40 wrap-anywhere">{{.Target}}</td>
+        <td class="muted text-sm wrap-anywhere">{{.Detail}}</td>
+        <td class="mono muted whitespace-nowrap text-xs">{{.IP}}</td>
       </tr>
       {{end}}
     </tbody>
