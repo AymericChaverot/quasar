@@ -1,11 +1,17 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"time"
 
 	"quasar/internal/auth"
 	"quasar/internal/backup"
+	"quasar/internal/boot"
 	"quasar/internal/config"
 	"quasar/internal/db"
 	"quasar/internal/docker"
@@ -23,42 +29,82 @@ func main() {
 
 	cfg := config.Load()
 	printBanner()
+	seq := boot.Start()
+
+	environment := "production"
+	if !cfg.CookieSecure {
+		environment = "development"
+	}
+	seq.OK("config", "domain "+cfg.Domain, environment)
 
 	database, err := db.Open(cfg.DBPath)
 	if err != nil {
-		log.Fatalf("db: %v", err)
+		seq.Fatal("database", err)
 	}
 	defer database.Close()
 
 	if err := auth.EnsureAdmin(database, cfg.AdminUser, cfg.AdminPassword); err != nil {
-		log.Fatalf("admin bootstrap: %v", err)
+		seq.Fatal("admin", err)
 	}
 
 	// The master key lives alongside the database (persisted, mounted volume)
 	// but — deliberately — outside anything backup.Run archives, so a leaked
 	// backup or a copied-out database file alone can't be decrypted. Which is
 	// also why it has to be kept somewhere safe: see /system's key download.
+	_, statErr := os.Stat(cfg.KeyPath)
 	keyring, err := secrets.LoadOrCreateKey(cfg.KeyPath)
 	if err != nil {
-		log.Fatalf("encryption key: %v", err)
+		seq.Fatal("master key", err)
 	}
-	if n, err := db.EncryptLegacyApps(database, keyring); err != nil {
-		log.Printf("encrypt legacy app secrets: %v", err)
-	} else if n > 0 {
-		log.Printf("encrypted %d app(s)' stored env/compose data at rest", n)
+	keyState := "loaded"
+	if os.IsNotExist(statErr) {
+		// A new key on an install that already has data is the one thing on
+		// this list worth stopping to read: nothing encrypted before can be
+		// opened with it.
+		keyState = "created — download it from System and keep it safe"
 	}
+	seq.OK("master key", keyState)
 
+	var migrations []string
+	if n, err := db.EncryptLegacyApps(database, keyring); err != nil {
+		seq.Warn("migration", "encrypting legacy app secrets: "+err.Error())
+	} else if n > 0 {
+		migrations = append(migrations, fmt.Sprintf("encrypted %d app(s)' stored env and compose at rest", n))
+	}
 	// The platform-wide git token of earlier versions becomes the any-host
 	// credential, sealed rather than left in the settings table in plaintext.
 	if moved, err := db.MigrateGitToken(database, keyring); err != nil {
-		log.Printf("migrate git token: %v", err)
+		seq.Warn("migration", "moving the git token: "+err.Error())
 	} else if moved {
-		log.Print("moved the stored git token into encrypted git credentials (host: any)")
+		migrations = append(migrations, "moved the stored git token into encrypted git credentials")
+	}
+	if len(migrations) > 0 {
+		seq.OK("migration", migrations...)
+	}
+
+	apps, err := db.ListApps(database, keyring)
+	if err != nil {
+		seq.Warn("database", cfg.DBPath, "listing applications: "+err.Error())
+	} else {
+		seq.OK("database", cfg.DBPath, plural(len(apps), "application"), plural(db.CountEnabledStations(database), "station")+" installed")
 	}
 
 	dock, err := docker.New(cfg, database, keyring)
 	if err != nil {
-		log.Fatalf("docker: %v", err)
+		seq.Fatal("docker", err)
+	}
+	// Asked once, with a short leash: a daemon that does not answer here is
+	// reported, not waited on — the dashboard is how that gets looked into.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	engine := dock.EngineInfo(ctx)
+	cancel()
+	if engine.DockerVersion == "unknown" {
+		seq.Warn("docker", "the daemon did not answer — applications cannot be managed until it does")
+	} else {
+		seq.OK("docker", "Engine "+engine.DockerVersion, "API "+engine.APIVersion, engine.OSType)
+	}
+	if engine.TraefikImage != "" {
+		seq.OK("traefik", engine.TraefikImage)
 	}
 
 	monitor.Start(database, dock, cfg.HostRootPath, keyring)
@@ -67,14 +113,26 @@ func main() {
 
 	srv, err := server.New(cfg, database, dock, keyring)
 	if err != nil {
-		log.Fatalf("server: %v", err)
+		seq.Fatal("server", err)
 	}
 	// A station's hooks run without anybody having pressed anything, so the
 	// loop that fires them belongs here rather than inside a request.
 	srv.StartStationHooks()
+	seq.OK("background", "metrics and health checks", "backup schedule", "update checks", "station hooks")
 
-	log.Printf("quasar listening on %s (domain: %s)", cfg.ListenAddr, cfg.Domain)
-	if err := http.ListenAndServe(cfg.ListenAddr, srv); err != nil {
-		log.Fatal(err)
+	// Bound before "ready" is said, so the line is only ever written by a
+	// dashboard that is actually listening.
+	ln, err := net.Listen("tcp", cfg.ListenAddr)
+	if err != nil {
+		seq.Fatal("http", err)
 	}
+	seq.Ready("listening on " + cfg.ListenAddr)
+	log.Fatal(http.Serve(ln, srv))
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
