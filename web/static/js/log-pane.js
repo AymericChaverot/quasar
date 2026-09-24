@@ -15,5 +15,9 @@
   pane.addEventListener("scroll", sync);
   jump.addEventListener("click", tail);
   new MutationObserver(function () { if (follow) tail(); }).observe(pane, { childList: true });
+  // A pane in a closed tab is not laid out, so the lines that arrive meanwhile
+  // scroll nothing and it opens at the top. It is resized from nothing when
+  // its tab opens, which is when it can be taken to the end.
+  new ResizeObserver(function () { if (follow) tail(); }).observe(pane);
   tail();
 })();
