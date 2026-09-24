@@ -63,7 +63,20 @@ func (s *Server) auditAs(r *http.Request, actor, action, target, detail string) 
 // X-Forwarded-For is the real client. Only the last entry is trusted: earlier
 // ones are whatever the client chose to send, and recording those in an audit
 // trail would let anyone forge the origin of their own actions.
+//
+// Behind Cloudflare's proxy that entry is one of Cloudflare's addresses, shared
+// by everybody it serves, and the visitor is in CF-Connecting-IP instead.
 func clientIP(r *http.Request) string {
+	peer := peerIP(r)
+	if ip, ok := behindCloudflare(peer, r.Header.Get("CF-Connecting-IP")); ok {
+		return ip
+	}
+	return peer
+}
+
+// peerIP is the address that connected to Traefik: the last X-Forwarded-For
+// entry, or the connection's own address when there is no proxy.
+func peerIP(r *http.Request) string {
 	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
 		parts := strings.Split(fwd, ",")
 		if ip := strings.TrimSpace(parts[len(parts)-1]); ip != "" {

@@ -18,6 +18,7 @@ func TestClientIP(t *testing.T) {
 		name       string
 		remoteAddr string
 		forwarded  string
+		cf         string
 		want       string
 	}{
 		{
@@ -57,6 +58,37 @@ func TestClientIP(t *testing.T) {
 			remoteAddr: "203.0.113.9",
 			want:       "203.0.113.9",
 		},
+		{
+			name:       "behind cloudflare",
+			remoteAddr: "172.18.0.4:44444",
+			forwarded:  "162.158.1.20",
+			cf:         "198.51.100.7",
+			want:       "198.51.100.7",
+		},
+		{
+			name:       "behind cloudflare over ipv6",
+			remoteAddr: "172.18.0.4:44444",
+			forwarded:  "2606:4700::6810:1",
+			cf:         "2001:db8::42",
+			want:       "2001:db8::42",
+		},
+		{
+			// From anywhere but Cloudflare the header is only a claim, and
+			// believing it would let an attacker choose the address their
+			// failed sign-ins are counted against.
+			name:       "cloudflare header from elsewhere is ignored",
+			remoteAddr: "172.18.0.4:44444",
+			forwarded:  "203.0.113.9",
+			cf:         "198.51.100.7",
+			want:       "203.0.113.9",
+		},
+		{
+			name:       "unreadable cloudflare header",
+			remoteAddr: "172.18.0.4:44444",
+			forwarded:  "162.158.1.20",
+			cf:         "not an address",
+			want:       "162.158.1.20",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -64,6 +96,9 @@ func TestClientIP(t *testing.T) {
 			r.RemoteAddr = tc.remoteAddr
 			if tc.forwarded != "" {
 				r.Header.Set("X-Forwarded-For", tc.forwarded)
+			}
+			if tc.cf != "" {
+				r.Header.Set("CF-Connecting-IP", tc.cf)
 			}
 			if got := clientIP(r); got != tc.want {
 				t.Errorf("clientIP() = %q, want %q", got, tc.want)
