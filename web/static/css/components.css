@@ -133,6 +133,49 @@
 }
 .input[type="search"]::-webkit-search-cancel-button:hover { background-color: var(--text); }
 
+/* Number fields: the browser's arrows are hidden and number-field.js puts two
+   steppers of our own inside the field's right edge, chevrons painted from a
+   variable like the search field's clear button, so they follow the theme. */
+.input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+.input[type="number"]::-webkit-inner-spin-button,
+.input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.num-field { position: relative; display: block; }
+.num-field.is-inline { width: fit-content; }
+.num-field > .input { padding-right: 2rem; }
+.num-step {
+  position: absolute;
+  right: var(--border-w);
+  width: 1.5rem;
+  height: calc(50% - var(--border-w));
+  border-left: var(--border-w) solid var(--border);
+  background-color: transparent;
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+.num-step-up { top: var(--border-w); border-top-right-radius: var(--radius); }
+.num-step-down {
+  bottom: var(--border-w);
+  border-bottom-right-radius: var(--radius);
+  border-top: var(--border-w) solid var(--border);
+}
+.num-step::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 0.625rem;
+  height: 0.625rem;
+  background-color: var(--text-faint);
+  -webkit-mask: var(--chevron) center / contain no-repeat;
+  mask: var(--chevron) center / contain no-repeat;
+}
+.num-step-up { --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 15 6-6 6 6'/%3E%3C/svg%3E"); }
+.num-step-down { --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
+.num-step:hover { background-color: var(--surface-2); }
+.num-step:hover::after { background-color: var(--text); }
+.num-step:active::after { background-color: var(--accent); }
+.num-field:focus-within .num-step { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+
 .input-suffix {
   border: var(--border-w) solid var(--border);
   border-left: 0;
