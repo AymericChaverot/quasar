@@ -82,6 +82,7 @@ func loadDotEnv(path string) {
 			// A key the environment refuses is one this process cannot use
 			// anyway; the caller reads it back through os.Getenv either way.
 			_ = os.Setenv(key, value)
+			fromFile[key] = true
 		}
 	}
 }

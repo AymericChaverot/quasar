@@ -36,6 +36,20 @@ func main() {
 		environment = "development"
 	}
 	seq.OK("config", "domain "+cfg.Domain, environment)
+	// Everything the dashboard read, as it is used, so what it started with
+	// is on record rather than inferred from a file that may since have
+	// changed. Only a value that did not come from the environment is
+	// annotated: a default is what most often explains a surprise.
+	for _, s := range cfg.Settings() {
+		note := ""
+		switch s.Source {
+		case "default":
+			note = "default"
+		case ".env":
+			note = "from .env"
+		}
+		seq.Setting(s.Name, s.Value, note)
+	}
 
 	database, err := db.Open(cfg.DBPath)
 	if err != nil {

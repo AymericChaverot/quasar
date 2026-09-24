@@ -77,3 +77,29 @@ func (s *Sequence) line(mark, colour, name string, details []string) {
 	}
 	fmt.Fprintf(s.out, "  %s%s%s %s%s%s%s%s%s\n", colour, mark, reset, label, name, reset, pad, muted+detail, reset)
 }
+
+// faint is for what a line only qualifies — where a setting came from.
+const faint = "\x1b[38;2;105;108;119m" // --text-faint
+
+// settingWidth lines setting values up in a column of their own.
+const settingWidth = 16
+
+// Setting writes one loaded setting under the step before it: its name, its
+// value, and a note on where it came from. An empty value is written as such,
+// so an unset variable is seen to be unset — and without the note, which has
+// nothing to add to it.
+func (s *Sequence) Setting(name, value, note string) {
+	if value == "" {
+		value, note = "(not set)", ""
+	}
+	indent := strings.Repeat(" ", 4+labelWidth)
+	pad := strings.Repeat(" ", max(1, settingWidth-len(name)))
+	if note != "" {
+		note = "  " + note
+	}
+	if !s.colour {
+		fmt.Fprintf(s.out, "%s%s%s%s%s\n", indent, name, pad, value, note)
+		return
+	}
+	fmt.Fprintf(s.out, "%s%s%s%s%s%s%s%s%s\n", indent, muted, name, reset, pad, label, value, faint+note, reset)
+}
