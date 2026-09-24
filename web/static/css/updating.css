@@ -135,14 +135,22 @@
    layer moves on its own period — 7s, 9s, 11s, 12.5s, 13s, which share no
    common multiple worth waiting for — so the surface never settles into a loop
    the eye can follow. Fixed and pointer-transparent, below every card, which is
-   opaque and keeps the text over it readable. */
+   opaque and keeps the text over it readable.
+
+   It reaches --glow-under below the screen. As it pours in, it surges up past
+   its level, and a glow cut off at the bottom edge would show daylight under
+   it for those few frames; the part out of sight is the liquid it rises from.
+   Every layer inside is placed from the screen's edge, not the box's, and the
+   surge is in vh rather than in a share of the height, so what shows is the
+   same as if the box stopped at the edge. */
 .glow {
+  --glow-under: 10vh;
   position: fixed;
   right: 0;
-  bottom: 0;
+  bottom: calc(-1 * var(--glow-under));
   left: 0;
   z-index: -1;
-  height: 58vh;
+  height: calc(58vh + var(--glow-under));
   pointer-events: none;
   opacity: 0;
   color: transparent;
@@ -168,27 +176,27 @@
 /* Poured in, not faded in: it surges past its level, drops most of the way
    back inside half a second, then settles the rest of the way slowly. */
 @keyframes glow-flare {
-  0%   { opacity: 0;    transform: translateY(26%); }
-  7%   { opacity: 1;    transform: translateY(-7%); }
-  22%  { opacity: 0.76; transform: translateY(3%); }
-  45%  { opacity: 0.52; transform: translateY(-1%); }
+  0%   { opacity: 0;    transform: translateY(15.08vh); }
+  7%   { opacity: 1;    transform: translateY(-4.06vh); }
+  22%  { opacity: 0.76; transform: translateY(1.74vh); }
+  45%  { opacity: 0.52; transform: translateY(-0.58vh); }
   100% { opacity: 0.42; transform: translateY(0); }
 }
 
 @keyframes glow-burst {
-  0%   { opacity: 0;    transform: translateY(26%); }
-  3%   { opacity: 1;    transform: translateY(-7%); }
-  9%   { opacity: 0.76; transform: translateY(3%); }
-  18%  { opacity: 0.52; transform: translateY(-1%); }
+  0%   { opacity: 0;    transform: translateY(15.08vh); }
+  3%   { opacity: 1;    transform: translateY(-4.06vh); }
+  9%   { opacity: 0.76; transform: translateY(1.74vh); }
+  18%  { opacity: 0.52; transform: translateY(-0.58vh); }
   55%  { opacity: 0.42; transform: translateY(0); }
-  100% { opacity: 0;    transform: translateY(8%); }
+  100% { opacity: 0;    transform: translateY(4.64vh); }
 }
 
 @keyframes glow-brief {
-  0%   { opacity: 0;    transform: translateY(16%); }
+  0%   { opacity: 0;    transform: translateY(9.28vh); }
   16%  { opacity: 0.42; transform: translateY(0); }
   55%  { opacity: 0.42; transform: translateY(0); }
-  100% { opacity: 0;    transform: translateY(8%); }
+  100% { opacity: 0;    transform: translateY(4.64vh); }
 }
 
 /* The body of it, lying flat across the whole width. */
@@ -197,12 +205,13 @@
   right: 0;
   bottom: 0;
   left: 0;
-  height: 30vh;
-  transform-origin: bottom;
+  height: calc(30vh + var(--glow-under));
+  /* It swells from the screen's edge, as it did when that was its bottom. */
+  transform-origin: 50% calc(100% - var(--glow-under));
   background: linear-gradient(to top,
-    color-mix(in srgb, currentColor 62%, transparent),
-    color-mix(in srgb, currentColor 20%, transparent) 52%,
-    transparent 100%);
+    color-mix(in srgb, currentColor 62%, transparent) var(--glow-under),
+    color-mix(in srgb, currentColor 20%, transparent) calc(var(--glow-under) + 15.6vh),
+    transparent calc(var(--glow-under) + 30vh));
   filter: blur(22px);
   animation: pool-level 11s ease-in-out infinite;
 }
@@ -216,9 +225,9 @@
    source of each is off-screen past the corner, so only the climb shows. */
 .glow-wall {
   position: absolute;
-  bottom: 0;
+  bottom: var(--glow-under);
   width: 30%;
-  height: 100%;
+  height: calc(100% - var(--glow-under));
   transform-origin: bottom;
   filter: blur(26px);
 }
@@ -251,7 +260,7 @@
    so what shows is the light thrown up, never the shape making it. */
 .glow-plume {
   position: absolute;
-  bottom: -20vh;
+  bottom: calc(var(--glow-under) - 20vh);
   border-radius: 50%;
   background: radial-gradient(closest-side,
     color-mix(in srgb, currentColor 62%, transparent),
@@ -310,9 +319,9 @@
 [data-theme="solarized"] .glow-pool,
 [data-theme="nord"] .glow-pool {
   background: linear-gradient(to top,
-    color-mix(in srgb, currentColor 34%, transparent),
-    color-mix(in srgb, currentColor 11%, transparent) 52%,
-    transparent 100%);
+    color-mix(in srgb, currentColor 34%, transparent) var(--glow-under),
+    color-mix(in srgb, currentColor 11%, transparent) calc(var(--glow-under) + 15.6vh),
+    transparent calc(var(--glow-under) + 30vh));
 }
 [data-theme="paper"] .glow-wall-l,
 [data-theme="solarized"] .glow-wall-l,
