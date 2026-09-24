@@ -154,7 +154,7 @@ func pushOffsite(database *sql.DB, k *secrets.Keyring, path, name string) {
 		err = offsite.Upload(cfg, path)
 	}
 	if err != nil {
-		log.Printf("offsite upload of %s: %v", name, err)
+		event.Error("offsite", name, "upload failed", err.Error())
 		notify.Send(database, fmt.Sprintf("Quasar: backup %s was written locally but the offsite upload FAILED: %v", name, err))
 		if auditErr := db.RecordAudit(database, db.AuditEntry{
 			Actor: db.ActorSystem, Action: "offsite.failed", Target: name, Detail: err.Error(),
@@ -163,6 +163,7 @@ func pushOffsite(database *sql.DB, k *secrets.Keyring, path, name string) {
 		}
 		return
 	}
+	event.Info("offsite", name, "uploaded to "+cfg.Bucket)
 	if err := db.RecordAudit(database, db.AuditEntry{
 		Actor: db.ActorSystem, Action: "offsite.upload", Target: name,
 		Detail: cfg.Bucket,
@@ -215,14 +216,29 @@ func StartScheduler(database *sql.DB, k *secrets.Keyring, appsDir, dir string, d
 			if db.GetSetting(database, db.SettingBackupAuto) != "true" {
 				continue
 			}
-			if name, err := Run(database, k, appsDir, dir, dump); err != nil {
-				log.Printf("scheduled backup: %v", err)
+			started := time.Now()
+			name, err := Run(database, k, appsDir, dir, dump)
+			Report(dir, name, "scheduled", started, err)
+			if err != nil {
 				notify.Send(database, "Quasar: scheduled backup FAILED: "+err.Error())
-			} else {
-				event.Info("backup", "scheduled", name)
 			}
 		}
 	}()
+}
+
+// Report logs how a backup went: the archive, its size and how long it took,
+// or why there is none. trigger says what asked for it — "scheduled", or who.
+func Report(dir, name, trigger string, started time.Time, err error) {
+	took := time.Since(started).Round(time.Second).String()
+	if err != nil {
+		event.Error("backup", trigger, "failed after "+took, err.Error())
+		return
+	}
+	size := ""
+	if fi, statErr := os.Stat(filepath.Join(dir, name)); statErr == nil {
+		size = fmt.Sprintf("%.1f MB", float64(fi.Size())/(1<<20))
+	}
+	event.Info("backup", name, size, "in "+took, trigger)
 }
 
 func applyRetention(database *sql.DB, dir string) {
@@ -235,8 +251,10 @@ func applyRetention(database *sql.DB, dir string) {
 		// A backup that will not delete means retention is quietly not being
 		// applied, which is how a disk fills up without anyone noticing.
 		if err := os.Remove(filepath.Join(dir, backups[i].Name)); err != nil {
-			log.Printf("backup: retiring %s: %v", backups[i].Name, err)
+			event.Warning("backup", backups[i].Name, "past the "+strconv.Itoa(keep)+" kept, but will not delete", err.Error())
+			continue
 		}
+		event.Info("backup", backups[i].Name, "removed", "past the "+strconv.Itoa(keep)+" kept")
 	}
 }
 

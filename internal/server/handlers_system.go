@@ -21,6 +21,7 @@ import (
 	"quasar/internal/certs"
 	"quasar/internal/db"
 	"quasar/internal/docker"
+	"quasar/internal/event"
 	"quasar/internal/offsite"
 	"quasar/internal/secrets"
 	"quasar/internal/version"
@@ -409,7 +410,9 @@ func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleBackupNow(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
 	name, err := backup.Run(s.db, s.keyring, s.cfg.AppsDir, s.cfg.BackupsDir, s.dock.DumpForBackup)
+	backup.Report(s.cfg.BackupsDir, name, "by "+s.actor(r), started, err)
 	if err != nil {
 		http.Error(w, "backup failed: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -434,6 +437,7 @@ func (s *Server) handleBackupDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "backup.delete", r.PathValue("name"), "")
+	event.Info("backup", r.PathValue("name"), "deleted", "by "+s.actor(r))
 	http.Redirect(w, r, "/system?msg=Backup deleted.", http.StatusSeeOther)
 }
 
@@ -450,6 +454,7 @@ func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := backup.Restore(s.db, s.cfg.AppsDir, s.cfg.BackupsDir, r.PathValue("name"), s.keyring, archiveKey); err != nil {
+		event.Error("restore", r.PathValue("name"), err.Error())
 		http.Error(w, "restore failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -460,6 +465,7 @@ func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 		detail = "with an uploaded master key"
 	}
 	s.audit(r, "backup.restore", r.PathValue("name"), detail)
+	event.Info("restore", r.PathValue("name"), "restored", detail, "by "+s.actor(r))
 	http.Redirect(w, r, "/system?msg="+url.QueryEscape(msg), http.StatusSeeOther)
 }
 
