@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"quasar/internal/db"
+	"quasar/internal/event"
 	"quasar/internal/notify"
 	"quasar/internal/version"
 )
@@ -121,6 +122,7 @@ func StartChecker(database *sql.DB, repo string) {
 			// and the checker now runs often enough that repeating it would
 			// mean a message every half hour until the update is applied.
 			if err == nil && latest != known && IsNewer(version.Version, latest) {
+				event.Info("update", "Quasar "+latest+" is available", "running "+version.Version)
 				notify.Send(database, fmt.Sprintf("Quasar: version %s is available (current: %s). Update from the System page.", latest, version.Version))
 			}
 			time.Sleep(CheckInterval)
