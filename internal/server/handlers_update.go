@@ -12,6 +12,7 @@ import (
 
 	"quasar/internal/db"
 	"quasar/internal/docker"
+	"quasar/internal/event"
 	"quasar/internal/updater"
 	"quasar/internal/version"
 )
@@ -220,6 +221,7 @@ func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "platform.update", latest, imageRef)
+	event.Info("update", "Quasar "+version.Version+" → "+latest, "started", "by "+s.actor(r))
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), updateTimeout)
@@ -227,9 +229,13 @@ func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 		if err := s.dock.SelfUpdate(ctx, imageRef, s.cfg.SocketNetwork, func(p docker.PullStatus) {
 			s.update.progress(p.Percent, p.Phase)
 		}); err != nil {
+			event.Error("update", "Quasar "+latest, err.Error())
 			s.update.fail(err.Error())
 			return
 		}
+		// What comes next is this process being replaced: the new one's
+		// banner is the line that says the update went through.
+		event.Info("update", "Quasar "+latest, "pulled", "restarting on it")
 		s.update.handoff()
 	}()
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"quasar/internal/docker"
+	"quasar/internal/event"
 	"quasar/internal/updater"
 	"quasar/internal/version"
 )
@@ -167,6 +168,7 @@ func (s *Server) handleTraefikUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "traefik.update", version.TraefikImage, "from "+running)
+	event.Info("traefik", running+" → "+version.TraefikImage, "started", "by "+s.actor(r))
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), traefikTimeout)
@@ -178,6 +180,11 @@ func (s *Server) handleTraefikUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 			s.traefik.progress(p.Pull.Percent, p.Pull.Phase)
 		})
+		if err != nil {
+			event.Error("traefik", version.TraefikImage, err.Error())
+		} else {
+			event.Info("traefik", "running on "+version.TraefikImage)
+		}
 		s.traefik.finish(err)
 	}()
 
