@@ -64,6 +64,7 @@ const ICONS = {
   disk: '<path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><path d="M6 16h.01M10 16h.01"/>',
   users: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 3.5a4 4 0 0 1 0 9"/><path d="M22 21a7 7 0 0 0-4.5-6.5"/>',
   card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/>',
+  eventLog: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m7 8 1.5 1.5L11 7"/><path d="M13 8h4M7 13h10M7 17h7"/>',
 
   // --- reference ---
   plug: '<path d="M9 2v6M15 2v6"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v5"/>',
@@ -142,6 +143,7 @@ const PAGES = {
   '/stations/security/': 'shieldCheck',
 
   '/server/monitoring/': 'gauge',
+  '/server/dashboard-log/': 'eventLog',
   '/server/notifications/': 'bell',
   '/server/backups/': 'archive',
   '/server/disk/': 'disk',

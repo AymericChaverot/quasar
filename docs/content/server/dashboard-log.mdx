@@ -1,0 +1,73 @@
+---
+title: Dashboard log
+description: What the dashboard writes to its own log, from start to stop.
+---
+
+The dashboard writes what happens on the platform to its own output. Read it in **Dashboard → System containers → quasar-dashboard**, or on the server:
+
+```bash
+docker logs quasar-dashboard
+```
+
+## At start
+
+The log opens with Quasar's banner and version, followed by one line per thing brought up:
+
+```
+  ✓ config      domain example.com · production
+                APPS_DIR        /opt/quasar/apps
+                BACKUPS_DIR     /opt/quasar/backups
+                DOCKER_HOST     tcp://socket-proxy:2375
+                ACME_EMAIL      ops@example.com
+  ✓ master key  loaded
+  ✓ database    /opt/quasar/storage/database.sqlite · 12 applications · 3 stations installed
+  ✓ docker      Engine 29.8.0 · API 1.56 · linux/amd64
+  ✓ traefik     traefik:v3.7.13
+  ✓ background  metrics and health checks · backup schedule · update checks · station hooks
+  ✓ ready       listening on :8080 · started in 41ms
+
+  ✓ apps        10 running · 2 stopped (staging, old-blog)
+  ✓ stations    3 enabled
+```
+
+- The settings under `config` are the values in use. A value taken from a default, or from `.env` rather than the environment, says so.
+- `master key` says **created** instead of **loaded** on a new install. [Download it](/server/backups/#the-master-key) and keep it safe.
+- The last two lines say how many applications are running, stopped, not deployed or in error, and name the ones that aren't running. An application in error turns the line red.
+
+## While it runs
+
+After that, one line per event that matters. Settings saved and pages viewed are not logged.
+
+| Area | Events |
+| --- | --- |
+| `deploy` | Every deployment, with its duration, image and cause (update, webhook, API, rollback…), or why it failed. |
+| `app` `health` | An application deleted, stopping unexpectedly, running again, or restarted after failing its health checks. |
+| `update` `traefik` | A new Quasar release, and updates of the dashboard and of Traefik. |
+| `backup` `offsite` `restore` | Every archive with its size and duration, offsite uploads, archives removed by retention, restores. |
+| `login` `security` `users` `api token` | Sign-ins, failed sign-ins and [refused addresses](/server/users/#sign-in-protection), 2FA and password changes, users and API tokens, master key downloads. |
+| `certs` `cleanup` `station` `notify` | Certificates deleted, Docker cleanups, stations installed or removed, failed station hooks, notifications that couldn't be sent. |
+
+Each line starts with a mark: `✓` went as asked, `!` worth a look, `✗` failed.
+
+Failed sign-ins are grouped: the first one from an address is logged right away, then one line sums up the others after 10 minutes.
+
+## At stop
+
+`docker stop` and `docker compose down` end the dashboard cleanly: requests in progress get a few seconds to finish, and the log says so.
+
+```
+  ✓ shutdown    received SIGTERM · stopping
+  ✓ shutdown    stopped in 12ms
+```
+
+If the log ends without these lines, the dashboard didn't stop on its own request — it crashed, or was killed.
+
+## Timestamps and colours
+
+Lines carry no timestamp of their own: Docker records one for each. Show it with `docker logs -t quasar-dashboard`. Quasar's log views show it too.
+
+The log is in colour. Set `NO_COLOR=1` on the dashboard container to turn colours off, for a log collector that doesn't handle them.
+
+:::note
+This log is not the audit trail. **Audit** records every change, with who made it, and keeps it in the database. See [monitoring](/server/monitoring/#audit-log).
+:::
