@@ -6,13 +6,6 @@
      build panel and the deploy all change with it. */}}
 {{define "git_source_panel"}}
 <div id="git-source" class="card space-y-3 p-4">
-  {{with .App.Repo}}
-  <a href="{{.URL}}" target="_blank" rel="noopener" title="{{.URL}}"
-     class="link mono flex w-fit items-center gap-1.5 text-sm">
-    {{template "forge_icon" .Forge}}<span>{{.Label}}</span>{{with $.App.GitBranch}}<span class="muted">· {{.}}</span>{{end}}
-  </a>
-  {{end}}
-
   <form hx-post="/apps/{{.App.ID}}/source" hx-target="#git-source" hx-swap="outerHTML"
         hx-confirm="Deploy {{.App.Name}} from this repository and branch? The code is cloned again and rebuilt; the application keeps its address, its environment and its data."
         class="space-y-3">
@@ -37,8 +30,8 @@
         The repository is checked before anything changes, then cloned again and deployed the way
         it asks to be: from its compose file or its Dockerfile. The application keeps its name, its
         address, its environment, its domains, its protection and its data. Moving to another
-        repository resets the build choice to automatic. Point the new repository's push
-        webhook at the URL under Settings.
+        repository resets the build choice under Overview to automatic. Point the new repository's push
+        webhook at the deploy webhook URL below.
       </p>
     </div>
   </form>

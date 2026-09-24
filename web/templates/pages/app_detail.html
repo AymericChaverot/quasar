@@ -124,13 +124,6 @@
 {{end}}
 
 <div class="page-pane{{if $.Station}} hidden{{end}}" data-pane="overview">
-{{if and (eq .DeployType "git") $.IsAdmin}}
-<section class="mt-8">
-  <h2 class="h-label mb-3">Source</h2>
-  {{template "git_source_panel" (dict "App" . "URL" (redactURL .GitURL) "Branch" .GitBranch)}}
-</section>
-{{end}}
-
 {{if eq .DeployType "git"}}
 <section class="mt-8">
   <h2 class="h-label mb-3">Build</h2>
@@ -254,6 +247,12 @@
 </div>
 
 <div class="page-pane hidden" data-pane="settings">
+{{if eq .DeployType "git"}}
+<section class="mt-8">
+  <h2 class="h-label mb-3">Source</h2>
+  {{template "git_source_panel" (dict "App" . "URL" (redactURL .GitURL) "Branch" .GitBranch)}}
+</section>
+{{end}}
 <div class="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
   <section>
     <h2 class="h-label mb-3">Custom domains</h2>
