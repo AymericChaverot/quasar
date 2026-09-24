@@ -23,6 +23,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Level is how a line is marked.
@@ -77,6 +78,21 @@ func Print(level Level, area string, details ...string) {
 	mu.Lock()
 	defer mu.Unlock()
 	_, _ = io.WriteString(out, Format(level, area, strings.Join(kept, " · "), colour))
+}
+
+// Duration writes how long something took as precisely as is worth reading:
+// milliseconds under a second, where "0s" would say nothing, tenths under ten
+// seconds, whole seconds past that.
+func Duration(d time.Duration) string {
+	switch {
+	case d < time.Millisecond:
+		return "under 1ms"
+	case d < time.Second:
+		return d.Round(time.Millisecond).String()
+	case d < 10*time.Second:
+		return d.Round(100 * time.Millisecond).String()
+	}
+	return d.Round(time.Second).String()
 }
 
 // Format is one line as Print writes it, for the start-up sequence to share.

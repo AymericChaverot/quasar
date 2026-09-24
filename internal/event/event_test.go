@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"log"
 	"testing"
+	"time"
 )
 
 // capture sends the package's lines to a buffer, without colour, for the
@@ -47,5 +48,19 @@ func TestCaptureStandardLog(t *testing.T) {
 		"  ✗ quasar      unprefixed\n"
 	if buf.String() != want {
 		t.Errorf("got\n%s\nwant\n%s", buf.String(), want)
+	}
+}
+
+func TestDuration(t *testing.T) {
+	for d, want := range map[time.Duration]string{
+		300 * time.Microsecond:                     "under 1ms",
+		42*time.Millisecond + 300*time.Microsecond: "42ms",
+		3*time.Second + 260*time.Millisecond:       "3.3s",
+		41*time.Second + 600*time.Millisecond:      "42s",
+		2*time.Minute + 5*time.Second:              "2m5s",
+	} {
+		if got := Duration(d); got != want {
+			t.Errorf("Duration(%v) = %q, want %q", d, got, want)
+		}
 	}
 }

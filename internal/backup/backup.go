@@ -229,7 +229,7 @@ func StartScheduler(database *sql.DB, k *secrets.Keyring, appsDir, dir string, d
 // Report logs how a backup went: the archive, its size and how long it took,
 // or why there is none. trigger says what asked for it — "scheduled", or who.
 func Report(dir, name, trigger string, started time.Time, err error) {
-	took := time.Since(started).Round(time.Second).String()
+	took := event.Duration(time.Since(started))
 	if err != nil {
 		event.Error("backup", trigger, "failed after "+took, err.Error())
 		return

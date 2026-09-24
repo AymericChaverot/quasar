@@ -183,7 +183,7 @@ func serve(ln net.Listener, handler http.Handler) {
 		if err := hs.Shutdown(ctx); err != nil {
 			event.Warning("shutdown", "closed the requests still open after "+shutdownGrace.String())
 		}
-		event.Info("shutdown", "stopped in "+time.Since(started).Round(time.Millisecond).String())
+		event.Info("shutdown", "stopped in "+event.Duration(time.Since(started)))
 	}
 }
 
