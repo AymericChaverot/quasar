@@ -1,7 +1,10 @@
 /* --- Logs ------------------------------------------------------------------ */
 
+/* Tall enough for the dashboard's own start — banner, start-up sequence and
+   the first lines after it — to be read whole, without the page it sits on
+   having to scroll to show all of it. */
 .log-pane {
-  height: 24rem;
+  height: min(40rem, 75vh);
   overflow-y: auto;
   border: var(--border-w) solid var(--border);
   border-radius: var(--radius);
