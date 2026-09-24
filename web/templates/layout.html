@@ -83,7 +83,28 @@
   <main class="mx-auto max-w-6xl px-6 py-8">
     {{template "content" .}}
   </main>
-  {{/* Asks the question a data-confirm carries, for every destructive form. */}}
+  {{/* The one confirmation box on the site, asked by every data-confirm form
+       and every hx-confirm control through confirm.js. It is filled in from
+       whatever asks: the question, and the words of the button that asked. */}}
+  <dialog id="confirm-dialog" class="modal modal-confirm" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <div class="modal-head">
+      <h2 id="confirm-title" class="modal-title">Confirm</h2>
+      <button type="button" class="modal-close" data-confirm-cancel aria-label="Cancel">{{template "icon_x"}}</button>
+    </div>
+    <div class="modal-body confirm-body">
+      <span class="confirm-mark" aria-hidden="true">{{template "icon_alert_triangle"}}</span>
+      <div class="space-y-2">
+        <p id="confirm-message" class="text-sm"></p>
+        {{/* Only for a dangerous action: said once here rather than in each of
+             their questions, which already say what goes. */}}
+        <p class="confirm-final text-sm">This can't be undone.</p>
+      </div>
+    </div>
+    <div class="modal-foot flex items-center justify-end gap-3">
+      <button type="button" class="btn" data-confirm-cancel>Cancel</button>
+      <button type="button" id="confirm-ok" class="btn-primary">Confirm</button>
+    </div>
+  </dialog>
   <script src="/static/js/confirm.js" defer></script>
   {{/* Pins every shimmer to the document clock so a polled panel does not
        restart its animation on each swap. See the file for why. */}}

@@ -326,6 +326,24 @@ input[type="checkbox"]:focus-visible {
 }
 .btn-danger:hover { background: color-mix(in srgb, var(--err) 12%, transparent); }
 
+/* The button that goes through with something that cannot be taken back, in
+   the dialog that asked. Filled, so it is the heaviest thing on screen and not
+   one more outline beside Cancel. */
+.btn-danger-solid {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: var(--border-w) solid var(--err);
+  border-radius: var(--radius);
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 600;
+  background: var(--err);
+  color: #fff;
+}
+.btn-danger-solid:hover { background: color-mix(in srgb, var(--err) 85%, #000); }
+
 /* Inline icon, sized to sit beside text; color follows currentColor. */
 .ico {
   width: 0.875rem;
@@ -510,6 +528,47 @@ input[type="checkbox"]:focus-visible {
   padding: 0.75rem 1rem;
   font-size: 0.75rem;
   color: var(--text-faint);
+}
+
+/* A confirmation: a sentence and two buttons, sized to the sentence rather
+   than to the file viewer the panel was first drawn for. */
+.modal-confirm { width: min(30rem, calc(100vw - 2rem)); }
+.modal-confirm .modal-body { line-height: 1.5; }
+
+.confirm-body { display: flex; gap: 0.875rem; align-items: flex-start; }
+.confirm-mark {
+  display: grid;
+  place-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+.confirm-mark svg { width: 1.125rem; height: 1.125rem; }
+.confirm-final { display: none; }
+
+/* An action that cannot be undone. The whole panel says so before a word of
+   it is read: a red rule across the top, a red edge, the heading and the mark
+   in red, the page behind it tinted, and the sentence nobody wants to miss. */
+.modal-confirm.is-danger {
+  border-color: color-mix(in srgb, var(--err) 70%, var(--border-strong));
+  border-top: 3px solid var(--err);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.45), 0 0 0 1px color-mix(in srgb, var(--err) 25%, transparent),
+              0 0 48px color-mix(in srgb, var(--err) 22%, transparent);
+}
+.modal-confirm.is-danger::backdrop { background: color-mix(in srgb, var(--err) 14%, rgb(0 0 0 / 0.6)); }
+.modal-confirm.is-danger .modal-title { color: var(--err); }
+.modal-confirm.is-danger .confirm-mark {
+  color: var(--err);
+  background: color-mix(in srgb, var(--err) 16%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--err) 35%, transparent);
+}
+.modal-confirm.is-danger .confirm-final {
+  display: block;
+  font-weight: 600;
+  color: var(--err);
 }
 
 /* --- Badges & meters ------------------------------------------------------- */
