@@ -111,6 +111,18 @@ A station can't take the dashboard down: its script runs in a separate process t
 
 Quasar checks GitHub every 30 minutes. Press **Check for updates** in **System → Software update** to check now. The check needs the server to reach `github.com`.
 
+## A feature does nothing after an update
+
+Deleting a certificate is refused, or a volume stays read-only, on a server that is up to date. The dashboard updates itself, but its mounts and permissions come from `/opt/quasar/docker-compose.yml`, which only changes when you pull it. **System** says so at the top of the page. See [updating the system stack](/getting-started/updating/#updating-the-system-stack).
+
+## Sign-in says "Too many failed attempts"
+
+Your address failed too many sign-ins and is refused for a while. See [sign-in protection](/server/users/#sign-in-protection).
+
+- Wait for the time shown, then sign in again.
+- An admin signed in elsewhere can lift it in **Settings → Sign-in protection → Unblock**.
+- Otherwise, restart the dashboard on the server, which lifts every lock: `docker restart quasar-dashboard`.
+
 ## Still stuck
 
-Two places tell you what happened: the **audit log**, which records who did what and from where, and the application's **Logs** tab and its history. After that, open an issue on [GitHub](https://github.com/AymericChaverot/quasar/issues).
+Three places tell you what happened: the **audit log**, which records who did what and from where, the application's **Logs** tab and its history, and the [dashboard log](/server/dashboard-log/). After that, open an issue on [GitHub](https://github.com/AymericChaverot/quasar/issues).
