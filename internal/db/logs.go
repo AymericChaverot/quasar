@@ -64,15 +64,17 @@ func AppendLogs(database *sql.DB, appID string, entries []LogEntry) error {
 // SearchLogs returns persisted log lines, newest first, optionally scoped to
 // one app and/or filtered by a substring match. An empty appID searches
 // across every app; an empty query returns the most recent lines unfiltered.
-func SearchLogs(database *sql.DB, appID, query string, limit int) ([]LogLine, error) {
+// offset skips that many of the newest matches, which is how the Logs page
+// reaches older ones a page at a time.
+func SearchLogs(database *sql.DB, appID, query string, limit, offset int) ([]LogLine, error) {
 	rows, err := database.Query(`
 		SELECT app_logs.app_id, apps.name, app_logs.ts, app_logs.line
 		FROM app_logs
 		JOIN apps ON apps.id = app_logs.app_id
 		WHERE (? = '' OR app_logs.app_id = ?)
 		  AND (? = '' OR app_logs.line LIKE '%' || ? || '%')
-		ORDER BY app_logs.ts DESC
-		LIMIT ?`, appID, appID, query, query, limit)
+		ORDER BY app_logs.ts DESC, app_logs.rowid DESC
+		LIMIT ? OFFSET ?`, appID, appID, query, query, limit, offset)
 	if err != nil {
 		return nil, err
 	}

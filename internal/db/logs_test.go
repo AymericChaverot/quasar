@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,7 +44,7 @@ func TestAppendAndSearchLogs(t *testing.T) {
 	AppendLogs(database, "app1", []LogEntry{{Line: "hello world"}, {Line: "an ERROR occurred"}})
 	AppendLogs(database, "app2", []LogEntry{{Line: "another error here"}})
 
-	all, err := SearchLogs(database, "", "error", 10)
+	all, err := SearchLogs(database, "", "error", 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +52,7 @@ func TestAppendAndSearchLogs(t *testing.T) {
 		t.Fatalf("cross-app search for \"error\": got %d results, want 2: %+v", len(all), all)
 	}
 
-	scoped, err := SearchLogs(database, "app1", "", 10)
+	scoped, err := SearchLogs(database, "app1", "", 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +69,7 @@ func TestAppendAndSearchLogs(t *testing.T) {
 	}
 
 	DeleteAppLogs(database, "app1")
-	remaining, err := SearchLogs(database, "", "", 10)
+	remaining, err := SearchLogs(database, "", "", 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +95,7 @@ func TestAppendLogsKeepsTheContainersTimestamp(t *testing.T) {
 		{Line: "unstamped"}, // no timestamp: falls back to now
 	})
 
-	got, err := SearchLogs(database, "app1", "", 10)
+	got, err := SearchLogs(database, "app1", "", 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +127,7 @@ func TestAppendLogsTruncatesLongLines(t *testing.T) {
 	}
 	AppendLogs(database, "app1", []LogEntry{{Line: string(long)}})
 
-	got, err := SearchLogs(database, "app1", "", 10)
+	got, err := SearchLogs(database, "app1", "", 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,5 +136,35 @@ func TestAppendLogsTruncatesLongLines(t *testing.T) {
 	}
 	if len(got[0].Line) != maxLogLineLen {
 		t.Errorf("stored line length = %d, want %d", len(got[0].Line), maxLogLineLen)
+	}
+}
+
+// Lines written in the same instant still page in a fixed order: without a
+// tiebreak, an offset could show one of them twice and skip another.
+func TestSearchLogsPagesLinesOfTheSameInstant(t *testing.T) {
+	database := openTestDB(t)
+	if err := InsertApp(database, testKeyring(t), &App{ID: "app1", Name: "Web", Subdomain: "web", DeployType: "image", ImageRef: "nginx"}); err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	var entries []LogEntry
+	for _, l := range []string{"1", "2", "3", "4", "5"} {
+		entries = append(entries, LogEntry{TS: at, Line: l})
+	}
+	if err := AppendLogs(database, "app1", entries); err != nil {
+		t.Fatal(err)
+	}
+	var seen []string
+	for offset := 0; offset < 6; offset += 2 {
+		page, err := SearchLogs(database, "", "", 2, offset)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, l := range page {
+			seen = append(seen, l.Line)
+		}
+	}
+	if got := strings.Join(seen, ""); got != "54321" {
+		t.Errorf("pages read %q, want every line once, newest first (54321)", got)
 	}
 }

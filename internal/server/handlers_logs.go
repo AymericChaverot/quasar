@@ -35,7 +35,7 @@ type LogLineView struct {
 // handleLogsSearchPartial runs a search over persisted log history, across
 // every app or scoped to one, optionally filtered by a substring.
 func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request) {
-	lines, err := db.SearchLogs(s.db, r.URL.Query().Get("app"), r.URL.Query().Get("q"), logSearchLimit)
+	lines, err := db.SearchLogs(s.db, r.URL.Query().Get("app"), r.URL.Query().Get("q"), logSearchLimit, 0)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

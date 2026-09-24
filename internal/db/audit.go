@@ -42,6 +42,12 @@ func RecordAudit(db *sql.DB, e AuditEntry) error {
 // ListAudit returns entries newest first, optionally filtered by a substring
 // match across actor, action and target.
 func ListAudit(db *sql.DB, query string, limit int) ([]*AuditEntry, error) {
+	return ListAuditPage(db, query, limit, 0)
+}
+
+// ListAuditPage is ListAudit past the offset newest matches: the Audit page
+// reads the trail a page at a time.
+func ListAuditPage(db *sql.DB, query string, limit, offset int) ([]*AuditEntry, error) {
 	rows, err := db.Query(`
 		SELECT id, ts, actor, action, target, detail, ip
 		FROM audit_log
@@ -50,7 +56,7 @@ func ListAudit(db *sql.DB, query string, limit int) ([]*AuditEntry, error) {
 		   OR action LIKE '%' || ? || '%'
 		   OR target LIKE '%' || ? || '%'
 		ORDER BY id DESC
-		LIMIT ?`, query, query, query, query, limit)
+		LIMIT ? OFFSET ?`, query, query, query, query, limit, offset)
 	if err != nil {
 		return nil, err
 	}

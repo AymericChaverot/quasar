@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -98,4 +99,26 @@ func TestPruneAuditKeepsNewest(t *testing.T) {
 
 func TestPruneAuditOnEmptyTable(t *testing.T) {
 	PruneAudit(openTestDB(t)) // fresh install
+}
+
+// A page past the first starts where the one before it stopped, still newest
+// first, so reading the pages in turn walks the whole trail once.
+func TestListAuditPageWalksTheTrail(t *testing.T) {
+	database := openTestDB(t)
+	for _, actor := range []string{"a", "b", "c", "d", "e"} {
+		RecordAudit(database, AuditEntry{Actor: actor, Action: "login"})
+	}
+	var seen []string
+	for offset := 0; offset < 6; offset += 2 {
+		page, err := ListAuditPage(database, "", 2, offset)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range page {
+			seen = append(seen, e.Actor)
+		}
+	}
+	if got := strings.Join(seen, ""); got != "edcba" {
+		t.Errorf("pages read %q, want every entry once, newest first (edcba)", got)
+	}
 }
