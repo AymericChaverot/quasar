@@ -53,6 +53,9 @@ type Server struct {
 	// event log, instead of a line per guess.
 	loginFailures *loginFailures
 
+	// loginGuard refuses sign-ins from an address that has failed too often.
+	loginGuard *loginGuard
+
 	// update is the self-update in flight, if any: the pull runs detached from
 	// the request that asked for it, and this is where the page waiting on it
 	// reads how far it has got.
@@ -84,6 +87,7 @@ func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secr
 
 		edgeAttempts:  newEdgeThrottle(),
 		loginFailures: newLoginFailures(),
+		loginGuard:    newLoginGuard(func() loginPolicy { return loginPolicyFrom(database) }),
 	}
 	if err := s.parseTemplates(); err != nil {
 		return nil, err
@@ -246,6 +250,8 @@ func (s *Server) routes() {
 	s.viewer("POST /settings/2fa/disable", s.handle2FADisable)
 
 	s.admin("POST /settings/sessions/clear", s.handleSessionsClear)
+	s.admin("POST /settings/sign-in", s.handleSignInProtection)
+	s.admin("POST /settings/sign-in/unblock", s.handleSignInUnblock)
 	s.admin("POST /settings/registries", s.handleRegistryAdd)
 	s.admin("POST /settings/registries/{id}/delete", s.handleRegistryDelete)
 	s.admin("POST /settings/integrations", s.handleIntegrationsSave)

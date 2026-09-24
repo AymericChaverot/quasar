@@ -168,6 +168,11 @@ const (
 	SettingBackupRetention = "backup_retention" // how many backup archives to keep
 	SettingBackupAuto      = "backup_auto"      // "true" to run a daily backup
 
+	// Sign-in protection: how many failed attempts an address gets, and for
+	// how many minutes it is then refused.
+	SettingLoginAttempts    = "login_max_attempts"
+	SettingLoginLockMinutes = "login_lock_minutes"
+
 	// Host usage percentages that trigger a notification; 0 turns one off.
 	SettingAlertDisk = "alert_disk_percent"
 	SettingAlertMem  = "alert_mem_percent"

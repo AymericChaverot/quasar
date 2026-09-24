@@ -405,6 +405,47 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
     </form>
   </section>
 
+  <section id="sign-in" class="space-y-4">
+    <h2 class="h-label">Sign-in protection</h2>
+    {{with .SignIn}}
+    <form method="post" action="/settings/sign-in" class="card space-y-4 p-4">
+      <div class="flex flex-wrap items-end gap-3">
+        <label class="text-sm">
+          <span class="label mb-1!">Failed attempts allowed</span>
+          <input name="attempts" type="number" min="{{.MinAttempts}}" max="{{.MaxAttempts}}" value="{{.Attempts}}" required class="input mono w-28!">
+        </label>
+        <label class="text-sm">
+          <span class="label mb-1!">Then refused for (minutes)</span>
+          <input name="lock_minutes" type="number" min="{{.MinLock}}" max="{{.MaxLock}}" value="{{.LockMinutes}}" required class="input mono w-28!">
+        </label>
+        <button type="submit" class="btn">Save</button>
+      </div>
+      <p class="help">
+        After {{.Attempts}} wrong passwords or 2FA codes within {{.LockMinutes}} minutes, an address is refused
+        for {{.LockMinutes}} minutes, without its password even being checked. Counted per address, so guessing
+        at an account never locks its owner out from elsewhere. A restart of the dashboard lifts every lock.
+      </p>
+    </form>
+    <div class="card p-4">
+      {{if .Lockouts}}
+      <ul class="space-y-2">
+        {{range .Lockouts}}
+        <li class="flex items-center justify-between gap-4 text-sm">
+          <span><span class="mono">{{.IP}}</span> <span class="muted">· {{.Failures}} failed attempts · refused for {{.Wait}}</span></span>
+          <form method="post" action="/settings/sign-in/unblock">
+            <input type="hidden" name="ip" value="{{.IP}}">
+            <button type="submit" class="btn py-1! text-xs">Unblock</button>
+          </form>
+        </li>
+        {{end}}
+      </ul>
+      {{else}}
+      <p class="muted text-sm">No address is refused right now.</p>
+      {{end}}
+    </div>
+    {{end}}
+  </section>
+
   <section class="space-y-4">
     <h2 class="h-label">Sessions</h2>
     <div class="card flex items-center justify-between p-4">

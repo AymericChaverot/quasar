@@ -122,6 +122,7 @@ func (s *Server) settingsData(r *http.Request) map[string]any {
 		"AlertDisk":         s.alertThreshold(db.SettingAlertDisk, monitor.AlertDefaultDisk),
 		"AlertMem":          s.alertThreshold(db.SettingAlertMem, monitor.AlertDefaultMem),
 		"AlertCPU":          s.alertThreshold(db.SettingAlertCPU, monitor.AlertDefaultCPU),
+		"SignIn":            s.signInData(),
 	}
 }
 
