@@ -22,6 +22,7 @@ func main() {
 	runWorkerMode()
 
 	cfg := config.Load()
+	printBanner()
 
 	database, err := db.Open(cfg.DBPath)
 	if err != nil {
