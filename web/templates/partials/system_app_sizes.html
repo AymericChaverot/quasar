@@ -8,7 +8,7 @@
      saying when it was taken is cheaper than taking it again. */}}
 {{define "system_app_sizes"}}
 {{if .AppSizes}}
-<div class="table-wrap max-w-2xl">
+<div class="table-wrap">
   <table>
     <thead><tr><th>Application</th><th>On-disk size</th><th>Measured</th></tr></thead>
     <tbody>
@@ -26,7 +26,7 @@
 {{/* The section used to disappear entirely on an install with no applications.
      It cannot now — the page is drawn before the answer is known — so the empty
      case is stated instead, the way the backups table below it already does. */}}
-<div class="empty max-w-2xl p-6 text-center">
+<div class="empty p-6 text-center">
   <p class="muted text-sm">No applications yet.</p>
 </div>
 {{end}}

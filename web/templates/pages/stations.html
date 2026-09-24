@@ -15,7 +15,7 @@
      approval before a byte of it is stored. */}}
 {{if .IsAdmin}}
 <form id="station-import" method="post" action="/settings/stations/fetch"
-      class="card mb-8 max-w-3xl space-y-3 p-4">
+      class="card mb-8 space-y-3 p-4">
   <label class="label mb-0!" for="station-url">Install another</label>
   <div class="flex flex-wrap items-center gap-2">
     <input id="station-url" name="source_url" type="url" required
@@ -39,7 +39,7 @@
 {{template "stations_lists" .}}
 <script src="/static/js/station-star.js" defer></script>
 {{else}}
-<div class="empty max-w-3xl p-8 text-center">
+<div class="empty p-8 text-center">
   <p class="text-sm">No station installed.</p>
   <p class="help mt-1!">
     A station is a document somebody wrote for one service in particular.

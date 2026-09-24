@@ -9,7 +9,7 @@
      on anything the response replaces. */}}
 {{define "system_env"}}
 <div id="system-env"{{if .Traefik.Busy}} hx-get="/partials/system/environment" hx-trigger="every 2s" hx-swap="outerHTML"{{end}}>
-<div class="card max-w-2xl">
+<div class="card">
 
   <div class="env-row">
     <span class="env-icon" aria-hidden="true">

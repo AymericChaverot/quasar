@@ -23,7 +23,7 @@
   {{with .Hardware}}
   <section class="space-y-4">
     <h2 class="h-label">Hardware</h2>
-    <div class="grid max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2">
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <div class="card p-4 sm:col-span-2">
         <p class="stat-label muted text-sm">{{template "icon_cpu"}}Processor</p>
         <p class="stat-figure">
@@ -46,7 +46,7 @@
         </p>
       </div>
     </div>
-    <p class="help max-w-2xl">
+    <p class="help max-w-3xl">
       The capacity of the machine, not what is being used of it — the dashboard carries the live
       CPU, memory and disk figures.
     </p>
@@ -63,21 +63,21 @@
     {{/* outerHTML, unlike the three below: the partial brings its own wrapper
          so that it can poll itself while a Traefik update is running. */}}
     <div hx-get="/partials/system/environment" hx-trigger="load" hx-swap="outerHTML">
-      <div class="card h-40 max-w-2xl animate-pulse"></div>
+      <div class="card h-40 animate-pulse"></div>
     </div>
   </section>
 
   <section class="space-y-4">
     <h2 class="h-label">TLS certificates</h2>
     <div hx-get="/partials/system/certs" hx-trigger="load" hx-swap="innerHTML">
-      <div class="card h-32 max-w-2xl animate-pulse"></div>
+      <div class="card h-32 animate-pulse"></div>
     </div>
   </section>
 
   <section class="space-y-4">
     <h2 class="h-label">Docker storage</h2>
     <div hx-get="/partials/system/storage" hx-trigger="load" hx-swap="innerHTML">
-      <div class="grid max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div class="card h-20 animate-pulse"></div>
         <div class="card h-20 animate-pulse"></div>
         <div class="card h-20 animate-pulse"></div>
@@ -94,7 +94,7 @@
   <section class="space-y-4">
     <h2 class="h-label">Volumes</h2>
     <div hx-get="/partials/system/volumes" hx-trigger="load" hx-swap="innerHTML">
-      <div class="card h-24 max-w-2xl animate-pulse"></div>
+      <div class="card h-24 animate-pulse"></div>
     </div>
   </section>
   {{end}}
@@ -102,7 +102,7 @@
   <section class="space-y-4">
     <h2 class="h-label">Application storage</h2>
     <div hx-get="/partials/system/app-sizes" hx-trigger="load" hx-swap="innerHTML">
-      <div class="card h-24 max-w-2xl animate-pulse"></div>
+      <div class="card h-24 animate-pulse"></div>
     </div>
   </section>
 
@@ -111,7 +111,7 @@
   {{if .IsAdmin}}
   <section class="space-y-4">
     <h2 class="h-label">Backups</h2>
-    <div class="card max-w-2xl space-y-4 p-4">
+    <div class="card space-y-4 p-4">
       <div class="flex items-center justify-between">
         <p class="muted text-sm">Archive of the database and every app's data directory.</p>
         <form method="post" action="/system/backup">
@@ -203,7 +203,7 @@
     </div>
 
     {{if .Backups}}
-    <div class="table-wrap max-w-2xl">
+    <div class="table-wrap">
       <table>
         <thead><tr><th>Archive</th><th>Date</th><th>Size</th><th></th></tr></thead>
         <tbody>
@@ -233,7 +233,7 @@
       </table>
     </div>
     {{else}}
-    <div class="empty max-w-2xl p-6 text-center">
+    <div class="empty p-6 text-center">
       <p class="muted text-sm">No backups yet.</p>
     </div>
     {{end}}

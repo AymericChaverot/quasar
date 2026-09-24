@@ -1,7 +1,7 @@
 {{define "content"}}
 {{with .Deploy}}
 {{$station := .Station}}
-<div class="mb-8 max-w-3xl">
+<div class="mb-8">
   <a href="/stations" class="back-link">Stations</a>
   <div class="mt-2 flex items-start gap-3">
     {{/* The same plate the station's own block draws, one size up: the mark
@@ -27,7 +27,7 @@
 </div>
 
 {{if .Error}}
-<div class="alert-err mb-6 max-w-3xl">
+<div class="alert-err mb-6">
   <p class="font-medium">This could not be installed:</p>
   <p class="mono mt-1 text-xs">{{.Error}}</p>
 </div>
@@ -46,7 +46,7 @@
      Every answer travels as a hidden field, so both buttons below carry the
      whole of what was filled in: one forward into the deploy, one back to the
      form with nothing lost. */}}
-<form method="post" action="/stations/{{$station.ID}}/deploy" class="max-w-3xl space-y-8">
+<form method="post" action="/stations/{{$station.ID}}/deploy" class="space-y-8">
   {{$d := .}}
   {{range .Params}}<input type="hidden" name="p.{{.Name}}" value="{{$d.Value .}}">{{end}}
   {{with .Advanced}}
@@ -126,7 +126,7 @@
 </form>
 
 {{else}}
-<form method="post" action="/stations/{{$station.ID}}/deploy/review" class="max-w-3xl space-y-8">
+<form method="post" action="/stations/{{$station.ID}}/deploy/review" class="space-y-8">
 
   {{/* The station's own questions, and nothing else. Everything the
        new-application form would have asked has already been answered by the

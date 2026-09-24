@@ -11,7 +11,7 @@
 </div>
 
 {{if .Errors}}
-<div class="alert-err mb-6 max-w-3xl">
+<div class="alert-err mb-6">
   <p class="font-medium">This entry was not saved:</p>
   <ul class="mt-2 list-disc space-y-1 pl-5">
     {{range .Errors}}<li class="mono text-xs">{{.}}</li>{{end}}
@@ -20,7 +20,7 @@
 {{end}}
 
 <form method="post" action="/settings/catalogs/{{$cat.ID}}/entries/{{if $new}}new{{else}}{{$e.ID}}{{end}}"
-      class="max-w-3xl space-y-8">
+      class="space-y-8">
 
   <section class="space-y-4">
     <h2 class="h-label">The card</h2>

@@ -32,7 +32,7 @@
 </div>
 
 {{if .Reason}}
-<div class="card max-w-2xl p-4">
+<div class="card p-4">
   <p class="text-sm">{{.Reason}}</p>
   <p class="help">
     Storage is read through the host filesystem, which the dashboard mounts read-only.
@@ -45,7 +45,7 @@
      names they are known by, so they are what the list offers. */}}
 <h2 class="h-label mb-3">Mounted storage</h2>
 {{if .Target.Mounts}}
-<div class="table-wrap max-w-3xl">
+<div class="table-wrap">
   <table>
     <thead>
       <tr><th>Container path</th><th>Source</th><th class="w-24">Access</th></tr>
@@ -66,7 +66,7 @@
   </table>
 </div>
 {{else}}
-<div class="empty max-w-2xl p-6 text-center">
+<div class="empty p-6 text-center">
   <p class="muted text-sm">This application has no storage mounted.</p>
   <p class="help">Nothing it writes survives a redeploy — which is what you want for a stateless app, and a problem for anything else.</p>
 </div>
@@ -83,7 +83,7 @@
      A file overrides it, since a file opens in the dialog. */}}
 <div id="file-browser" hx-target="#file-browser" hx-swap="innerHTML">
   {{if .Error}}
-  <div class="card muted max-w-2xl p-4 text-sm">{{.Error}}</div>
+  <div class="card muted p-4 text-sm">{{.Error}}</div>
   {{else}}
   {{template "file_list" .Listing}}
   {{end}}

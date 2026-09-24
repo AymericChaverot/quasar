@@ -11,9 +11,9 @@
      a different page rather than a fuller one. */}}
 {{define "system_volumes"}}
 {{if .Error}}
-<div class="card muted max-w-2xl p-4 text-sm">Volume list unavailable.</div>
+<div class="card muted p-4 text-sm">Volume list unavailable.</div>
 {{else if .Volumes}}
-<div class="table-wrap max-w-2xl">
+<div class="table-wrap">
   <table>
     <thead>
       <tr>
@@ -56,13 +56,13 @@
     </tbody>
   </table>
 </div>
-<p class="help max-w-2xl">
+<p class="help max-w-3xl">
   {{len .Volumes}} {{plural (len .Volumes) "volume" "volumes"}}, {{humanSize .Total}} in total.
   An orphaned volume is one no container references any more — the cleanup above offers to delete
   those, and nothing else on this server will bring their contents back.
 </p>
 {{else}}
-<div class="empty max-w-2xl p-6 text-center">
+<div class="empty p-6 text-center">
   <p class="muted text-sm">No volumes on this server.</p>
   <p class="help">Applications deployed from the catalogue keep their data in bind mounts under the apps directory instead, which the application's own page lists.</p>
 </div>
