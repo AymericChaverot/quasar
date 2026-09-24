@@ -89,3 +89,26 @@ func TestAppDetailLinksRepository(t *testing.T) {
 		t.Error("page shows the token saved in the clone URL")
 	}
 }
+
+// The list reaches the repository from the type column, and only for an app
+// that has one.
+func TestAppsTableLinksRepository(t *testing.T) {
+	s := testServer(t)
+	rows := []AppView{{
+		App:    &db.App{ID: "beef0001", Name: "API", Subdomain: "api", DeployType: "git", GitURL: "git@github.com:acme/api.git"},
+		Domain: "example.com",
+	}, {
+		App:    &db.App{ID: "abcd1234", Name: "Blog", Subdomain: "blog", DeployType: "image", ImageRef: "nginx"},
+		Domain: "example.com",
+	}}
+	var buf bytes.Buffer
+	if err := s.pages["dashboard"].ExecuteTemplate(&buf, "apps_table", rows); err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(buf.String(), `aria-label="Repository `); n != 1 {
+		t.Errorf("list links %d repositories, want 1", n)
+	}
+	if !strings.Contains(buf.String(), `href="https://github.com/acme/api"`) {
+		t.Error("list does not link the git app's repository")
+	}
+}

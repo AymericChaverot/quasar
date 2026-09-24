@@ -75,6 +75,13 @@
              repository is on disk, since there is nothing to report yet. */}}
         <td class="muted">
           <span class="inline-flex flex-wrap items-center gap-1.5">
+            {{/* The forge's mark in front of "git", as the way to the
+                 repository: the row already says where the app goes, and this
+                 is where it comes from. */}}
+            {{with .Repo}}
+            <a href="{{.URL}}" target="_blank" rel="noopener" title="{{.Label}}"
+               aria-label="Repository {{.Label}}" class="link inline-flex items-center">{{template "forge_icon" .Forge}}</a>
+            {{end}}
             {{.DeployType}}
             {{if eq .Build.Mode "compose"}}
             <span class="chip" title="Built as a stack from {{.Build.ComposeFile}}">compose</span>
