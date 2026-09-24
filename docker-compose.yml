@@ -58,8 +58,30 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    # The Let's Encrypt email is filled into traefik.yml here, as Traefik
+    # starts, from ACME_EMAIL in .env. Traefik takes its static configuration
+    # from a file, flags or the environment but never a mix, so the file
+    # cannot read the variable itself.
+    #
+    # setup.sh used to write the email into traefik.yml instead, which left
+    # that tracked file modified on every install: the day it changes in the
+    # repository, `git pull` stops on every server. Now the file stays as
+    # shipped — and until the installs that predate this have restored theirs
+    # (the System page tells them how), traefik.yml must not be edited in the
+    # repository. On those installs the email is already in the file, and
+    # filling it in again changes nothing.
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        email=$$(printf '%s' "$$ACME_EMAIL" | sed 's/[&|\\]/\\&/g')
+        sed "s|{{ACME_EMAIL}}|$$email|g" /etc/traefik/traefik.tmpl.yml > /etc/traefik/traefik.yml
+        exec traefik
     volumes:
-      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.tmpl.yml:ro
       - ./traefik/acme.json:/acme.json
     networks:
       - traefik-net

@@ -85,8 +85,10 @@ ADMIN_PASSWORD=${ADMIN_PASSWORD}
 EOF
 chmod 600 .env
 
-info "Configuring Traefik (Let's Encrypt: ${ACME_EMAIL})..."
-sed -i "s/{{ACME_EMAIL}}/${ACME_EMAIL}/" traefik/traefik.yml
+# traefik/traefik.yml is left as shipped: Traefik fills the email in from
+# ACME_EMAIL above each time it starts (see docker-compose.yml). Writing it
+# into the tracked file would stop every later `git pull` on this server.
+info "Let's Encrypt certificates will be requested for ${ACME_EMAIL}."
 
 info "Creating Docker network traefik-net..."
 docker network inspect traefik-net >/dev/null 2>&1 || docker network create traefik-net
