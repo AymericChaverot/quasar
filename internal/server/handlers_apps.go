@@ -17,6 +17,7 @@ import (
 	"quasar/internal/catalog"
 	"quasar/internal/db"
 	"quasar/internal/docker"
+	"quasar/internal/event"
 )
 
 // Applications: listing them, creating one, and the actions that move an
@@ -560,6 +561,7 @@ func (s *Server) handleAppDelete(w http.ResponseWriter, r *http.Request) {
 	// Recorded after the fact and deliberately outside DeleteAppLogs' reach:
 	// deleting an app must not also erase the record of who deleted it.
 	s.audit(r, "app.delete", a.Name, a.Subdomain+" ("+a.DeployType+")")
+	event.Info("app", a.Name, "deleted", "by "+s.actor(r))
 	w.Header().Set("HX-Redirect", "/")
 	w.WriteHeader(http.StatusOK)
 }

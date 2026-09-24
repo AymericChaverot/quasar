@@ -18,16 +18,22 @@ func (s *Server) isAdmin(r *http.Request) bool {
 	return role == auth.RoleAdmin
 }
 
+// actor is who the request acts as: the signed-in user, or the system for a
+// request with no session behind it.
+func (s *Server) actor(r *http.Request) string {
+	_, username, _, _ := s.currentUser(r)
+	if username == "" {
+		return db.ActorSystem
+	}
+	return username
+}
+
 // audit records an action against the logged-in user. Called after the action
 // succeeds, so the trail says what happened rather than what was attempted —
 // failed attempts that matter (a rejected login) are recorded explicitly.
 func (s *Server) audit(r *http.Request, action, target, detail string) {
-	_, username, _, _ := s.currentUser(r)
-	if username == "" {
-		username = db.ActorSystem
-	}
 	if err := db.RecordAudit(s.db, db.AuditEntry{
-		Actor:  username,
+		Actor:  s.actor(r),
 		Action: action,
 		Target: target,
 		Detail: detail,

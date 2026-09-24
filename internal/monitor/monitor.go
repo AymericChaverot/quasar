@@ -121,8 +121,10 @@ func watchStates(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring
 			}
 			switch {
 			case state == "error":
+				event.Error("app", a.Name, "stopped unexpectedly", "was "+prev)
 				notify.Send(database, fmt.Sprintf("Quasar: %s (%s.*) is in ERROR state", a.Name, a.Subdomain))
 			case prev == "error" && state == "running":
+				event.Info("app", a.Name, "running again")
 				notify.Send(database, fmt.Sprintf("Quasar: %s (%s.*) recovered and is running again", a.Name, a.Subdomain))
 			}
 		}
@@ -169,9 +171,12 @@ func checkHealth(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring
 				ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 				err := dock.Restart(ctx, a)
 				cancel()
+				checks := fmt.Sprintf("failed %d health checks in a row", fails)
 				if err != nil {
+					event.Error("health", a.Name, checks, "could not be restarted", err.Error())
 					notify.Send(database, fmt.Sprintf("Quasar: %s failed %d health checks and could NOT be restarted: %v", a.Name, fails, err))
 				} else {
+					event.Warning("health", a.Name, checks, "restarted")
 					notify.Send(database, fmt.Sprintf("Quasar: %s failed %d health checks — container restarted automatically", a.Name, fails))
 				}
 			}
