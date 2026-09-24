@@ -1,7 +1,6 @@
 package config
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -16,20 +15,13 @@ func find(t *testing.T, all []Setting, name string) Setting {
 	return Setting{}
 }
 
-// A secret is reported as set and nothing else: none of its characters, not
-// even how many there are.
-func TestSettingsHideSecrets(t *testing.T) {
-	c := Config{AdminPassword: "correct horse battery staple"}
-	for _, s := range c.Settings() {
-		if strings.Contains(s.Value, "correct") || strings.Contains(s.Value, "28") {
-			t.Errorf("%s gives the secret away: %q", s.Name, s.Value)
+// The admin account is not listed: after the first start it is not what
+// anyone signs in with, and its password has no business in a log.
+func TestSettingsLeaveOutTheAdminAccount(t *testing.T) {
+	for _, s := range (Config{AdminUser: "admin", AdminPassword: "correct horse"}).Settings() {
+		if s.Name == "ADMIN_USER" || s.Name == "ADMIN_PASSWORD" {
+			t.Errorf("%s is reported", s.Name)
 		}
-	}
-	if got := find(t, c.Settings(), "ADMIN_PASSWORD").Value; got != "•••••••• (set)" {
-		t.Errorf("ADMIN_PASSWORD = %q", got)
-	}
-	if got := find(t, Config{}.Settings(), "ADMIN_PASSWORD").Value; got != "" {
-		t.Errorf("an unset password is reported as %q", got)
 	}
 }
 
@@ -38,12 +30,12 @@ func TestSettingsHideSecrets(t *testing.T) {
 func TestSettingsSources(t *testing.T) {
 	t.Setenv("ACME_EMAIL", "ops@example.com")
 	t.Setenv("DOCKER_HOST", "")
-	t.Setenv("ADMIN_USER", "admin")
-	fromFile["ADMIN_USER"] = true
-	t.Cleanup(func() { delete(fromFile, "ADMIN_USER") })
+	t.Setenv("APPS_DIR", "/opt/quasar/apps")
+	fromFile["APPS_DIR"] = true
+	t.Cleanup(func() { delete(fromFile, "APPS_DIR") })
 
 	all := Config{}.Settings()
-	for name, want := range map[string]string{"ACME_EMAIL": "environment", "ADMIN_USER": ".env", "DOCKER_HOST": "default"} {
+	for name, want := range map[string]string{"ACME_EMAIL": "environment", "APPS_DIR": ".env", "DOCKER_HOST": "default"} {
 		if got := find(t, all, name).Source; got != want {
 			t.Errorf("%s comes from %q, want %q", name, got, want)
 		}
