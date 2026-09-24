@@ -307,7 +307,7 @@ func (s *Server) handleCertDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	path, writable := s.acmePath()
 	if !writable {
-		redirectSystem(w, r, "Traefik's certificate store is mounted read-only: this server's system stack predates certificate deletion. On the server, run: cd /opt/quasar && git pull --ff-only && docker compose up -d")
+		redirectSystem(w, r, "Traefik's certificate store is mounted read-only: this server's system stack predates certificate deletion. On the server, run: "+stackUpdateCommand)
 		return
 	}
 	if err := certs.Delete(path, target.Domain); err != nil {
@@ -339,9 +339,16 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 	if s.isAdmin(r) {
 		data["Drift"] = s.stackDrift(r)
 		data["Version"] = version.Version
+		data["Command"] = stackUpdateCommand
 	}
 	s.render(w, r, "system", data)
 }
+
+// stackUpdateCommand brings a server's system stack up to the compose file of
+// the version it runs. Run as root, because setup.sh installs as root and
+// /opt/quasar belongs to it; through sh -c, so sudo covers all three steps and
+// not only the first.
+const stackUpdateCommand = "sudo sh -c 'cd /opt/quasar && git pull --ff-only && docker compose up -d'"
 
 // stackDrift is what the running system stack lacks compared with the compose
 // file this version shipped with; see docker.StackDrift.

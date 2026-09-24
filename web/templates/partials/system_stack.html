@@ -21,10 +21,17 @@
     {{range .Drift}}<li>{{.}}</li>{{end}}
   </ul>
   <p>Until then, what depends on it does not work — deleting an unused certificate, for one. On the server, run:</p>
-  <code class="mono block break-all rounded p-2 text-xs" style="background: var(--surface-2); color: var(--text)">cd /opt/quasar &amp;&amp; git pull --ff-only &amp;&amp; docker compose up -d</code>
+  <code class="mono block break-all rounded p-2 text-xs" style="background: var(--surface-2); color: var(--text)">{{.Command}}</code>
   <p class="text-xs">
     Traefik, the socket proxy and the dashboard are recreated: sites are unreachable for a few
     seconds, and this page comes back on its own. Applications' containers are not touched.
+  </p>
+  <p class="text-xs">
+    If git refuses because <span class="mono">docker-compose.yml</span> was edited on the server,
+    <span class="mono">sudo git -C /opt/quasar diff</span> shows what was changed. Carry over what
+    is still needed, then <span class="mono">sudo git -C /opt/quasar checkout -- docker-compose.yml</span>
+    and run the command again. Leave <span class="mono">traefik/traefik.yml</span> as it is: it holds
+    the email Let's Encrypt knows this server by.
   </p>
 </section>
 {{end}}

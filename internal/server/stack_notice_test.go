@@ -10,7 +10,7 @@ func renderStackNotice(t *testing.T, drift []string) string {
 	t.Helper()
 	s := testServer(t)
 	var buf bytes.Buffer
-	data := map[string]any{"Drift": drift, "Version": "v1.2.3"}
+	data := map[string]any{"Drift": drift, "Version": "v1.2.3", "Command": stackUpdateCommand}
 	if err := s.pages["system"].ExecuteTemplate(&buf, "system_stack", data); err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +23,10 @@ func TestStackNoticeSaysWhatToRun(t *testing.T) {
 	for _, want := range []string{
 		"older than v1.2.3",
 		"does not mount /opt/quasar/traefik",
-		"cd /opt/quasar &amp;&amp; git pull --ff-only &amp;&amp; docker compose up -d",
+		// As root: setup.sh installs as root, and /opt/quasar belongs to it.
+		"sudo sh -c &#39;cd /opt/quasar &amp;&amp; git pull --ff-only &amp;&amp; docker compose up -d&#39;",
+		// A hand-edited compose file stops the pull; the notice says what then.
+		"sudo git -C /opt/quasar diff",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the notice does not say %q", want)
