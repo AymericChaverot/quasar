@@ -5,3 +5,6 @@ apps
 traefik/acme.json
 *.md
 setup.sh
+docs
+notes
+.dev
