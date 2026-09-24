@@ -2,9 +2,10 @@
 {{if eq . "running"}}
 <span class="badge badge-ok"><span class="dot"></span>Running</span>
 {{else if eq . "deploying"}}
-{{/* The one state that is not a verdict but an activity, so it is the one that
-     moves: the dot pulses and the word itself is swept by .shimmer. */}}
-<span class="badge badge-warn"><span class="dot animate-pulse"></span><span class="shimmer">Deploying</span></span>
+{{/* The one state that is not a verdict but an activity, so its dot pulses.
+     The word is not swept: wherever a deploy is shown in progress, the phase
+     line beside it already is, and one sweep per action is enough. */}}
+<span class="badge badge-warn"><span class="dot animate-pulse"></span>Deploying</span>
 {{else if eq . "error"}}
 <span class="badge badge-err"><span class="dot"></span>Error</span>
 {{else if eq . "stopped"}}
