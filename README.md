@@ -369,7 +369,7 @@ few seconds; applications are untouched.
   in the audit log. Time and memory are bounded from outside the process being
   bounded, so a runaway station is a failed panel rather than a dead dashboard.
 
-  See [`docs/stations.md`](docs/stations.md) for the format in full, and
+  See [`notes/stations.md`](notes/stations.md) for the format in full, and
   [`stations/`](stations/) for ready-made ones: a Minecraft server, a Postgres
   server and a Gitea forge, each complete enough to run, beside three written
   to be read — one of every component, one of every permission, and one that

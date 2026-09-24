@@ -47,7 +47,7 @@ func TestTheDocumentedStationIsAccepted(t *testing.T) {
 // specification.
 func workedExample(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join("..", "..", "docs", "stations.md")
+	path := filepath.Join("..", "..", "notes", "stations.md")
 	spec, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("reading %s: %v", path, err)

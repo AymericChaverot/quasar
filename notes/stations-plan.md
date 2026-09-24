@@ -60,7 +60,7 @@ problems the way catalogues already do. No storage, no server, no runtime.
 Files: `internal/station/{station,parse,permissions,validate}.go` + tests.
 
 Tests: a valid document round-trips; every rejection names its field; **the
-worked example in `docs/stations.md` is extracted and parsed** — the catalogue
+worked example in `notes/stations.md` is extracted and parsed** — the catalogue
 holds its documented example to the same standard for the same reason, and
 documentation that would be refused on paste is worth less than none.
 

@@ -11,7 +11,7 @@ explorer, backups, resource limits and TLS as anything else on the dashboard,
 with the station's tabs on top. Remove the station and a perfectly normal
 application is left running.
 
-The format is in [`docs/stations.md`](../docs/stations.md).
+The format is in [`notes/stations.md`](../notes/stations.md).
 
 ## Using one
 
