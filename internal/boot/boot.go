@@ -9,18 +9,16 @@
 package boot
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"strings"
 	"time"
+
+	"quasar/internal/event"
 )
 
 const (
 	reset = "\x1b[0m"
-	ok    = "\x1b[38;2;52;211;153m"  // --ok
-	warn  = "\x1b[38;2;251;191;36m"  // --warn
-	fail  = "\x1b[38;2;248;113;113m" // --err
 	label = "\x1b[38;2;232;233;236m" // --text
 	muted = "\x1b[38;2;150;152;160m" // --text-muted
 	// faint is for what a line only qualifies — where a setting came from.
@@ -28,8 +26,9 @@ const (
 )
 
 const (
-	// labelWidth lines the details up in a column.
-	labelWidth = 12
+	// labelWidth lines the details up in a column, the same one the events
+	// logged afterwards use.
+	labelWidth = event.AreaWidth
 	// settingWidth lines setting values up in a column of their own.
 	settingWidth = 16
 )
@@ -48,23 +47,23 @@ func Start() *Sequence {
 }
 
 // OK says a step came up, and what it found.
-func (s *Sequence) OK(name string, details ...string) { s.line("✓", ok, name, details) }
+func (s *Sequence) OK(name string, details ...string) { s.line(event.OK, name, details) }
 
 // Warn says a step came up short of what it should, but the dashboard goes on
 // without it: Docker unreachable, a migration that did not run.
-func (s *Sequence) Warn(name string, details ...string) { s.line("!", warn, name, details) }
+func (s *Sequence) Warn(name string, details ...string) { s.line(event.Warn, name, details) }
 
 // Fatal says a step failed in a way the dashboard cannot start past, and
 // stops it.
 func (s *Sequence) Fatal(name string, err error) {
-	s.line("✗", fail, name, []string{err.Error()})
+	s.line(event.Fail, name, []string{err.Error()})
 	os.Exit(1)
 }
 
 // Ready closes the sequence, with how long it took.
 func (s *Sequence) Ready(details ...string) {
 	took := time.Since(s.started).Round(time.Millisecond)
-	s.line("✓", ok, "ready", append(details, "started in "+took.String()))
+	s.line(event.OK, "ready", append(details, "started in "+took.String()))
 	s.write("\n")
 }
 
@@ -88,20 +87,14 @@ func (s *Sequence) Setting(name, value, note string) {
 	s.write(indent + muted + name + reset + pad + label + value + faint + note + reset + "\n")
 }
 
-func (s *Sequence) line(mark, colour, name string, details []string) {
+func (s *Sequence) line(level event.Level, name string, details []string) {
 	var kept []string
 	for _, d := range details {
 		if d != "" {
 			kept = append(kept, d)
 		}
 	}
-	detail := strings.Join(kept, " · ")
-	pad := strings.Repeat(" ", max(1, labelWidth-len(name)))
-	if !s.colour {
-		s.write(fmt.Sprintf("  %s %s%s%s\n", mark, name, pad, detail))
-		return
-	}
-	s.write("  " + colour + mark + reset + " " + label + name + reset + pad + muted + detail + reset + "\n")
+	s.write(event.Format(level, name, strings.Join(kept, " · "), s.colour))
 }
 
 // write puts a line out. A start-up log that cannot be written has nowhere

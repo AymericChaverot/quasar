@@ -14,6 +14,7 @@ import (
 
 	"quasar/internal/db"
 	"quasar/internal/docker"
+	"quasar/internal/event"
 	"quasar/internal/notify"
 	"quasar/internal/secrets"
 	"quasar/internal/vps"
@@ -90,7 +91,7 @@ func sampleAppSizes(database *sql.DB, dock *docker.Client, keyring *secrets.Keyr
 				continue
 			}
 			if err := db.RecordAppSize(database, a.ID, dock.AppDirSize(a.ID)); err != nil {
-				log.Printf("recording the size of %s: %v", a.Name, err)
+				log.Printf("monitor: recording the size of %s: %v", a.Name, err)
 			}
 		}
 		time.Sleep(sizeInterval)
@@ -245,7 +246,7 @@ func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyri
 				log.Printf("monitor: trimming the audit log: %v", err)
 			}
 			if freed := db.Reclaim(database); freed > 0 {
-				log.Printf("reclaimed %d MB of database space", freed>>20)
+				event.Info("database", fmt.Sprintf("reclaimed %d MB of space", freed>>20))
 			}
 			lastPrune = time.Now()
 		}

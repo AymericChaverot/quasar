@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"quasar/internal/db"
+	"quasar/internal/event"
 	"quasar/internal/notify"
 	"quasar/internal/offsite"
 	"quasar/internal/secrets"
@@ -218,7 +219,7 @@ func StartScheduler(database *sql.DB, k *secrets.Keyring, appsDir, dir string, d
 				log.Printf("scheduled backup: %v", err)
 				notify.Send(database, "Quasar: scheduled backup FAILED: "+err.Error())
 			} else {
-				log.Printf("scheduled backup created: %s", name)
+				event.Info("backup", "scheduled", name)
 			}
 		}
 	}()

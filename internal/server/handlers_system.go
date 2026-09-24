@@ -171,7 +171,7 @@ func (s *Server) appSizes() []AppSize {
 			// application's own history, and it is what stops the monitor
 			// walking the same tree again within the hour.
 			if err := db.RecordAppSize(s.db, id, bytes); err != nil {
-				log.Printf("recording the first size of %s: %v", id, err)
+				log.Printf("app sizes: recording the first size of %s: %v", id, err)
 			}
 		}(i, a.ID)
 	}

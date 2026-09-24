@@ -6,12 +6,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+
+	"quasar/internal/event"
 )
 
 const (
@@ -164,7 +165,9 @@ func EnsureAdmin(db *sql.DB, username, password string) error {
 		username, string(hash), RoleAdmin); err != nil {
 		return err
 	}
-	log.Printf("created initial admin user %q — you can now remove ADMIN_PASSWORD from .env", username)
+	// setup.sh looks for "created initial admin user" to know it can take the
+	// password back out of .env.
+	event.Info("admin", fmt.Sprintf("created initial admin user %q", username), "ADMIN_PASSWORD can now be removed from .env")
 	return nil
 }
 
