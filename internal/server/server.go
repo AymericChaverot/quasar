@@ -135,7 +135,7 @@ var templateFuncs = template.FuncMap{
 	},
 	"hasPrefix": strings.HasPrefix,
 	// redactURL keeps a token pasted into a clone URL out of the page.
-	"redactURL": docker.RedactURL,
+	"redactURL":  docker.RedactURL,
 	"logPalette": db.LogColorPalette,
 	// The event a station's panel is re-fetched by. Kept as a function so the
 	// name the template listens for and the name the action's response sends

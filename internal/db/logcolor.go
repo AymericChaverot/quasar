@@ -61,25 +61,8 @@ func farthestHue(hues []float64) float64 {
 // order they were created, so an existing install comes out the same as if
 // each had been coloured on the day it was added.
 func AssignLogColors(db *sql.DB) error {
-	rows, err := db.Query("SELECT id, log_color FROM apps ORDER BY created_at, rowid")
+	ids, taken, err := appsByLogColor(db)
 	if err != nil {
-		return err
-	}
-	var ids, taken []string
-	for rows.Next() {
-		var id, color string
-		if err := rows.Scan(&id, &color); err != nil {
-			rows.Close()
-			return err
-		}
-		if color == "" {
-			ids = append(ids, id)
-		} else {
-			taken = append(taken, color)
-		}
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
 		return err
 	}
 	for _, id := range ids {
@@ -90,6 +73,29 @@ func AssignLogColors(db *sql.DB) error {
 		taken = append(taken, color)
 	}
 	return nil
+}
+
+// appsByLogColor splits the applications, oldest first, into those with no
+// colour yet and the colours the others already have. The rows are read to
+// the end before anything is written: the pool is a single connection.
+func appsByLogColor(db *sql.DB) (uncolored, taken []string, err error) {
+	rows, err := db.Query("SELECT id, log_color FROM apps ORDER BY created_at, rowid")
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, color string
+		if err := rows.Scan(&id, &color); err != nil {
+			return nil, nil, err
+		}
+		if color == "" {
+			uncolored = append(uncolored, id)
+		} else {
+			taken = append(taken, color)
+		}
+	}
+	return uncolored, taken, rows.Err()
 }
 
 // takenLogColors is every colour already given to an application.
