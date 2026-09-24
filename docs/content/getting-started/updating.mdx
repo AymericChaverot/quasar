@@ -20,6 +20,34 @@ You can also press **Check for updates** to check right away.
 The updater replaces the dashboard image only. It never changes `/opt/quasar/docker-compose.yml`, so edits you made to that file are kept.
 :::
 
+## Updating the system stack
+
+The dashboard's mounts and permissions, the socket proxy and Traefik come from `/opt/quasar/docker-compose.yml`, which the updater doesn't touch. When a release needs a newer version of that file, **System** says so at the top of the page and lists what is missing. Until then, the features that depend on it don't work — deleting an unused certificate, for example.
+
+To update it, run on the server:
+
+```bash
+sudo sh -c 'cd /opt/quasar && git pull --ff-only && docker compose up -d'
+```
+
+Traefik, the socket proxy and the dashboard are recreated: sites are unreachable for a few seconds. Applications' containers are not touched.
+
+If git refuses because you edited `docker-compose.yml` on the server:
+
+1. `sudo git -C /opt/quasar diff` shows what you changed.
+2. Note what you still need, then `sudo git -C /opt/quasar checkout -- docker-compose.yml`.
+3. Run the command again, and apply your changes back.
+
+### The Let's Encrypt email
+
+Traefik reads the Let's Encrypt email from `ACME_EMAIL` in `/opt/quasar/.env` each time it starts. Servers installed before v0.4.9 had it written into `traefik/traefik.yml` instead, which stops `git pull` the day that file changes. **System** tells those servers to restore it:
+
+```bash
+sudo git -C /opt/quasar checkout -- traefik/traefik.yml
+```
+
+Nothing restarts, and Traefik keeps the same email.
+
 ## Updating Traefik
 
 **System → Environment** shows the Traefik version in use. When the current Quasar release was tested with a newer one, an update button appears.
