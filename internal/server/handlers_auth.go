@@ -6,6 +6,7 @@ import (
 
 	"quasar/internal/auth"
 	"quasar/internal/db"
+	"quasar/internal/event"
 )
 
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
@@ -20,6 +21,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		// them against one account is the only warning of a password attack.
 		// The submitted name is recorded as the target, never as the actor.
 		s.auditAs(r, db.ActorSystem, "login.failed", username, "")
+		s.loginFailures.record(clientIP(r), "sign-in", username)
 		s.render(w, r, "login", map[string]any{
 			"Title": "Sign in", "HideNav": true,
 			"Error": "Invalid username or password.",
@@ -32,6 +34,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.auditAs(r, username, "login", "", "")
+	event.Info("login", username+" signed in", "from "+clientIP(r))
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -54,6 +57,7 @@ func (s *Server) handle2FAVerify(w http.ResponseWriter, r *http.Request) {
 	if err := auth.Confirm2FA(s.db, cookie.Value, r.FormValue("code")); err != nil {
 		_, username, _, _ := s.currentUser(r)
 		s.auditAs(r, db.ActorSystem, "2fa.failed", username, "")
+		s.loginFailures.record(clientIP(r), "2FA code", username)
 		s.render(w, r, "twofa", map[string]any{
 			"Title": "Two-factor authentication", "HideNav": true,
 			"Error": "Invalid code, try again.",
@@ -61,6 +65,7 @@ func (s *Server) handle2FAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "login", "", "second factor confirmed")
+	event.Info("login", s.actor(r)+" signed in", "with 2FA", "from "+clientIP(r))
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 

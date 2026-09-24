@@ -49,6 +49,10 @@ type Server struct {
 	// password on the public login page.
 	edgeAttempts *edgeThrottle
 
+	// loginFailures sums up the failed sign-ins from each address in the
+	// event log, instead of a line per guess.
+	loginFailures *loginFailures
+
 	// update is the self-update in flight, if any: the pull runs detached from
 	// the request that asked for it, and this is where the page waiting on it
 	// reads how far it has got.
@@ -78,7 +82,8 @@ func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secr
 		mux:     http.NewServeMux(),
 		guards:  map[string]string{},
 
-		edgeAttempts: newEdgeThrottle(),
+		edgeAttempts:  newEdgeThrottle(),
+		loginFailures: newLoginFailures(),
 	}
 	if err := s.parseTemplates(); err != nil {
 		return nil, err
