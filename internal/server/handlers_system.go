@@ -319,6 +319,7 @@ func (s *Server) handleCertDelete(w http.ResponseWriter, r *http.Request) {
 	// The file is only half of it: Traefik holds the certificates in memory and
 	// would write this one back on its next save.
 	s.audit(r, "cert.delete", target.Domain, "")
+	event.Info("certs", target.Domain, "certificate deleted, Traefik will issue a new one", "by "+s.actor(r))
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 60*time.Second)
 	defer cancel()
 	if err := s.dock.RestartTraefik(ctx); err != nil {
@@ -406,6 +407,7 @@ func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
 		detail = append(detail, "including orphaned volumes")
 	}
 	s.audit(r, "system.cleanup", docker.HumanSize(rep.Bytes), strings.Join(detail, ", "))
+	event.Info("cleanup", "reclaimed "+docker.HumanSize(rep.Bytes), strings.Join(detail, ", "), "by "+s.actor(r))
 	redirectSystem(w, r, rep.Summary())
 }
 

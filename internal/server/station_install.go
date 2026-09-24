@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"quasar/internal/db"
+	"quasar/internal/event"
 	"quasar/internal/station"
 )
 
@@ -60,6 +61,7 @@ func (s *Server) handleStationInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "station.import", st.ID, versionAndSource(st.Version, f.SourceURL))
+	event.Info("station", st.ID+" "+st.Version+" installed", "by "+s.actor(r))
 	s.audit(r, "station.permissions.grant", st.ID, grantDetail(st))
 	redirectStations(w, r, "Station “"+st.Name+"” installed.")
 }
@@ -256,6 +258,7 @@ func (s *Server) handleStationDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "station.delete", row.StationID, row.Name)
+	event.Info("station", row.StationID+" removed", "by "+s.actor(r))
 	// A station that is removed leaves a perfectly normal application behind:
 	// the same containers, storage, logs and backups, minus the tabs somebody
 	// wrote for it.

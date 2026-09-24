@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"quasar/internal/db"
+	"quasar/internal/event"
 )
 
 var client = &http.Client{Timeout: 10 * time.Second}
@@ -53,7 +54,7 @@ func Send(database *sql.DB, msg string) {
 	}
 
 	for _, f := range failures {
-		log.Printf("notify: %s", f)
+		event.Warning("notify", f)
 	}
 	// Only recorded when nothing got through: if one channel worked, the
 	// operator already knows, and the audit trail is not a place to accumulate

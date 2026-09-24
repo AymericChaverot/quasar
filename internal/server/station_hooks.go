@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"quasar/internal/db"
+	"quasar/internal/event"
 	"quasar/internal/station"
 	"quasar/internal/station/ui"
 )
@@ -207,7 +208,7 @@ func (s *Server) runHook(a *db.App, doc station.Station, action string) {
 // recordHookFailure puts it where somebody will find it: the audit log, which
 // is where every other privileged thing a station did already is.
 func (s *Server) recordHookFailure(a *db.App, doc station.Station, action, problem string) {
-	log.Printf("station %s on %s: hook %s failed: %s", doc.ID, a.Name, action, problem)
+	event.Error("station", doc.ID+" on "+a.Name, "hook "+action+" failed", problem)
 	if err := db.RecordAudit(s.db, db.AuditEntry{
 		Actor:  "station " + doc.ID,
 		Action: "station.hook.fail",
