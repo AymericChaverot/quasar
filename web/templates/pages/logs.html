@@ -1,7 +1,7 @@
 {{define "content"}}
 <h1 class="page-title mb-8">Logs</h1>
 
-<form class="mb-6 flex flex-wrap items-end gap-4" hx-get="/partials/logs" hx-target="#log-results" hx-swap="innerHTML">
+<form class="mb-6 flex flex-wrap items-end field-row gap-4" hx-get="/partials/logs" hx-target="#log-results" hx-swap="innerHTML">
   <div>
     <label for="app" class="label mb-1!">Application</label>
     <select id="app" name="app" class="input">

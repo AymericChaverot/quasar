@@ -45,7 +45,7 @@
   <div class="card muted p-4 text-sm">No tasks yet. Commands run inside the app's container via /bin/sh.</div>
   {{end}}
   {{if $isAdmin}}
-  <form hx-post="/apps/{{$appID}}/tasks" hx-target="#tasks-pane" hx-swap="innerHTML" class="flex flex-wrap items-end gap-3">
+  <form hx-post="/apps/{{$appID}}/tasks" hx-target="#tasks-pane" hx-swap="innerHTML" class="flex flex-wrap items-end field-row gap-3">
     <div class="min-w-64 flex-1">
       <label class="label">Command</label>
       <input name="command" type="text" placeholder="php artisan migrate" class="input mono" required>

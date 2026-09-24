@@ -118,7 +118,7 @@
           <button type="submit" class="btn-primary">{{template "icon_archive"}}Back up now</button>
         </form>
       </div>
-      <form method="post" action="/system/backup-settings" class="flex flex-wrap items-end gap-4 border-t pt-4" style="border-color: var(--border)">
+      <form method="post" action="/system/backup-settings" class="flex flex-wrap items-end field-row gap-4 border-t pt-4" style="border-color: var(--border)">
         <label class="flex items-center gap-2 text-sm">
           <input type="checkbox" name="backup_auto" {{if .AutoOn}}checked{{end}}>
           <span>Daily automatic backup</span>

@@ -367,6 +367,11 @@ input[type="checkbox"]:focus-visible {
   line-height: 1.25rem;
   color: var(--err);
 }
+
+/* A button at the end of a row of fields stands as tall as they do: the same
+   vertical padding as .input, so the two line up top and bottom, not just at
+   the bottom edge the row aligns them on. */
+.field-row > :is(.btn, .btn-primary, .btn-danger) { padding-top: 0.5rem; padding-bottom: 0.5rem; }
 .btn-danger:hover { background: color-mix(in srgb, var(--err) 12%, transparent); }
 
 /* The button that goes through with something that cannot be taken back, in

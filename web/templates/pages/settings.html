@@ -76,7 +76,7 @@
         <img src="{{.TOTPSetup.QR}}" alt="TOTP QR code" class="rounded" width="160" height="160">
         <div class="space-y-3">
           <p class="help">Manual entry secret: <span class="mono select-all">{{.TOTPSetup.Secret}}</span></p>
-          <form method="post" action="/settings/2fa/enable" class="flex items-end gap-3">
+          <form method="post" action="/settings/2fa/enable" class="flex items-end field-row gap-3">
             <div>
               <label for="totp_code" class="label">Code</label>
               <input id="totp_code" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required class="input mono w-32!">
@@ -87,7 +87,7 @@
       </div>
       {{else if .TOTPEnabled}}
       <p class="text-sm" style="color: var(--ok)">Two-factor authentication is enabled.</p>
-      <form method="post" action="/settings/2fa/disable" class="flex items-end gap-3">
+      <form method="post" action="/settings/2fa/disable" class="flex items-end field-row gap-3">
         <div>
           <label for="disable_pw" class="label">Confirm with your password</label>
           <input id="disable_pw" name="password" type="password" required class="input">
@@ -141,7 +141,7 @@
         </li>
         {{end}}
       </ul>
-      <form method="post" action="/settings/users" class="flex flex-wrap items-end gap-3 border-t pt-4" style="border-color: var(--border)">
+      <form method="post" action="/settings/users" class="flex flex-wrap items-end field-row gap-3 border-t pt-4" style="border-color: var(--border)">
         <div>
           <label for="new_username" class="label mb-1!">New user</label>
           <input id="new_username" name="username" type="text" placeholder="username" class="input mono w-40!" required>
@@ -198,7 +198,7 @@
         {{end}}
       </ul>
       {{end}}
-      <form method="post" action="/settings/tokens" class="flex flex-wrap items-end gap-3 border-t pt-4" style="border-color: var(--border)">
+      <form method="post" action="/settings/tokens" class="flex flex-wrap items-end field-row gap-3 border-t pt-4" style="border-color: var(--border)">
         <div>
           <label for="token_name" class="label mb-1!">New token</label>
           <input id="token_name" name="name" type="text" placeholder="github-actions" class="input mono w-48!" required>
@@ -409,7 +409,7 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
     <h2 class="h-label">Sign-in protection</h2>
     {{with .SignIn}}
     <form method="post" action="/settings/sign-in" class="card space-y-4 p-4">
-      <div class="flex flex-wrap items-end gap-3">
+      <div class="flex flex-wrap items-end field-row gap-3">
         <label class="text-sm">
           <span class="label mb-1!">Failed attempts allowed</span>
           <input name="attempts" type="number" min="{{.MinAttempts}}" max="{{.MaxAttempts}}" value="{{.Attempts}}" required class="input mono w-28!">
