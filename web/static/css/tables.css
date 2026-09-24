@@ -37,3 +37,17 @@
 .table-wrap tbody tr { border-top: var(--border-w) solid color-mix(in srgb, var(--border) 60%, transparent); }
 .table-wrap tbody tr:first-child { border-top: 0; }
 .table-wrap tbody tr:hover { background: var(--surface-2); }
+
+/* --- Pager ------------------------------------------------------------------
+   Under a paged table, at its right edge where the eye ends a row. */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+.pager [aria-disabled="true"] {
+  opacity: 0.4;
+  pointer-events: none;
+}
