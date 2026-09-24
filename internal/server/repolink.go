@@ -81,6 +81,37 @@ func repoLinkOf(raw string) (RepoLink, bool) {
 	}, true
 }
 
+// onBranch is the link opened on one branch instead of the forge's default,
+// which is what a deploy built and so what the reader wants to see. Each forge
+// spells the path differently; on one Quasar does not know, the repository's
+// own page is the only address that is certain, so the link is left there.
+func (l RepoLink) onBranch(branch string) RepoLink {
+	if branch == "" {
+		return l
+	}
+	var prefix string
+	switch l.Forge {
+	case forgeGitHub:
+		prefix = "/tree/"
+	case forgeGitLab:
+		prefix = "/-/tree/"
+	case forgeBitbucket:
+		prefix = "/src/"
+	case forgeGitea:
+		prefix = "/src/branch/"
+	default:
+		return l
+	}
+	// A branch may hold slashes, which the forges read as part of its name;
+	// only what sits between them is escaped.
+	segments := strings.Split(branch, "/")
+	for i, s := range segments {
+		segments[i] = url.PathEscape(s)
+	}
+	l.URL += prefix + strings.Join(segments, "/")
+	return l
+}
+
 // forgeOf names the forge a host runs. The public ones are known by name; a
 // self-hosted GitLab or Gitea is only recognised when its host says so, and
 // is otherwise linked under the plain mark rather than guessed at.

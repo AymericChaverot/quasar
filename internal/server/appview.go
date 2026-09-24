@@ -64,6 +64,7 @@ func (v AppView) Host() string { return appHost(v.App, v.Domain) }
 
 // Repo is where a git app's repository can be read, or nil for an app that
 // was not deployed from one — or from one with no page, like a local path.
+// The link opens on the branch the app is deployed from.
 func (v AppView) Repo() *RepoLink {
 	if v.DeployType != "git" {
 		return nil
@@ -72,6 +73,7 @@ func (v AppView) Repo() *RepoLink {
 	if !ok {
 		return nil
 	}
+	link = link.onBranch(v.GitBranch)
 	return &link
 }
 

@@ -79,7 +79,7 @@ func TestAppDetailLinksRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	html := buf.String()
-	if !strings.Contains(html, `href="https://gitlab.com/team/api"`) {
+	if !strings.Contains(html, `href="https://gitlab.com/team/api/-/tree/main"`) {
 		t.Error("page does not link the repository")
 	}
 	if !strings.Contains(html, "· main") {
@@ -110,5 +110,26 @@ func TestAppsTableLinksRepository(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), `href="https://github.com/acme/api"`) {
 		t.Error("list does not link the git app's repository")
+	}
+}
+
+func TestRepoLinkOnBranch(t *testing.T) {
+	cases := []struct {
+		raw, branch, want string
+	}{
+		{"https://github.com/acme/api", "main", "https://github.com/acme/api/tree/main"},
+		{"https://github.com/acme/api", "feature/login", "https://github.com/acme/api/tree/feature/login"},
+		{"https://github.com/acme/api", "fix#12", "https://github.com/acme/api/tree/fix%2312"},
+		{"https://gitlab.com/team/api", "dev", "https://gitlab.com/team/api/-/tree/dev"},
+		{"https://bitbucket.org/acme/site", "dev", "https://bitbucket.org/acme/site/src/dev"},
+		{"https://codeberg.org/me/tool", "dev", "https://codeberg.org/me/tool/src/branch/dev"},
+		{"https://git.example.com/me/tool", "dev", "https://git.example.com/me/tool"},
+		{"https://github.com/acme/api", "", "https://github.com/acme/api"},
+	}
+	for _, c := range cases {
+		link, _ := repoLinkOf(c.raw)
+		if got := link.onBranch(c.branch).URL; got != c.want {
+			t.Errorf("%s on %q = %q, want %q", c.raw, c.branch, got, c.want)
+		}
 	}
 }
