@@ -23,10 +23,16 @@ const (
 	fail  = "\x1b[38;2;248;113;113m" // --err
 	label = "\x1b[38;2;232;233;236m" // --text
 	muted = "\x1b[38;2;150;152;160m" // --text-muted
+	// faint is for what a line only qualifies — where a setting came from.
+	faint = "\x1b[38;2;105;108;119m" // --text-faint
 )
 
-// labelWidth lines the details up in a column.
-const labelWidth = 12
+const (
+	// labelWidth lines the details up in a column.
+	labelWidth = 12
+	// settingWidth lines setting values up in a column of their own.
+	settingWidth = 16
+)
 
 // Sequence is one start-up, written to out as it goes.
 type Sequence struct {
@@ -59,30 +65,8 @@ func (s *Sequence) Fatal(name string, err error) {
 func (s *Sequence) Ready(details ...string) {
 	took := time.Since(s.started).Round(time.Millisecond)
 	s.line("✓", ok, "ready", append(details, "started in "+took.String()))
-	fmt.Fprintln(s.out)
+	s.write("\n")
 }
-
-func (s *Sequence) line(mark, colour, name string, details []string) {
-	var kept []string
-	for _, d := range details {
-		if d != "" {
-			kept = append(kept, d)
-		}
-	}
-	detail := strings.Join(kept, " · ")
-	pad := strings.Repeat(" ", max(1, labelWidth-len(name)))
-	if !s.colour {
-		fmt.Fprintf(s.out, "  %s %s%s%s\n", mark, name, pad, detail)
-		return
-	}
-	fmt.Fprintf(s.out, "  %s%s%s %s%s%s%s%s%s\n", colour, mark, reset, label, name, reset, pad, muted+detail, reset)
-}
-
-// faint is for what a line only qualifies — where a setting came from.
-const faint = "\x1b[38;2;105;108;119m" // --text-faint
-
-// settingWidth lines setting values up in a column of their own.
-const settingWidth = 16
 
 // Setting writes one loaded setting under the step before it: its name, its
 // value, and a note on where it came from. An empty value is written as such,
@@ -98,8 +82,30 @@ func (s *Sequence) Setting(name, value, note string) {
 		note = "  " + note
 	}
 	if !s.colour {
-		fmt.Fprintf(s.out, "%s%s%s%s%s\n", indent, name, pad, value, note)
+		s.write(indent + name + pad + value + note + "\n")
 		return
 	}
-	fmt.Fprintf(s.out, "%s%s%s%s%s%s%s%s%s\n", indent, muted, name, reset, pad, label, value, faint+note, reset)
+	s.write(indent + muted + name + reset + pad + label + value + faint + note + reset + "\n")
+}
+
+func (s *Sequence) line(mark, colour, name string, details []string) {
+	var kept []string
+	for _, d := range details {
+		if d != "" {
+			kept = append(kept, d)
+		}
+	}
+	detail := strings.Join(kept, " · ")
+	pad := strings.Repeat(" ", max(1, labelWidth-len(name)))
+	if !s.colour {
+		s.write(fmt.Sprintf("  %s %s%s%s\n", mark, name, pad, detail))
+		return
+	}
+	s.write("  " + colour + mark + reset + " " + label + name + reset + pad + muted + detail + reset + "\n")
+}
+
+// write puts a line out. A start-up log that cannot be written has nowhere
+// to report that either, and the dashboard starts regardless.
+func (s *Sequence) write(line string) {
+	_, _ = io.WriteString(s.out, line)
 }
