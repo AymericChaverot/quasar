@@ -1,8 +1,12 @@
 package server
 
 import (
+	"fmt"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"quasar/internal/db"
 )
 
 // The audit trail is only useful if the recorded origin cannot be chosen by the
@@ -65,5 +69,38 @@ func TestClientIP(t *testing.T) {
 				t.Errorf("clientIP() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// The Audit page shows auditPageSize entries, newest first, and the page after
+// it the ones before those — with the search carried from one to the next.
+func TestAuditPages(t *testing.T) {
+	s, database := catalogTestServer(t)
+	for i := 1; i <= auditPageSize+3; i++ {
+		db.RecordAudit(database, db.AuditEntry{Actor: "admin", Action: "app.deploy", Target: fmt.Sprintf("app-%03d", i)})
+	}
+	db.RecordAudit(database, db.AuditEntry{Actor: "admin", Action: "login"})
+
+	get := func(target string) string {
+		w := httptest.NewRecorder()
+		s.handleAuditPage(w, httptest.NewRequest("GET", target, nil))
+		return w.Body.String()
+	}
+
+	first := get("/audit?q=deploy")
+	if !strings.Contains(first, fmt.Sprintf("app-%03d", auditPageSize+3)) || strings.Contains(first, "app-003") {
+		t.Error("the first page does not hold the newest entries, and only those")
+	}
+	if !strings.Contains(first, `href="/audit?page=2&amp;q=deploy"`) {
+		t.Error("the first page does not link to the second, search included")
+	}
+
+	second := get("/audit?q=deploy&page=2")
+	if !strings.Contains(second, "app-003") || strings.Contains(second, "app-004") {
+		t.Error("the second page does not hold exactly the three oldest entries")
+	}
+
+	if empty := get("/audit?page=9"); !strings.Contains(empty, "No older entries.") {
+		t.Error("a page past the end does not say there is nothing older")
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"strconv"
+	"net/url"
 	"strings"
 
 	"quasar/internal/auth"
@@ -70,20 +70,25 @@ func clientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
+// auditPageSize is how many entries the Audit page shows at a time.
+const auditPageSize = 50
+
 func (s *Server) handleAuditPage(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
-	limit := 200
-	if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 2000 {
-		limit = n
-	}
-	entries, err := db.ListAudit(s.db, query, limit)
+	page := pageOf(r)
+	// One entry past the page, which says whether there is an older one.
+	entries, err := db.ListAuditPage(s.db, query, auditPageSize+1, (page-1)*auditPageSize)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	hasOlder := len(entries) > auditPageSize
+	entries = entries[:min(len(entries), auditPageSize)]
 	s.render(w, r, "audit", map[string]any{
 		"Title":   "Audit",
 		"Entries": entries,
 		"Query":   query,
+		"Page":    page,
+		"Pager":   pagerFor("/audit", url.Values{"q": {query}}, page, hasOlder),
 	})
 }
