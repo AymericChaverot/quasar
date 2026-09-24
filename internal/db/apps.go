@@ -193,6 +193,23 @@ func UpdateAppGitBuild(db *sql.DB, id, mode string) error {
 	return err
 }
 
+// UpdateAppSource moves a git app to another repository or branch. It takes
+// effect on the next deploy, which sees the checkout no longer matches and
+// clones the new source.
+//
+// Moving to another repository also forgets the build mode and the routed
+// service chosen for the old one: they were choices between what that
+// repository offered, and the new one may offer neither. A branch of the same
+// repository keeps them.
+func UpdateAppSource(db *sql.DB, id, gitURL, branch string) error {
+	_, err := db.Exec(`UPDATE apps SET
+		git_build = CASE WHEN git_url = ? THEN git_build ELSE '' END,
+		compose_service = CASE WHEN git_url = ? THEN compose_service ELSE '' END,
+		git_url = ?, git_branch = ?
+		WHERE id = ?`, gitURL, gitURL, gitURL, branch, id)
+	return err
+}
+
 // UpdateAppComposeService stores which service of a stack the domain is routed
 // to, empty to go back to the one Quasar works out for itself. It takes effect
 // on the next deploy, which is when the compose file is rewritten.
