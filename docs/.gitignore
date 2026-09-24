@@ -1,0 +1,6 @@
+# The documentation is its own Astro project: its install, build and the
+# config the ZenithDocs CLI regenerates on every run stay out of the repository.
+node_modules/
+dist/
+.astro/
+.zenith/

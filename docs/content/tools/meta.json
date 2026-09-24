@@ -1,0 +1,14 @@
+{
+  "title": "Tools",
+  "description": "Helpers for using Quasar",
+  "icon": "wand",
+  "root": true,
+  "pages": [
+    "overview",
+    "setup-assistant",
+    "compose-routing",
+    "catalogue-builder",
+    "station-builder",
+    "station-checker"
+  ]
+}

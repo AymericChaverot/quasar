@@ -1,0 +1,13 @@
+---
+title: Compose routing
+description: See which service Quasar would give the domain to, and which ports survive.
+full: true
+---
+
+import ComposeRouting from '../../components/ComposeRouting.astro';
+
+Paste a `docker-compose.yml` and this applies Quasar's own rules to it: which service gets the domain and why, what the generated file would change, and which published ports stay reachable without Traefik.
+
+It reads the file, it does not run it. Nothing is sent anywhere. The rules themselves are explained on [compose stacks](/applications/compose/).
+
+<ComposeRouting />

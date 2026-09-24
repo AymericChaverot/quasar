@@ -1,0 +1,14 @@
+{
+  "pages": [
+    "index",
+    "concepts",
+    "getting-started",
+    "applications",
+    "catalogue",
+    "stations",
+    "server",
+    "troubleshooting",
+    "reference",
+    "tools"
+  ]
+}

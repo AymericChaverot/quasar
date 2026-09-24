@@ -1,0 +1,35 @@
+---
+title: Notifications
+description: Get alerted by webhook, push notification or email.
+---
+
+Set up notifications in **Settings → Integrations**. Every configured channel receives every message.
+
+## Channels
+
+| Channel | Setting |
+| --- | --- |
+| **Webhook** | A Discord or Slack-compatible webhook URL. |
+| **ntfy** | An [ntfy](https://ntfy.sh) topic URL, such as `https://ntfy.sh/my-quasar-topic`. Push notifications on a phone, without a chat service. |
+| **Email** | An SMTP server: host, port, sender, recipients (comma-separated), and optionally a username and password. |
+
+Leave a channel empty to turn it off.
+
+After any change, click **Send test**. A broken webhook looks exactly like a quiet server.
+
+## What triggers a notification
+
+- A deployment fails.
+- An application goes into an error state, and when it recovers.
+- A [health check](/applications/resources-health/#health-checks) fails 3 times and the app is restarted.
+- A scheduled [task](/applications/automation/#tasks) fails.
+- A backup fails, or its offsite upload fails.
+- The server crosses a usage threshold (see below), and when it goes back under.
+- A new Quasar version is available.
+- A [station](/stations/permissions/#notify) sends a message.
+
+## Usage alerts
+
+Under **Server usage alerts**, set thresholds for **disk**, **memory** and **CPU**, in percent.
+
+You are notified once when a threshold is crossed, and once when usage goes back under it. Set a threshold to `0` to turn it off.

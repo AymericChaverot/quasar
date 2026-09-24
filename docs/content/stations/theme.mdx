@@ -1,0 +1,44 @@
+---
+title: Theme
+description: Give a station's tabs their own look.
+---
+
+A station can adjust how its own tab looks, with `ui.theme`. Every field is optional.
+
+```yaml
+ui:
+  theme:
+    accent: "#3ba55d"
+    tint: 0.06
+    chart: ["#8b5cf6", "#22d3ee", "#f59e0b"]
+    radius: 12px
+    density: normal
+```
+
+## Fields
+
+| Field | Values | Description |
+| --- | --- | --- |
+| `accent` | Hex colour | Accent colour. Hover and text colours are derived from it, with enough contrast. |
+| `tint` | `0` to `0.2` | How much of the accent is mixed into surfaces. |
+| `chart` | Up to 8 hex colours | Colours of chart series, in order. |
+| `font_display` | `{family, src}` | A typeface for headings. `src` must be a `data:font/woff2;base64,…` URI, 512 KB max. |
+| `font_body` | `inherit`, `display`, `mono` | Typeface for body text. |
+| `scale` | `0.9` to `1.25` | Text size. |
+| `case` | `normal`, `upper` | Letter case of headings. |
+| `tracking` | `normal`, `wide` | Letter spacing. |
+| `radius` | Length, e.g. `12px` | Corner radius. |
+| `radius_badge` | Length | Corner radius of badges. |
+| `border_w` | Length | Border width. |
+| `density` | `compact`, `normal`, `roomy` | Spacing. |
+| `icon` | `data:image/…;base64,…` URI | Station icon, 256 KB max. |
+| `banner` | `data:image/…;base64,…` URI | Banner image, 256 KB max. |
+
+## Limits
+
+These rules keep every station readable on every server:
+
+- **Background, surface, text and border colours can't be changed.** They come from the theme the operator chose, so a station stays readable in dark and light themes.
+- **Status colours (ok, warning, error) and log colours can't be changed.** Red always means the same thing.
+- **The theme only applies inside the Station tab.** Navigation and the rest of the dashboard keep the operator's theme.
+- **Fonts and images must be embedded** as `data:` URIs. Quasar never fetches them from the internet.

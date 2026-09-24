@@ -1,0 +1,10 @@
+{
+  "title": "Catalogue",
+  "icon": "grid",
+  "collapsible": false,
+  "pages": [
+    "using",
+    "custom",
+    "format"
+  ]
+}

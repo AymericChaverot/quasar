@@ -1,0 +1,509 @@
+---
+/**
+ * What Quasar would do with a compose file: which service gets the domain, and
+ * which ports survive.
+ *
+ * The rules are the ones in Quasar's own internal/docker/compose_adapt.go,
+ * applied here to a file parsed in the browser — the same order, the same
+ * refusal to guess when nothing singles a service out. Nothing is deployed and
+ * nothing leaves the page; the answer is a reading of the file, not a run.
+ */
+---
+
+<div class="cr" data-compose-routing>
+  <noscript>
+    <p class="cr-note">This tool needs JavaScript. <a href="../../applications/compose/">Compose stacks</a> explains the same rules in prose.</p>
+  </noscript>
+  <div data-app></div>
+</div>
+
+<script>
+  import { parse } from 'yaml';
+
+  type Dict = Record<string, any>;
+
+  const root = document.querySelector<HTMLElement>('[data-compose-routing]')!;
+  const app = root.querySelector<HTMLElement>('[data-app]')!;
+  const STORAGE_KEY = 'quasar-compose-routing';
+
+  const EXAMPLE = `services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "8443:443"
+    depends_on:
+      - api
+  api:
+    image: ghcr.io/me/api:latest
+    expose:
+      - "3000"
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:17
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: \${DB_PASSWORD}
+`;
+
+  const state = { file: '', port: 80 };
+  try {
+    Object.assign(state, JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'));
+  } catch {
+    /* private window: the page still works, it just forgets */
+  }
+
+  const esc = (s: any) =>
+    String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+  /** The host ports Traefik holds for the whole server. */
+  const EDGE = [80, 443];
+
+  interface Port {
+    text: string;
+    host?: number;
+    hostHi?: number;
+    container?: number;
+  }
+
+  /**
+   * One `ports` entry, in either spelling compose accepts: "8080:80",
+   * "127.0.0.1:8080:80", "8000-8010:80", "3000", or the long mapping form.
+   */
+  function readPort(entry: any): Port {
+    if (entry && typeof entry === 'object') {
+      const host = Number(entry.published ?? entry.host_port);
+      return {
+        text: `${entry.published ?? ''}${entry.published ? ':' : ''}${entry.target ?? ''}`,
+        host: Number.isFinite(host) ? host : undefined,
+        hostHi: Number.isFinite(host) ? host : undefined,
+        container: Number(entry.target) || undefined,
+      };
+    }
+    const text = String(entry ?? '').trim();
+    const parts = text.split('/')[0].split(':');
+    const container = Number(parts[parts.length - 1]);
+    const out: Port = { text, container: Number.isFinite(container) ? container : undefined };
+    if (parts.length >= 2) {
+      const [lo, hi] = parts[parts.length - 2].split('-');
+      const host = Number(lo);
+      if (Number.isFinite(host)) {
+        out.host = host;
+        out.hostHi = Number(hi) || host;
+      }
+    }
+    return out;
+  }
+
+  const bindsEdge = (ports: Port[]) =>
+    ports.some((p) => p.host !== undefined && EDGE.some((e) => e >= p.host! && e <= (p.hostHi ?? p.host!)));
+
+  /** Every port the service says it listens on: its ports entries, then its expose entries. */
+  function containerPorts(svc: Dict, ports: Port[]): number[] {
+    const out = ports.map((p) => p.container).filter((n): n is number => !!n);
+    for (const e of [].concat(svc?.expose ?? [])) {
+      const n = Number(String(e).split('/')[0]);
+      if (Number.isFinite(n)) out.push(n);
+    }
+    return out;
+  }
+
+  /** The services this one waits for, as a list or as a mapping of conditions. */
+  function dependsOn(svc: Dict): string[] {
+    const dep = svc?.depends_on;
+    if (!dep) return [];
+    return Array.isArray(dep) ? dep.map(String) : Object.keys(dep);
+  }
+
+  /** Any label starting with `traefik.`, written as a mapping or as `key=value` strings. */
+  function hasTraefikLabels(svc: Dict): boolean {
+    const labels = svc?.labels;
+    if (!labels) return false;
+    const keys = Array.isArray(labels) ? labels.map(String) : Object.keys(labels);
+    return keys.some((k) => k.startsWith('traefik.'));
+  }
+
+  interface Service {
+    name: string;
+    raw: Dict;
+    ports: Port[];
+    container: number[];
+    waits: string[];
+    labels: boolean;
+  }
+
+  /**
+   * The service the stack is built around: the one that waits for others and
+   * that nothing waits for. Trusted only when every service takes part in the
+   * graph — a service standing outside it is one the graph does not describe.
+   */
+  function frontOfGraph(services: Service[]): Service | null {
+    const awaited = new Set(services.flatMap((s) => s.waits));
+    let front: Service | null = null;
+    for (const s of services) {
+      const waits = s.waits.length > 0;
+      if (!waits && !awaited.has(s.name)) return null;
+      if (waits && !awaited.has(s.name)) {
+        if (front) return null;
+        front = s;
+      }
+    }
+    return front;
+  }
+
+  const single = (services: Service[], match: (s: Service) => boolean) => {
+    const found = services.filter(match);
+    return found.length === 1 ? found[0] : null;
+  };
+
+  function decide(services: Service[], appPort: number) {
+    const edge = single(services, (s) => bindsEdge(s.ports));
+    if (edge) return { service: edge, why: `it publishes host port ${EDGE.join(' or ')}, which is what a browser talks to on a laptop` };
+
+    const front = frontOfGraph(services);
+    if (front) return { service: front, why: 'the rest of the stack lines up behind it: it waits for other services, and nothing waits for it' };
+
+    const declares = single(services, (s) => s.container.includes(appPort));
+    if (declares) return { service: declares, why: `it is the only service offering port ${appPort}, the one configured for the application` };
+
+    if (services.length === 1) return { service: services[0], why: 'it is the only service in the file' };
+
+    return { service: null, why: '' };
+  }
+
+  function render() {
+    const text = state.file.trim();
+    let body = '';
+
+    if (!text) {
+      body = '<p class="cr-note">Paste a compose file above, or load the example.</p>';
+    } else {
+      let doc: any;
+      try {
+        doc = parse(text);
+      } catch (error) {
+        body = `<div class="cr-card cr-bad"><p class="cr-head">This file is not valid YAML</p><p class="cr-mono cr-small">${esc((error as Error).message)}</p></div>`;
+      }
+
+      if (doc !== undefined) {
+        const raw = doc?.services;
+        if (!raw || typeof raw !== 'object') {
+          body = '<div class="cr-card cr-bad"><p class="cr-head">This file declares no services</p><p class="cr-small">Quasar reads the <span class="cr-mono">services</span> mapping; there is none here.</p></div>';
+        } else {
+          const services: Service[] = Object.entries(raw as Dict).map(([name, svc]: [string, any]) => {
+            const ports = [].concat(svc?.ports ?? []).map(readPort);
+            return {
+              name,
+              raw: svc ?? {},
+              ports,
+              container: containerPorts(svc, ports),
+              waits: dependsOn(svc),
+              labels: hasTraefikLabels(svc),
+            };
+          });
+
+          const authored = services.filter((s) => s.labels);
+          const { service, why } = decide(services, Number(state.port) || 80);
+          const dropped = services.flatMap((s) => s.ports.filter((p) => bindsEdge([p])).map((p) => ({ s: s.name, p })));
+          const kept = services.flatMap((s) => s.ports.filter((p) => p.host !== undefined && !bindsEdge([p])).map((p) => ({ s: s.name, p })));
+
+          const verdict = authored.length
+            ? `<div class="cr-card cr-warn">
+                 <p class="cr-head">Quasar would change nothing</p>
+                 <p class="cr-small">${authored.map((s) => `<span class="cr-mono">${esc(s.name)}</span>`).join(', ')} already carries <span class="cr-mono">traefik.*</span> labels, so the file is run exactly as written. Password protection, rate limits and address lists set in Quasar are never put in front of it. Remove those labels to have Quasar route the stack.</p>
+               </div>`
+            : service
+              ? `<div class="cr-card cr-good">
+                   <p class="cr-head">The domain goes to <span class="cr-mono">${esc(service.name)}</span></p>
+                   <p class="cr-small">Chosen because ${esc(why)}.</p>
+                 </div>`
+              : `<div class="cr-card cr-bad">
+                   <p class="cr-head">Quasar would route nothing</p>
+                   <p class="cr-small">Several services could be the one serving the site and nothing singles one out, so Quasar changes nothing rather than hand the domain to a database. Pick the service yourself in the application's <strong>Routing</strong> section, then redeploy.</p>
+                 </div>`;
+
+          const rows = services
+            .map((s) => {
+              const marks = [
+                service && s.name === service.name && !authored.length ? '<span class="cr-badge cr-badge-ok">routed</span>' : '',
+                bindsEdge(s.ports) ? '<span class="cr-badge">binds 80/443</span>' : '',
+                s.labels ? '<span class="cr-badge cr-badge-warn">own labels</span>' : '',
+                s.waits.length ? `<span class="cr-badge">waits for ${esc(s.waits.join(', '))}</span>` : '',
+              ]
+                .filter(Boolean)
+                .join(' ');
+              const ports = s.ports.length
+                ? s.ports.map((p) => `<span class="cr-mono">${esc(p.text)}</span>`).join(', ')
+                : '<span class="cr-faint">publishes nothing</span>';
+              return `<tr>
+                <td class="cr-mono">${esc(s.name)}</td>
+                <td>${ports}</td>
+                <td>${marks || '<span class="cr-faint">—</span>'}</td>
+              </tr>`;
+            })
+            .join('');
+
+          const changes = authored.length
+            ? ''
+            : `<div class="cr-card">
+                 <p class="cr-head">What the generated file would change</p>
+                 <ul class="cr-list">
+                   ${service ? `<li>Traefik router labels added to <span class="cr-mono">${esc(service.name)}</span>, and that service attached to the <span class="cr-mono">traefik-net</span> network.</li>` : '<li>Nothing: no service was singled out.</li>'}
+                   ${dropped.length ? `<li>Host bindings dropped, because Traefik holds those ports for every application: ${dropped.map((d) => `<span class="cr-mono">${esc(d.s)} ${esc(d.p.text)}</span>`).join(', ')}.</li>` : '<li>No host binding on 80 or 443 to drop.</li>'}
+                   <li>Written to <span class="cr-mono">docker-compose.quasar.yml</span> beside the original, on every deployment. Your file is never modified.</li>
+                 </ul>
+               </div>`;
+
+          const warning = kept.length
+            ? `<div class="cr-card cr-warn">
+                 <p class="cr-head">Reachable without Traefik</p>
+                 <p class="cr-small">These stay published straight onto the host, so they are answered by the container directly — no TLS, no password protection, no rate limit, no address list: ${kept.map((k) => `<span class="cr-mono">${esc(k.s)} ${esc(k.p.text)}</span>`).join(', ')}. Quasar leaves them alone, since a stack may publish a database or a game server on purpose.</p>
+               </div>`
+            : '';
+
+          body = `${verdict}
+            <div class="cr-table-wrap">
+              <table class="cr-table">
+                <thead><tr><th>Service</th><th>Published ports</th><th></th></tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+            ${changes}
+            ${warning}`;
+        }
+      }
+    }
+
+    app.innerHTML = `
+      <div class="cr-form">
+        <label class="cr-field">
+          <span class="cr-label">docker-compose.yml</span>
+          <textarea class="cr-input cr-mono" rows="14" spellcheck="false" data-bind="file" placeholder="services:&#10;  web:&#10;    image: nginx:alpine">${esc(state.file)}</textarea>
+        </label>
+        <div class="cr-row">
+          <label class="cr-inline">
+            <span class="cr-label">Application port</span>
+            <input class="cr-input cr-mono cr-narrow" type="number" data-bind="port" value="${esc(state.port)}">
+          </label>
+          <button type="button" class="cr-btn" data-act="example">Load an example</button>
+          <button type="button" class="cr-btn" data-act="clear">Clear</button>
+          <span class="cr-help">Only read when no service publishes 80 or 443 and the stack's shape settles nothing.</span>
+        </div>
+      </div>
+      <div class="cr-out">${body}</div>`;
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      /* nothing to do */
+    }
+  }
+
+  app.addEventListener('input', (event) => {
+    const el = event.target as HTMLInputElement;
+    const key = el.dataset.bind as 'file' | 'port';
+    if (!key) return;
+    (state as any)[key] = el.value;
+    const at = el.selectionStart;
+    render();
+    const again = app.querySelector<HTMLInputElement>(`[data-bind="${key}"]`);
+    again?.focus();
+    if (again && at != null) again.setSelectionRange(at, at);
+  });
+
+  app.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-act]');
+    if (!button) return;
+    if (button.dataset.act === 'example') state.file = EXAMPLE;
+    if (button.dataset.act === 'clear') state.file = '';
+    render();
+  });
+
+  render();
+</script>
+
+<style is:global>
+  .cr {
+    margin-block: 1.5rem;
+    display: grid;
+    gap: 1rem;
+  }
+
+  .cr-form {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: var(--radius-main, 0.75rem);
+    background: var(--background-2);
+  }
+
+  .cr-field {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .cr-row,
+  .cr-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .cr-label {
+    color: var(--text-2);
+    font-size: 0.8125rem;
+  }
+
+  .cr-input {
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: 0.375rem;
+    background: var(--background);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.875rem;
+    resize: vertical;
+  }
+
+  .cr-narrow {
+    width: 6rem;
+  }
+
+  .cr-input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+
+  .cr-mono {
+    font-family: var(--mono-family, monospace);
+    font-size: 0.8125rem;
+  }
+
+  .cr-note,
+  .cr-help,
+  .cr-small {
+    color: var(--text-2);
+    font-size: 0.8125rem;
+  }
+
+  .cr-faint {
+    color: var(--text-2);
+  }
+
+  .cr-btn {
+    padding: 0.3125rem 0.75rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: 999px;
+    background: var(--background);
+    color: var(--text);
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+
+  .cr-btn:hover {
+    border-color: var(--accent);
+  }
+
+  .cr-out {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .cr-card {
+    display: grid;
+    gap: 0.375rem;
+    padding: 0.75rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--background-2);
+  }
+
+  .cr-good {
+    border-left-color: var(--accent);
+  }
+
+  .cr-warn {
+    border-left-color: oklch(75% 0.15 70);
+  }
+
+  .cr-bad {
+    border-left-color: oklch(62% 0.2 25);
+  }
+
+  .cr-head {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 500;
+  }
+
+  .cr-card p,
+  .cr-list {
+    margin: 0;
+  }
+
+  .cr-list {
+    display: grid;
+    gap: 0.25rem;
+    padding-left: 1.1rem;
+    font-size: 0.8125rem;
+    color: var(--text-2);
+  }
+
+  .cr-table-wrap {
+    overflow-x: auto;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: 0.5rem;
+  }
+
+  .cr-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+  }
+
+  .cr-table th {
+    padding: 0.5rem 0.625rem;
+    border-bottom: var(--border-width, 1px) solid var(--border);
+    background: var(--background-2);
+    color: var(--text-2);
+    font-weight: 500;
+    text-align: left;
+  }
+
+  .cr-table td {
+    padding: 0.5rem 0.625rem;
+    border-bottom: var(--border-width, 1px) solid var(--border);
+    vertical-align: top;
+  }
+
+  .cr-table tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .cr-badge {
+    display: inline-block;
+    padding: 0.0625rem 0.5rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: 999px;
+    color: var(--text-2);
+    font-size: 0.6875rem;
+    white-space: nowrap;
+  }
+
+  .cr-badge-ok {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .cr-badge-warn {
+    border-color: oklch(75% 0.15 70);
+    color: oklch(75% 0.15 70);
+  }
+</style>

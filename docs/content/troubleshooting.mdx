@@ -1,0 +1,116 @@
+---
+title: Troubleshooting
+description: The usual failures, what causes them, and where to look.
+---
+
+## An application has no HTTPS
+
+The **TLS** section of the application's page lists every domain it serves and says what is wrong with each one. The usual causes:
+
+| Cause | Fix |
+| --- | --- |
+| The domain doesn't resolve | Add the DNS record, and wait for it to propagate. |
+| It resolves somewhere else | Often a record left by the registrar next to yours. Delete theirs. |
+| The application is on the root domain | The wildcard record doesn't cover it. Add an `A` record for the domain itself. |
+| Port 80 is closed | Let's Encrypt validates over HTTP on port 80. Open it, along with 443. |
+
+**Fixing the cause is not enough.** Traefik asks Let's Encrypt once, when the route first appears, and doesn't retry on its own. Once the cause is fixed, click **Request the certificate again** on the application's page.
+
+:::warning
+That button restarts Traefik: every site on the server is unavailable for a few seconds.
+:::
+
+## The domain doesn't reach the application
+
+Look at the bottom of the **TLS** section, under *What Traefik sees*: the router rule, the certificate resolver, the port and the networks the container is on. If the container isn't on the Traefik network, or no rule names the host, Traefik has nothing to route.
+
+For a **compose stack**, the **Routing** section says which service was chosen. Two cases stop the routing:
+
+- **No service chosen**: several services could serve the site and nothing singles one out. Pick one, then redeploy.
+- **Labels written by the author**: the file already has `traefik.*` labels, so Quasar changes nothing. Remove them to let Quasar route the stack.
+
+See [compose stacks](/applications/compose/#which-service-gets-the-domain).
+
+## The application is reachable, but a protection doesn't apply
+
+Password protection, rate limits and address lists are Traefik middlewares, so they only cover what Traefik routes: the subdomain and the custom domains.
+
+A stack that publishes a host port of its own is answered by the container directly, without passing through Traefik. The **Routing** section lists those ports.
+
+## A setting was saved but nothing changed
+
+Most settings are written into the container when it is created, so they take effect **at the next deployment**. Click **Redeploy**.
+
+The panels say so themselves: they show *redeploy owed* until it is done. Three exceptions, which apply immediately:
+
+- **tightening or raising** a resource limit (removing one waits for a deploy),
+- changing the **password** of an already active protection,
+- anything on the dashboard itself, such as notifications.
+
+## A deployment fails
+
+Read the live output on the application's page: the clone, the build and Docker all write to it, and it stays afterwards. Only admins see it, because build output can print secrets.
+
+Common causes:
+
+| Symptom | Cause |
+| --- | --- |
+| The clone fails on a private repository | No token, or a token whose scope doesn't match. See [Git credentials](/server/credentials/#git-credentials). |
+| The image can't be pulled | Private registry not configured. See [image registries](/server/credentials/#image-registries). |
+| `a deploy is already in progress` | One deployment at a time per application. The webhook answers `429`, the API `409`. |
+| The container starts then stops | The application's own problem: read its logs in the **Logs** tab. |
+
+If a new version misbehaves, [roll back](/applications/logs-history/#rolling-back) from the deployment history.
+
+## Creating an application is refused over a port
+
+Two raw applications can't publish the same host port. Quasar refuses the second one and names the application already using it — otherwise the stack would start, fail to bind, and stop in a log nobody reads.
+
+Pick another port, or stop the other application.
+
+## Resource limits don't apply to a stack
+
+They are written onto a container Quasar creates, and a stack is described by its own compose file. Set `deploy.resources.limits` on the service instead.
+
+## The disk is filling up
+
+**System → Docker storage** shows what can be reclaimed, per category, before you delete anything. See [disk space](/server/disk/).
+
+Other things that grow:
+
+- **Backups**: kept according to the retention setting, on the same disk as everything else. Consider an [offsite copy](/server/backups/#offsite-copy).
+- **Logs and metrics**: kept 7 days, plus a cap of 50,000 lines per application.
+- **Application data**: the **Growth** chart on an application's page shows which one is growing.
+
+Set a **disk usage alert** in [notifications](/server/notifications/#usage-alerts): a full disk is the most common way a VPS goes down.
+
+## Files in a volume can't be edited
+
+Named volumes reach the dashboard through a read-only mount, so the page shows a *read-only* chip. To make them editable, uncomment the `/var/lib/docker/volumes` line in `/opt/quasar/docker-compose.yml`, then run `docker compose up -d` in `/opt/quasar`.
+
+Two things stay refused whatever you mount: a file over 256 KB, which can only be downloaded, and a mount the container itself declares read-only.
+
+## A backup won't restore on a new server
+
+Environment variables and compose files are encrypted with a key that is never in the archive. Restoring on another server needs that server's original `master.key`: click **Key…** before **Restore**.
+
+Download the key from **System → Backups** and keep it somewhere other than the server. See [the master key](/server/backups/#the-master-key).
+
+## A station panel shows an error
+
+| What you see | Meaning |
+| --- | --- |
+| A spinner that keeps retrying | The application isn't running, or the script returned `waiting`. It connects itself when the service comes up. |
+| A message naming a missing permission | The script called something the document didn't declare. Add it and re-fetch the station — the new permissions have to be accepted. |
+| `This panel has nothing to show` | The action returned the wrong shape for that component. See [interface](/stations/interface/#components). |
+| A timeout | A panel action gets 10 seconds, an action 60, a hook 120. Longer work belongs in a [long action](/stations/interface/#long-actions). |
+
+A station can't take the dashboard down: its script runs in a separate process that is killed if it goes over time or memory.
+
+## No update button appears
+
+Quasar checks GitHub every 30 minutes. Press **Check for updates** in **System → Software update** to check now. The check needs the server to reach `github.com`.
+
+## Still stuck
+
+Two places tell you what happened: the **audit log**, which records who did what and from where, and the application's **Logs** tab and its history. After that, open an issue on [GitHub](https://github.com/AymericChaverot/quasar/issues).

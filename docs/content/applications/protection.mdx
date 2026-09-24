@@ -1,0 +1,47 @@
+---
+title: Access protection
+description: Put a sign-in page in front of an app, limit request rates, and restrict addresses.
+sidebar:
+  label: Protection
+---
+
+These settings are in the **Settings** tab of an application. **Redeploy** after changing them, unless the panel says otherwise.
+
+:::warning[Only what Traefik routes is protected]
+They apply to the app's subdomain and custom domains. Ports a compose stack publishes directly on the host (a database, a game server) bypass Traefik and are not protected.
+:::
+
+## Password protection
+
+Shows a sign-in page before anything reaches the app. Useful for an app that isn't meant to be public and has no login of its own.
+
+1. Open **Settings → Password protection**.
+2. Enter a username and a password.
+3. Save, then redeploy.
+
+Good to know:
+
+- A visitor stays signed in for 7 days, on that hostname.
+- Clients that send HTTP Basic credentials themselves (scripts, probes) are let through directly.
+- The password is stored as a hash and never shown again. To change the username, enter the password again too.
+- Once protection is active, changing the password takes effect immediately, without a redeploy, and signs out existing visitors.
+
+Click **Disable** to remove protection, then redeploy.
+
+:::note
+Not available for a compose file that has its own Traefik labels: Quasar doesn't add anything to those.
+:::
+
+## Edge protection
+
+**Settings → Edge protection** has three independent options:
+
+| Option | Effect |
+| --- | --- |
+| **Rate limit** | Maximum requests per second per client. Bursts up to three times this value are allowed. `0` turns it off. |
+| **Allowed addresses** | Only these IP addresses or CIDR blocks can reach the app, for example `203.0.113.4, 10.0.0.0/8`. Empty allows everyone. |
+| **Security headers** | Adds HSTS (one year, subdomains included), no MIME sniffing, no framing, and a strict referrer policy. Leave it off if the app sets its own. |
+
+:::note
+The address list checks the address connecting to Traefik. Behind another proxy, such as Cloudflare, that is the proxy's address.
+:::

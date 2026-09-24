@@ -1,0 +1,41 @@
+---
+title: Webhooks, tasks and terminal
+description: Deploy on push, run commands on a schedule, and open a shell in a container.
+sidebar:
+  label: Webhooks & tasks
+---
+
+## Deploy on push
+
+Every application has a secret webhook URL, in **Settings → Deploy webhook**:
+
+```
+https://admin.your-domain.com/hooks/<app-id>/<secret>
+```
+
+A `POST` to this URL does the same as **Update**: it fetches the new version and deploys it.
+
+To deploy on every push, add this URL as a webhook in your GitHub or GitLab repository.
+
+:::warning
+Anyone with the URL can trigger a deployment. Keep it secret.
+:::
+
+For more control from a CI pipeline, use the [API](/reference/api/overview/).
+
+## Tasks
+
+A task is a command run inside the application's container, with `/bin/sh`. For example `php artisan migrate`.
+
+1. Open the **History** tab, then **Tasks**.
+2. Enter the command.
+3. Set **Every N minutes** to run it on a schedule, or leave `0` to run it by hand.
+4. Click **Add task**.
+
+Each task shows its last run, status and output. **Run now** runs it immediately.
+
+## Web terminal
+
+The **Terminal** button at the top of an application's page opens an interactive shell in its container, in the browser.
+
+Only admins can use it.

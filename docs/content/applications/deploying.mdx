@@ -1,0 +1,78 @@
+---
+title: Deploying an application
+description: The three ways to deploy, and what Redeploy and Update do.
+sidebar:
+  label: Deploying
+---
+
+Click **New application** on the dashboard. You can fill in the form by hand, or start from the [catalogue](/catalogue/using/).
+
+## Deployment modes
+
+<Tabs items={['Docker image', 'Git build', 'Docker Compose']}>
+  <Tab value="Docker image">
+    Runs one container from an image, for example `nginx:latest` or `ghcr.io/org/app:v1`.
+
+    Images from private registries work once the registry is added in [Settings → Image registries](/server/credentials/#image-registries).
+  </Tab>
+  <Tab value="Git build">
+    Clones a repository and builds it. The repository must have, at its root, either:
+
+    - a `docker-compose.yml`: the whole stack is started, see [compose stacks](/applications/compose/);
+    - or a `Dockerfile`: one image is built and run as a single container.
+
+    When it has both, the compose file is used. You can switch to the Dockerfile on the application's page.
+
+    Private repositories need a token in [Settings → Git credentials](/server/credentials/#git-credentials).
+  </Tab>
+  <Tab value="Docker Compose">
+    Paste a `docker-compose.yml`. Quasar adapts it to run behind Traefik, see [compose stacks](/applications/compose/).
+  </Tab>
+</Tabs>
+
+## The form
+
+| Field | What it does |
+| --- | --- |
+| **Name** | Display name. |
+| **Subdomain** | The app is served on `subdomain.your-domain.com`. Use `@` to serve it on the root domain. |
+| **Internal port** | The port the app listens on inside its container. Ignored for compose stacks. |
+| **Persistent data mount** | A path in the container, such as `/data`, kept on the host in `apps/<id>/data/`. See [storage](/applications/storage/). |
+| **Custom domains** | Other domains to serve the app on, comma-separated. See [domains](/applications/domains-tls/). |
+| **Resource limits** | Maximum CPU and memory. Ignored for compose stacks. See [resources](/applications/resources-health/). |
+| **Environment variables** | One `KEY=value` per line. See [environment](/applications/environment/). |
+
+Click **Create and deploy**. The deployment starts immediately.
+
+## Watching a deployment
+
+The application's page shows the deployment live: the output of the clone, the build and Docker, with a progress bar for each step (pull, build, start, health check).
+
+The output stays on the page after the deployment ends, so you can read why a build failed.
+
+:::note
+Only admins can see this output, because build logs sometimes print secrets.
+:::
+
+## Redeploy or Update
+
+The application page has two deploy buttons. They do different things:
+
+| Button | What it does | Use it to |
+| --- | --- | --- |
+| **Redeploy** | Recreates the containers from what is already on the server: same image, same commit. | Apply a configuration change (environment, domains, protection…). |
+| **Update** | Fetches the new version first, then deploys it. | Get a new version of the app. |
+
+What **Update** fetches depends on the mode:
+
+- **Docker image**: pulls the image again.
+- **Git build**: pulls the branch and rebuilds.
+- **Docker Compose**: pulls every image in the file again.
+
+If an update goes wrong, [roll back](/applications/logs-history/#rolling-back) from the deployment history.
+
+## Other actions
+
+The top of the application page also has **Start**, **Stop** and **Restart**.
+
+To delete an application: **Settings** tab → **Danger zone** → **Delete application**. This removes its containers and its data directory permanently.

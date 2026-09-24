@@ -1,0 +1,61 @@
+---
+title: Concepts
+description: The words Quasar uses, and what they mean.
+---
+
+Quasar has a small vocabulary. These are the words the rest of the documentation uses.
+
+## Application
+
+Anything Quasar runs for you: one container, or several. Every application has a name, a subdomain, an environment, storage, logs, a deployment history, and a page of its own in the dashboard.
+
+There are three ways to create one — from an image, from a Git repository, or from a compose file — but whatever the mode, the result is an application, with the same controls.
+
+See [deploying an application](/applications/deploying/).
+
+## Stack
+
+An application made of several containers, described by a `docker-compose.yml`: an app with its database and its cache, for example.
+
+Quasar routes the domain to **one** service of the stack, and adapts the file to run behind Traefik. The others keep working on the internal network.
+
+See [compose stacks](/applications/compose/).
+
+## Raw application
+
+An application that doesn't speak HTTP: a game server, a database. Traefik only routes HTTP, so these publish their own port and are reached at the **server's address and that port**, not at a subdomain.
+
+## Catalogue entry
+
+A ready-made description of a service: which image or compose file to run, on which port, with which environment. Picking one fills in the new-application form; you still review it before creating anything.
+
+Quasar ships about 60 entries, and you can [add your own](/catalogue/custom/).
+
+An entry is **data**: it says what to deploy, and nothing more.
+
+## Station
+
+A catalogue entry **plus a control panel**: tabs, tables, forms and buttons written for that service in particular, backed by a script.
+
+The application it deploys is an ordinary application. The station adds a tab at the top of its page, and removing the station leaves the application running.
+
+A station is a **program**, so it declares what it is allowed to reach on your server, and you accept that list before installing it.
+
+See [what a station is](/stations/overview/).
+
+| | Catalogue entry | Station |
+| --- | --- | --- |
+| Says what to deploy | yes | yes |
+| Adds a page of controls | no | yes |
+| Contains code | no | yes, a script |
+| Asks for permissions | no | yes, accepted at install |
+
+## The pieces on the server
+
+| Piece | Role |
+| --- | --- |
+| **Dashboard** | The Quasar binary: the web interface, deployments, monitoring, backups. |
+| **Traefik** | Routes each domain to its application, and gets the certificates. |
+| **Socket proxy** | Limits what the dashboard can ask Docker to do. |
+
+Everything lives in `/opt/quasar`. See [files on the server](/reference/server-layout/).

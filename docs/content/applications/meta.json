@@ -1,0 +1,16 @@
+{
+  "title": "Applications",
+  "icon": "box",
+  "collapsible": false,
+  "pages": [
+    "deploying",
+    "compose",
+    "domains-tls",
+    "environment",
+    "storage",
+    "resources-health",
+    "protection",
+    "logs-history",
+    "automation"
+  ]
+}

@@ -1,0 +1,43 @@
+---
+title: Environment variables
+description: Set an application's environment, and how it reaches compose stacks.
+sidebar:
+  label: Environment
+---
+
+## Editing variables
+
+On the application's page, open the **Environment** tab. Write one `KEY=value` per line, then click **Save**.
+
+**Redeploy** for the change to take effect.
+
+For a pasted compose stack, the same tab also holds the compose file.
+
+## Where they are stored
+
+- In the database, **encrypted** with the server's master key.
+- In `apps/<id>/.env` on the server, which containers read.
+
+Only admins can see this tab. API tokens can't read variables either.
+
+:::important
+The master key is not included in backups. Keep a copy, or backups can't be restored onto another server. See [backups](/server/backups/#the-master-key).
+:::
+
+## In compose stacks
+
+The `.env` file is passed to Docker Compose with `--env-file`. Reference variables in the compose file with `${NAME}`:
+
+```yaml title="docker-compose.yml"
+services:
+  app:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+```
+
+```ini title="Environment"
+DB_PASSWORD=a-long-secret
+```
+
+This is how one value reaches every service of a stack.

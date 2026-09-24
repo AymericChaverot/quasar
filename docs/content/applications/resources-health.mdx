@@ -1,0 +1,44 @@
+---
+title: Resources and health checks
+description: Limit CPU and memory, watch usage, and restart apps that stop answering.
+sidebar:
+  label: Resources & health
+---
+
+## Usage
+
+The **Overview** tab of an application shows its live CPU and memory use, and a history over the last 24 hours or 7 days.
+
+For a compose stack, **Stack containers** lists each container with its own figures and logs.
+
+## Resource limits
+
+Limits keep one application from starving the server:
+
+- over its **CPU** limit, an app is slowed down;
+- at its **memory** limit, the kernel kills it instead of letting it take the whole server down.
+
+Set them in **Overview → Container resources**, in cores and MB. Empty or `0` means unlimited.
+
+| Change | When it applies |
+| --- | --- |
+| Setting or changing a limit | Immediately, on the running container. |
+| Removing a limit | At the next deployment. Docker can't lift a limit from a running container. |
+
+The panel says when a redeploy is still needed.
+
+:::note
+Limits set in Quasar don't apply to compose stacks. Use `deploy.resources.limits` on each service in the compose file.
+:::
+
+## Health checks
+
+A health check regularly requests a path of your app over HTTP, and restarts the app when it stops answering.
+
+1. On the application's page, open **Settings → Health check**.
+2. Enter a path, such as `/health`.
+3. Save.
+
+The path is checked every 30 seconds. After **3 failures in a row**, the container is restarted, and a [notification](/server/notifications/) is sent.
+
+Leave the path empty to turn the check off.

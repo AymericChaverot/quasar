@@ -1,0 +1,129 @@
+---
+title: Catalogue format
+description: Reference for catalogue documents, entries and parameters.
+sidebar:
+  label: Format
+---
+
+## Document
+
+```yaml
+name: My servers           # required
+categories: [Minecraft]    # optional: new categories, in display order
+entries:                   # required
+  - id: ...
+```
+
+## Entry
+
+An entry fills in the new-application form.
+
+```yaml
+- id: minecraft-modded
+  name: Modded Minecraft
+  description: Fabric or Forge server, version of your choosing
+  category: Minecraft
+  deploy_type: compose
+  compose_service: minecraft
+  port: 25565
+  raw: true
+  app_name: "Minecraft {{VERSION}} ({{TYPE}})"
+  subdomain: "mc-{{TYPE}}-{{VERSION}}"
+  params:
+    - {name: TYPE, label: Mod loader, kind: select, default: FABRIC,
+       options: [FABRIC, FORGE, NEOFORGE]}
+    - {name: VERSION, label: Version, default: "1.20.1"}
+    - {name: HOST_PORT, label: Port, kind: port, default: "25566"}
+  env: |
+    TYPE={{TYPE}}
+    MINECRAFT_VERSION={{VERSION}}
+    HOST_PORT={{HOST_PORT}}
+  compose: |
+    services:
+      minecraft:
+        image: itzg/minecraft-server:latest
+        ports:
+          - "${HOST_PORT}:25565"
+        environment:
+          EULA: "TRUE"
+          TYPE: ${TYPE}
+          VERSION: ${MINECRAFT_VERSION}
+        volumes:
+          - ./data:/data
+        restart: unless-stopped
+```
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `id` | yes | Unique identifier: lowercase letters, digits and hyphens. Reusing a built-in id replaces that entry. |
+| `name` | yes | Title of the card. |
+| `description` | yes | One line under the title. |
+| `category` | yes | Category the entry is listed under. |
+| `port` | yes | Port the domain routes to. For a `raw` server, the port it listens on. |
+| `deploy_type` | | `image` (default) or `compose`. |
+| `image_ref` | | Image to run, for `image`. |
+| `data_mount` | | Container path kept in the app's data folder, for `image`. |
+| `compose` | | The compose file, for `compose`. |
+| `compose_service` | | The service that serves the domain, for `compose`. Leave empty when Quasar can [work it out](/applications/compose/#which-service-gets-the-domain). |
+| `env` | | Content of the `.env` file. |
+| `app_name` | | Proposed application name. Defaults to `name`. |
+| `subdomain` | | Proposed subdomain. Defaults to `id`. |
+| `raw` | | `true` for a server that doesn't speak HTTP (game server, database). It is reached at the server's IP and port. |
+| `params` | | Questions asked before filling in the form. See below. |
+| `note` | | A message shown with the form, such as a setting to fill in by hand. |
+| `needs_setup` | | What must be provided before the app can start, such as credentials for an outside service. Shown on the card. |
+
+## Parameters
+
+Parameters are questions asked before the form is filled in. They let one entry cover many deployments: any version, any port, any number of times.
+
+| Field | Description |
+| --- | --- |
+| `name` | Key, used as `{{NAME}}` in the entry. |
+| `label` | Text shown in the form. Defaults to `name`. |
+| `kind` | `text` (default), `select`, `number` or `port`. |
+| `default` | Value proposed. |
+| `options` | Accepted values, for `select`. |
+| `help` | A line of help under the field. |
+
+## Placeholders
+
+Two syntaxes look alike but are read by different tools. Don't mix them up.
+
+### `{{NAME}}`: replaced by Quasar
+
+Replaced when the entry is picked.
+
+| Placeholder | Value | Works in |
+| --- | --- | --- |
+| `{{NAME}}` | The answer to the parameter `NAME`. | `env`, `image_ref`, `compose`, `app_name`, `subdomain` |
+| `{{RANDOM}}` | A new random secret, different at **each occurrence**. | `env` |
+| `{{HOST}}` | The host the app will be served on, such as `blog.your-domain.com`. | `env` |
+| `{{URL}}` | The full address, such as `https://blog.your-domain.com`. | `env` |
+
+A `{{NAME}}` that matches no parameter is an error when saving.
+
+### `${NAME}`: read by Docker Compose
+
+Left as it is by Quasar. Docker Compose reads it from the `.env` file when the stack starts.
+
+### Using both
+
+The usual pattern is to set a value once in `env`, then read it in the compose file:
+
+```yaml
+env: |
+  DB_PASSWORD={{RANDOM}}
+compose: |
+  services:
+    app:
+      environment:
+        DATABASE_PASSWORD: ${DB_PASSWORD}
+    db:
+      environment:
+        POSTGRES_PASSWORD: ${DB_PASSWORD}
+```
+
+:::tip
+Write a shared secret **once** in `env`, and read it with `${NAME}` wherever it is needed. Since `{{RANDOM}}` gives a new value at each occurrence, writing it twice would give the app and its database two different passwords.
+:::

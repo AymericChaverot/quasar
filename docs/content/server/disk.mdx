@@ -1,0 +1,43 @@
+---
+title: Disk space
+description: See what uses disk space, and clean up safely.
+---
+
+A full disk is the most common way a VPS goes down. **System** has three sections to keep it in check.
+
+## Docker storage
+
+Shows how much space Docker uses (images, containers, volumes, build cache), and how much of it can be reclaimed.
+
+### Cleaning up
+
+Each category shows the number of items and the space it frees **before** you delete anything. Open a category to see its items, and tick only the ones you want.
+
+A cleanup removes what nothing uses any more:
+
+- images with no container,
+- untagged image layers,
+- build cache (all or nothing: Docker can't remove part of it),
+- containers left over from deployments,
+- unused networks.
+
+It **keeps**:
+
+- stopped applications and their images,
+- each application's recent Git builds, used for [rollbacks](/applications/logs-history/#rolling-back).
+
+### Orphaned volumes
+
+Volumes that no container uses are offered separately, behind their own checkbox.
+
+:::danger
+A deleted volume can't be recovered. Open it first from **Volumes** to check what it holds.
+:::
+
+## Volumes
+
+Lists every Docker volume on the server, with its size and the application it belongs to. Orphaned volumes are marked. Click **Browse** to look inside with the [storage explorer](/applications/storage/#the-storage-explorer).
+
+## Application storage
+
+Shows the disk space used by each application's folder. The [Growth chart](/applications/storage/#growth) on an application's page shows how it evolves.

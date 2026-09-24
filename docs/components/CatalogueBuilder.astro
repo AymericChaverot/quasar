@@ -1,0 +1,636 @@
+---
+/**
+ * A form that writes a catalogue document.
+ *
+ * A catalogue is smaller than a station — it is data, with no script and no
+ * permissions — so this is one page rather than a sequence of steps. The checks
+ * mirror Catalog.Validate in internal/catalog/yaml.go, including the one that
+ * catches the mistake this format is most often written with: a {{NAME}} no
+ * parameter declares, or a {{RANDOM}} in the compose file, where Quasar leaves
+ * it alone and docker compose never sees a value.
+ */
+---
+
+<div class="cb" data-catalogue-builder>
+  <noscript>
+    <p class="cb-note">This tool needs JavaScript. The <a href="../../catalogue/format/">catalogue format</a> is written out in full.</p>
+  </noscript>
+  <div data-app></div>
+</div>
+
+<script>
+  type Dict = Record<string, any>;
+
+  const root = document.querySelector<HTMLElement>('[data-catalogue-builder]')!;
+  const app = root.querySelector<HTMLElement>('[data-app]')!;
+  const STORAGE_KEY = 'quasar-catalogue-builder';
+
+  const idRe = /^[a-z0-9][a-z0-9-]*$/;
+  const paramRe = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  const BUILTIN = ['RANDOM', 'HOST', 'URL'];
+
+  const blank = (): Dict => ({
+    catalogue: 'My catalogue',
+    categories: '',
+    entries: [entry()],
+  });
+
+  const entry = (): Dict => ({
+    id: '',
+    name: '',
+    description: '',
+    category: '',
+    type: 'image',
+    image_ref: '',
+    data_mount: '',
+    compose: '',
+    compose_service: '',
+    port: 80,
+    raw: false,
+    app_name: '',
+    subdomain: '',
+    env: '',
+    note: '',
+    params: [],
+  });
+
+  let state: Dict = blank();
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      state = { ...blank(), ...parsed, entries: (parsed.entries ?? []).map((e: Dict) => ({ ...entry(), ...e })) };
+    }
+  } catch {
+    /* private window: the page still works, it just forgets */
+  }
+
+  const esc = (s: any) =>
+    String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+  const list = (s: string) =>
+    String(s ?? '')
+      .split(/[,\n]+/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+
+  const getPath = (path: string) => path.split('.').reduce((o: any, k) => (o == null ? o : o[k]), state);
+
+  function setPath(path: string, value: any) {
+    const keys = path.split('.');
+    const last = keys.pop()!;
+    keys.reduce((o: any, k) => o[k], state)[last] = value;
+  }
+
+  function field(path: string, label: string, opts: Dict = {}) {
+    const tag = opts.rows ? 'textarea' : 'input';
+    const value = esc(getPath(path) ?? '');
+    return `<label class="cb-field${opts.wide ? ' cb-wide' : ''}">
+      <span class="cb-label">${esc(label)}${opts.required ? ' <em>required</em>' : ''}</span>
+      ${
+        opts.rows
+          ? `<textarea class="cb-input cb-mono" rows="${opts.rows}" spellcheck="false" data-bind="${path}" placeholder="${esc(opts.placeholder ?? '')}">${value}</textarea>`
+          : `<input class="cb-input${opts.mono ? ' cb-mono' : ''}" type="${opts.type ?? 'text'}" data-bind="${path}" value="${value}" placeholder="${esc(opts.placeholder ?? '')}">`
+      }
+      ${opts.help ? `<span class="cb-help">${opts.help}</span>` : ''}
+    </label>`;
+  }
+
+  const select = (path: string, label: string, options: [string, string][]) => `<label class="cb-field">
+      <span class="cb-label">${esc(label)}</span>
+      <select class="cb-input" data-bind="${path}" data-rerender>
+        ${options.map(([v, l]) => `<option value="${esc(v)}"${getPath(path) === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}
+      </select>
+    </label>`;
+
+  const check = (path: string, label: string) => `<label class="cb-check">
+      <input type="checkbox" data-bind="${path}"${getPath(path) ? ' checked' : ''}>
+      <span>${label}</span>
+    </label>`;
+
+  // ------------------------------------------------------------------ YAML --
+
+  function q(value: any): string {
+    const s = String(value);
+    if (s === '') return '""';
+    const plain = /^[A-Za-z_./@][A-Za-z0-9_ ./@:+-]*$/.test(s) && !/:\s|\s#|:$|\s$/.test(s);
+    return plain && !/^(true|false|yes|no|on|off|null|~)$/i.test(s) ? s : JSON.stringify(s);
+  }
+
+  function block(key: string, value: string, indent: string) {
+    const lines = value.replace(/\s+$/, '').split('\n');
+    return `${indent}${key}: |\n${lines.map((l) => (l ? `${indent}  ${l}` : '')).join('\n')}\n`;
+  }
+
+  function toYaml(): string {
+    let y = `name: ${q(state.catalogue)}\n`;
+    const cats = list(state.categories);
+    if (cats.length) y += `\ncategories:\n${cats.map((c) => `  - ${q(c)}`).join('\n')}\n`;
+    y += '\nentries:\n';
+    for (const e of state.entries) {
+      y += `  - id: ${q(e.id)}\n`;
+      y += `    name: ${q(e.name)}\n`;
+      y += `    description: ${q(e.description)}\n`;
+      y += `    category: ${q(e.category)}\n`;
+      if (e.type === 'compose') y += '    deploy_type: compose\n';
+      if (e.type === 'image') {
+        y += `    image_ref: ${q(e.image_ref)}\n`;
+        if (e.data_mount) y += `    data_mount: ${q(e.data_mount)}\n`;
+      } else if (e.compose_service) y += `    compose_service: ${q(e.compose_service)}\n`;
+      y += `    port: ${Number(e.port) || 0}\n`;
+      if (e.raw) y += '    raw: true\n';
+      if (e.app_name) y += `    app_name: ${q(e.app_name)}\n`;
+      if (e.subdomain) y += `    subdomain: ${q(e.subdomain)}\n`;
+      if (e.note) y += `    note: ${q(e.note)}\n`;
+      if (e.params.length) {
+        y += '    params:\n';
+        for (const p of e.params) {
+          y += `      - name: ${q(p.name)}\n`;
+          if (p.label) y += `        label: ${q(p.label)}\n`;
+          if (p.kind && p.kind !== 'text') y += `        kind: ${p.kind}\n`;
+          if (p.default !== '' && p.default != null) y += `        default: ${JSON.stringify(String(p.default))}\n`;
+          if (p.kind === 'select') y += `        options: [${list(p.options).map((o) => JSON.stringify(o)).join(', ')}]\n`;
+          if (p.help) y += `        help: ${q(p.help)}\n`;
+        }
+      }
+      if (e.env.trim()) y += block('env', e.env, '    ');
+      if (e.type === 'compose' && e.compose.trim()) y += block('compose', e.compose, '    ');
+    }
+    return y;
+  }
+
+  // ---------------------------------------------------------------- checks --
+
+  function issues(): { level: 'error' | 'warn'; text: string }[] {
+    const out: { level: 'error' | 'warn'; text: string }[] = [];
+    const err = (text: string) => out.push({ level: 'error', text });
+    const warn = (text: string) => out.push({ level: 'warn', text });
+
+    if (!state.catalogue.trim()) err('The catalogue needs a name; it is the button your entries sit behind.');
+    const ids = new Set<string>();
+
+    for (const [i, e] of state.entries.entries()) {
+      const where = e.id || `entry ${i + 1}`;
+      if (!e.id) err(`${where}: an entry needs an id.`);
+      else if (!idRe.test(e.id)) err(`${where}: id "${e.id}" is not usable as a subdomain: lowercase letters, digits and hyphens only.`);
+      else if (ids.has(e.id)) err(`Two entries share the id "${e.id}".`);
+      if (e.id) ids.add(e.id);
+      if (!e.name) err(`${where}: an entry needs a name.`);
+      if (!e.description) err(`${where}: an entry needs a description; it is all the card says about it.`);
+      if (!e.category) err(`${where}: an entry needs a category, or it will not appear on the page.`);
+      const port = Number(e.port);
+      if (!(port >= 1 && port <= 65535)) err(`${where}: port ${e.port} is out of range.`);
+      if (e.type === 'image' && !e.image_ref) err(`${where}: an image entry needs an image_ref.`);
+      if (e.type === 'compose' && !e.compose.trim()) err(`${where}: a compose entry needs a compose file.`);
+      if (e.type === 'compose' && e.compose.trim() && !/(^|\n)\s*services\s*:/.test(e.compose))
+        err(`${where}: the compose file declares no services.`);
+      if (e.type === 'compose' && e.compose_service && !new RegExp(`(^|\\n)\\s+${e.compose_service}\\s*:`).test(e.compose))
+        err(`${where}: compose_service is "${e.compose_service}", which the compose file does not define.`);
+      if (e.category && !list(state.categories).includes(e.category))
+        warn(`${where}: the category "${e.category}" is not declared above, so the entry lands in one Quasar already ships — which is fine if that was meant.`);
+
+      const names = new Set<string>();
+      for (const p of e.params) {
+        if (!p.name) err(`${where}: a question has no name.`);
+        else if (!paramRe.test(p.name)) err(`${where}: question "${p.name}": letters, digits and underscores only.`);
+        else if (names.has(p.name)) err(`${where}: two questions are named "${p.name}".`);
+        if (p.name) names.add(p.name);
+        if (p.kind === 'select' && !list(p.options).length) err(`${where}: question "${p.name}" is a select with no choices.`);
+      }
+
+      for (const m of [e.env, e.compose, e.image_ref, e.app_name, e.subdomain].join('\n').matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)) {
+        if (!names.has(m[1]) && !BUILTIN.includes(m[1])) err(`${where}: {{${m[1]}}} is used, but no question declares it.`);
+      }
+      for (const m of String(e.compose).matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)) {
+        if (BUILTIN.includes(m[1])) err(`${where}: {{${m[1]}}} only works in the environment. Write it there, and read it back as \${${m[1]}} in the compose file.`);
+      }
+      if (e.type === 'compose' && !/\$\{/.test(e.compose) && e.env.trim())
+        warn(`${where}: the environment is set but the compose file reads nothing from it. Values reach services as \${NAME}.`);
+      if (e.raw && !e.app_name && !e.subdomain && e.params.length)
+        warn(`${where}: a raw server deployed twice needs a parameter in app_name or subdomain, or the second collides with the first.`);
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------- render --
+
+  function entryForm(e: Dict, i: number) {
+    const base = `entries.${i}`;
+    const byType =
+      e.type === 'compose'
+        ? `${field(`${base}.compose`, 'Compose file', { rows: 8, wide: true, required: true, placeholder: 'services:\n  app:\n    image: ghcr.io/me/app:latest' })}
+           ${field(`${base}.compose_service`, 'Service that serves the domain', { mono: true, placeholder: 'app' })}`
+        : `${field(`${base}.image_ref`, 'Image', { mono: true, required: true, placeholder: 'ghcr.io/me/app:latest' })}
+           ${field(`${base}.data_mount`, 'Persistent data mount', { mono: true, placeholder: '/data' })}`;
+
+    const params = e.params
+      .map(
+        (p: Dict, j: number) => `<div class="cb-item">
+          <div class="cb-grid">
+            ${field(`${base}.params.${j}.name`, 'Name', { mono: true, placeholder: 'VERSION', help: 'Used as <code>{{NAME}}</code>.' })}
+            ${field(`${base}.params.${j}.label`, 'Question', { placeholder: 'Which version?' })}
+            ${select(`${base}.params.${j}.kind`, 'Kind', [['text', 'text'], ['select', 'select'], ['number', 'number'], ['port', 'port']])}
+            ${field(`${base}.params.${j}.default`, 'Default')}
+            ${p.kind === 'select' ? field(`${base}.params.${j}.options`, 'Choices', { wide: true, placeholder: 'stable, latest' }) : ''}
+            ${field(`${base}.params.${j}.help`, 'Help', { wide: true })}
+          </div>
+          <button type="button" class="cb-remove" data-act="remove" data-path="${base}.params" data-index="${j}">Remove</button>
+        </div>`,
+      )
+      .join('');
+
+    return `<section class="cb-entry">
+      <header class="cb-entry-head">
+        <h3 class="cb-h">${esc(e.name || e.id || `Entry ${i + 1}`)}</h3>
+        ${state.entries.length > 1 ? `<button type="button" class="cb-remove" data-act="remove" data-path="entries" data-index="${i}">Remove entry</button>` : ''}
+      </header>
+      <div class="cb-grid">
+        ${field(`${base}.name`, 'Name', { required: true, placeholder: 'My application' })}
+        ${field(`${base}.id`, 'Id', { required: true, mono: true, placeholder: 'my-app', help: 'Also the default subdomain. Reusing a built-in id replaces that card.' })}
+        ${field(`${base}.description`, 'Description', { required: true, wide: true, placeholder: 'What it is, in one line' })}
+        ${field(`${base}.category`, 'Category', { required: true, placeholder: 'Homelab' })}
+        ${select(`${base}.type`, 'Deploy type', [['image', 'Docker image'], ['compose', 'Docker Compose']])}
+        ${field(`${base}.port`, 'Port', { type: 'number', required: true, help: 'The port the domain routes to.' })}
+        ${byType}
+        ${field(`${base}.app_name`, 'Proposed application name', { placeholder: 'Defaults to the name' })}
+        ${field(`${base}.subdomain`, 'Proposed subdomain', { mono: true, placeholder: 'Defaults to the id' })}
+        ${field(`${base}.env`, 'Environment (.env)', { rows: 3, wide: true, placeholder: 'SECRET={{RANDOM}}\nBASE_URL={{URL}}', help: '<code>{{RANDOM}}</code>, <code>{{HOST}}</code> and <code>{{URL}}</code> are answered here, and nowhere else.' })}
+        ${field(`${base}.note`, 'Note shown with the form', { wide: true, placeholder: 'Anything to fill in by hand afterwards' })}
+        <div class="cb-wide">${check(`${base}.raw`, 'Not HTTP — a game server or a database, reached at the server address and port')}</div>
+      </div>
+      <div class="cb-sub">
+        <p class="cb-sub-head">Questions asked before the form is filled in</p>
+        ${params || '<p class="cb-help">None. The entry deploys the same thing every time.</p>'}
+        <button type="button" class="cb-add" data-act="add-param" data-index="${i}">+ Add a question</button>
+      </div>
+    </section>`;
+  }
+
+  function render() {
+    const found = issues();
+    const errors = found.filter((f) => f.level === 'error');
+
+    app.innerHTML = `
+      <div class="cb-layout">
+        <div class="cb-form">
+          <section class="cb-entry">
+            <h3 class="cb-h">The catalogue</h3>
+            <div class="cb-grid">
+              ${field('catalogue', 'Name', { required: true, help: 'The button your entries sit behind on the new-application page.' })}
+              ${field('categories', 'Categories', { wide: true, placeholder: 'Homelab, Internal tools', help: 'Comma-separated. They appear as filter buttons beside the ones Quasar ships.' })}
+            </div>
+          </section>
+          ${state.entries.map(entryForm).join('')}
+          <button type="button" class="cb-add" data-act="add-entry">+ Add an entry</button>
+        </div>
+
+        <aside class="cb-side">
+          <div class="cb-card ${errors.length ? 'cb-bad' : 'cb-good'}">
+            <p class="cb-head">${errors.length ? `${errors.length} thing${errors.length > 1 ? 's' : ''} to fix` : 'Ready to import'}</p>
+            <ul class="cb-checks">
+              ${
+                found.length
+                  ? found.map((f) => `<li class="cb-${f.level}">${esc(f.text)}</li>`).join('')
+                  : '<li class="cb-ok">Nothing to fix. Add it in <strong>Settings → Catalogues</strong>.</li>'
+              }
+            </ul>
+          </div>
+          <div class="cb-out-head">
+            <p class="cb-head">catalogue.yaml</p>
+            <div class="cb-row">
+              <button type="button" class="cb-btn" data-act="copy">Copy</button>
+              <button type="button" class="cb-btn cb-btn-primary" data-act="download">Download</button>
+            </div>
+          </div>
+          <pre class="cb-yaml"><code>${esc(toYaml())}</code></pre>
+        </aside>
+      </div>`;
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      /* nothing to do */
+    }
+  }
+
+  app.addEventListener('input', (event) => {
+    const el = event.target as HTMLInputElement;
+    const path = el.dataset.bind;
+    if (!path) return;
+    setPath(path, el.type === 'checkbox' ? el.checked : el.value);
+    if (el.hasAttribute('data-rerender')) return render();
+    const at = el.selectionStart;
+    render();
+    const again = app.querySelector<HTMLInputElement>(`[data-bind="${path}"]`);
+    again?.focus();
+    if (again && at != null && again.setSelectionRange) again.setSelectionRange(at, at);
+  });
+
+  app.addEventListener('click', async (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-act]');
+    if (!button) return;
+    switch (button.dataset.act) {
+      case 'add-entry':
+        state.entries.push(entry());
+        break;
+      case 'add-param':
+        state.entries[Number(button.dataset.index)].params.push({ name: '', label: '', kind: 'text', default: '', options: '', help: '' });
+        break;
+      case 'remove':
+        getPath(button.dataset.path!).splice(Number(button.dataset.index), 1);
+        break;
+      case 'copy': {
+        const label = button.textContent;
+        try {
+          await navigator.clipboard.writeText(toYaml());
+          button.textContent = 'Copied';
+        } catch {
+          button.textContent = 'Copy failed';
+        }
+        setTimeout(() => (button.textContent = label), 1500);
+        return;
+      }
+      case 'download': {
+        const blob = new Blob([toYaml()], { type: 'application/yaml' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'catalogue.yaml';
+        link.click();
+        URL.revokeObjectURL(link.href);
+        return;
+      }
+      default:
+        return;
+    }
+    render();
+  });
+
+  render();
+</script>
+
+<style is:global>
+  .cb {
+    margin-block: 1.5rem;
+  }
+
+  .cb-layout {
+    display: grid;
+    gap: 1.25rem;
+    align-items: start;
+  }
+
+  @media (min-width: 72rem) {
+    .cb-layout {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .cb-side {
+      position: sticky;
+      top: 5rem;
+      max-height: calc(100vh - 6rem);
+      overflow: auto;
+    }
+  }
+
+  .cb-form,
+  .cb-side {
+    display: grid;
+    gap: 1rem;
+    align-content: start;
+  }
+
+  .cb-form > *,
+  .cb-side > * {
+    min-width: 0;
+  }
+
+  .cb-entry {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: var(--radius-main, 0.75rem);
+    background: var(--background-2);
+  }
+
+  .cb-entry-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .cb .cb-h {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-size: 1rem;
+  }
+
+  .cb-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 0.75rem;
+  }
+
+  .cb-field {
+    display: grid;
+    gap: 0.25rem;
+    align-content: start;
+  }
+
+  .cb-wide {
+    grid-column: 1 / -1;
+  }
+
+  .cb-label {
+    color: var(--text-2);
+    font-size: 0.8125rem;
+  }
+
+  .cb-label em {
+    color: var(--accent);
+    font-size: 0.6875rem;
+    font-style: normal;
+  }
+
+  .cb-help,
+  .cb-note {
+    color: var(--text-2);
+    font-size: 0.75rem;
+  }
+
+  .cb-input {
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: 0.375rem;
+    background: var(--background);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.875rem;
+    resize: vertical;
+  }
+
+  .cb-input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+
+  .cb-mono {
+    font-family: var(--mono-family, monospace);
+    font-size: 0.8125rem;
+  }
+
+  .cb-check {
+    display: inline-flex;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.875rem;
+  }
+
+  .cb-check input {
+    accent-color: var(--accent);
+  }
+
+  .cb-sub {
+    display: grid;
+    gap: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: var(--border-width, 1px) solid var(--border);
+  }
+
+  .cb-sub-head {
+    margin: 0;
+    color: var(--text-2);
+    font-size: 0.8125rem;
+  }
+
+  .cb-item {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--background);
+  }
+
+  .cb-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .cb-btn,
+  .cb-add,
+  .cb-remove {
+    padding: 0.3125rem 0.75rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: 999px;
+    background: var(--background);
+    color: var(--text);
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+
+  .cb-btn:hover,
+  .cb-add:hover {
+    border-color: var(--accent);
+  }
+
+  .cb-btn-primary {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+
+  .cb-add {
+    justify-self: start;
+    border-style: dashed;
+  }
+
+  .cb-remove {
+    justify-self: start;
+    color: var(--text-2);
+  }
+
+  .cb-remove:hover {
+    border-color: oklch(62% 0.2 25);
+    color: oklch(62% 0.2 25);
+  }
+
+  .cb-card {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--background-2);
+  }
+
+  .cb-good {
+    border-left-color: var(--accent);
+  }
+
+  .cb-bad {
+    border-left-color: oklch(62% 0.2 25);
+  }
+
+  .cb-head {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 500;
+  }
+
+  .cb-checks {
+    display: grid;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.8125rem;
+  }
+
+  .cb-checks li {
+    padding: 0.375rem 0.5rem;
+    border-left: 3px solid var(--border);
+    border-radius: 0.25rem;
+    background: var(--background);
+  }
+
+  .cb-checks .cb-error {
+    border-color: oklch(62% 0.2 25);
+  }
+
+  .cb-checks .cb-warn {
+    border-color: oklch(75% 0.15 70);
+  }
+
+  .cb-checks .cb-ok {
+    border-color: var(--accent);
+    color: var(--text-2);
+  }
+
+  .cb-out-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .cb-yaml {
+    margin: 0;
+    padding: 0.75rem;
+    overflow: auto;
+    border-radius: 0.5rem;
+    background: var(--background);
+    font-family: var(--mono-family, monospace);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    white-space: pre;
+  }
+</style>

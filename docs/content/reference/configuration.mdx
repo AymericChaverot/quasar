@@ -1,0 +1,45 @@
+---
+title: Configuration
+description: Environment variables read by the dashboard.
+---
+
+Most settings are changed in the dashboard. The few below are set when the server starts.
+
+## Installed server
+
+The installer writes `/opt/quasar/.env`:
+
+| Variable | Description |
+| --- | --- |
+| `DOMAIN` | Root domain. The dashboard is served on `admin.<DOMAIN>`. |
+| `ACME_EMAIL` | Email address used for Let's Encrypt. |
+| `ADMIN_USER` | Username of the first admin account. |
+| `ADMIN_PASSWORD` | Its password. Only used to create the account on first start, then removed from the file. |
+
+To change the domain or the email, edit this file and restart the stack:
+
+```bash
+cd /opt/quasar && docker compose up -d
+```
+
+## All variables
+
+The dashboard reads these variables at startup. Defaults suit the standard install; `docker-compose.yml` sets the paths.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DOMAIN` | `localhost` | Root domain. |
+| `LISTEN_ADDR` | `:8080` | Address the dashboard listens on. |
+| `DB_PATH` | `/opt/quasar/storage/database.sqlite` | SQLite database. The master key is stored next to it, as `master.key`. |
+| `APPS_DIR` | `/opt/quasar/apps` | Application folders. |
+| `BACKUPS_DIR` | `/opt/quasar/backups` | Backup archives. |
+| `TRAEFIK_DIR` | `traefik/` next to `APPS_DIR` | Traefik configuration and certificates. |
+| `TRAEFIK_NETWORK` | `traefik-net` | Docker network shared with Traefik. |
+| `SOCKET_NETWORK` | `quasar-socket-net` | Docker network of the socket proxy. |
+| `ADMIN_USER` | — | First admin account, created only if no user exists. |
+| `ADMIN_PASSWORD` | — | Its password. |
+| `HOST_ROOT` | `/` | Where the host file system is mounted, for disk metrics and the storage explorer. |
+| `COOKIE_SECURE` | `true` | Set to `false` only for local development over plain HTTP. |
+| `GITHUB_REPO` | `AymericChaverot/quasar` | Repository checked for new releases. |
+| `EDGE_AUTH_URL` | `http://quasar-dashboard:8080` | Where Traefik reaches the dashboard for [password protection](/applications/protection/#password-protection). Only change it when the dashboard runs outside the standard stack. |
+| `ENV_FILE` | `.env` | File to load variables from. Real environment variables take precedence. |

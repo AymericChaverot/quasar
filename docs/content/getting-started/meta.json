@@ -1,0 +1,10 @@
+{
+  "title": "Getting started",
+  "icon": "rocket",
+  "collapsible": false,
+  "pages": [
+    "installation",
+    "first-steps",
+    "updating"
+  ]
+}

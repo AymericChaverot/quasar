@@ -1,0 +1,49 @@
+---
+title: Domains and TLS
+description: Subdomains, custom domains, and HTTPS certificates.
+sidebar:
+  label: Domains & TLS
+---
+
+## Subdomain
+
+Every application has a subdomain: `blog` serves it on `blog.your-domain.com`.
+
+Use `@` to serve an application on the root domain, `your-domain.com`. This needs an `A` record on the root domain itself; the wildcard record doesn't cover it.
+
+## Custom domains
+
+An application can also answer on other domains, such as `www.myblog.com`.
+
+1. Point the domain's DNS at the server's IP.
+2. On the application's page, open **Settings → Custom domains** and add the domain. Separate several with commas.
+3. Redeploy.
+
+## Certificates
+
+Certificates are issued automatically by Let's Encrypt, the first time a domain is requested. There is nothing to configure.
+
+### When a certificate is missing
+
+The **TLS** section of the application's page lists every domain the app serves, with its certificate status. When a certificate is missing, it explains why. The usual causes:
+
+- the domain doesn't resolve,
+- the domain resolves to another server, often a registrar's default record left in place.
+
+It also shows what Traefik sees for the app: the router rule, the certificate resolver, the port and the networks.
+
+### Requesting a certificate again
+
+Traefik asks Let's Encrypt once, when the route first appears. It doesn't retry a failed attempt on its own, so fixing DNS is not enough.
+
+After fixing the cause, click **Request the certificate again**.
+
+:::warning
+This restarts Traefik. **Every site on the server is unavailable for a few seconds.**
+:::
+
+## All certificates
+
+**System → TLS certificates** lists every certificate Traefik holds, with its expiry and the application using it.
+
+A certificate that no application uses (left over from a deleted app or a renamed domain) can be deleted. This also restarts Traefik.

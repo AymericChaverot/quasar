@@ -1,0 +1,2502 @@
+---
+/**
+ * A step-by-step form that writes a station document, with a preview of the
+ * page it produces.
+ *
+ * Everything happens in the browser. The form is drawn from one state object,
+ * the YAML and the preview are regenerated from it on every change, and the
+ * checks mirror the ones Quasar runs when a station is installed
+ * (internal/station/validate.go and its neighbours), so a document that passes
+ * here is not refused there for a reason this page could have caught.
+ *
+ * The preview is drawn from Quasar's own component shapes and Nebula's tokens,
+ * with sample data: it answers "what will this page look like", not "what will
+ * it say", which only the script can know.
+ */
+---
+
+<div class="sb" data-station-builder>
+  <noscript>
+    <p class="sb-note">This tool needs JavaScript. The <a href="../../stations/writing/">format reference</a> covers the same ground.</p>
+  </noscript>
+  <div data-app></div>
+</div>
+
+<script>
+  type Dict = Record<string, any>;
+  type Issue = { level: 'error' | 'warn'; text: string; step: number };
+
+  const STORAGE_KEY = 'quasar-station-builder-v2';
+
+  const PANEL_TYPES: Record<string, string> = {
+    stat: 'Stat — one number',
+    gauge: 'Gauge — a percentage',
+    keyvalue: 'Key / value list',
+    table: 'Table',
+    list: 'List',
+    timeline: 'Timeline',
+    markdown: 'Text',
+    code: 'Code block',
+    image: 'Image',
+    chart: 'Chart of a series',
+    log: 'Live container logs',
+    form: 'Form',
+    button: 'Button',
+    confirm: 'Button that asks first',
+    search: 'Search box',
+    iframe: 'Embedded page',
+    banner: 'Banner',
+    divider: 'Divider',
+  };
+  const DATA_TYPES = ['stat', 'gauge', 'keyvalue', 'table', 'list', 'timeline', 'markdown', 'code', 'image'];
+  const FIELD_TYPES = ['text', 'number', 'select', 'toggle', 'secret', 'port', 'textarea', 'file'];
+  const LIFECYCLE = ['start', 'stop', 'restart', 'redeploy', 'set_image'];
+  const EVENT_HOOKS = ['after_deploy', 'on_start', 'on_stop', 'on_health_fail'];
+  const BUILTIN_PLACEHOLDERS = ['RANDOM', 'HOST', 'URL'];
+
+  const idRe = /^[a-z0-9][a-z0-9-]*$/;
+  const panelIdRe = /^[a-z0-9][a-z0-9_-]*$/;
+  const paramRe = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  const actionRe = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+  const serviceRe = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+  const hostRe = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+  const seriesRe = /^[a-z][a-z0-9_]{0,31}$/;
+  const hexRe = /^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+  const lengthRe = /^-?[0-9]+(\.[0-9]+)?(px|rem|em|%)?$/;
+
+  // ----------------------------------------------------------------- state --
+
+  function blank(): Dict {
+    return {
+      step: 0,
+      view: 'preview',
+      theme: 'dark',
+      id: '',
+      name: '',
+      description: '',
+      author: '',
+      version: '1.0.0',
+      deploy: {
+        type: 'image',
+        image_ref: '',
+        data_mount: '',
+        compose: '',
+        compose_service: '',
+        port: 80,
+        raw: false,
+        app_name: '',
+        subdomain: '',
+        env: '',
+      },
+      params: [],
+      perms: {
+        exec: { on: false, services: '' },
+        logs: { on: false, services: '' },
+        files: { on: false, paths: '' },
+        env: { on: false, read: '', write: '' },
+        netInternal: { on: false, services: '', ports: '' },
+        netExternal: { on: false, allow: '' },
+        lifecycle: { on: false, start: false, stop: false, restart: true, redeploy: false, set_image: false },
+        notify: { on: false },
+      },
+      look: { accent: '', tint: '', radius: '' },
+      tabs: [{ id: 'overview', name: 'Overview', panels: [] }],
+      hooks: { after_deploy: '', on_start: '', on_stop: '', on_health_fail: '', every: [] },
+    };
+  }
+
+  function newPanel(type: string, extra: Dict = {}): Dict {
+    return {
+      type,
+      id: '',
+      title: '',
+      width: '',
+      refresh: '',
+      action: '',
+      columns: '',
+      rowLabel: '',
+      rowAction: '',
+      rowConfirm: '',
+      fields: '',
+      fillAction: '',
+      submitLabel: 'Save',
+      label: '',
+      confirm: '',
+      placeholder: '',
+      long: false,
+      service: '',
+      tail: 100,
+      port: '',
+      path: '/',
+      height: '',
+      series: '',
+      kind: 'line',
+      range: '24h',
+      unit: '',
+      text: '',
+      tone: '',
+      empty: '',
+      ...extra,
+    };
+  }
+
+  function example(): Dict {
+    const s = blank();
+    Object.assign(s, {
+      id: 'minecraft-demo',
+      name: 'Minecraft',
+      description: 'A server with a console and a mod list',
+      version: '1.0.0',
+    });
+    s.deploy.image_ref = 'itzg/minecraft-server:latest';
+    s.deploy.port = 25565;
+    s.deploy.raw = true;
+    s.deploy.env = 'EULA=TRUE\nVERSION={{VERSION}}';
+    s.params = [{ name: 'VERSION', label: 'Minecraft version', kind: 'select', default: '1.21.4', options: '1.21.4, 1.21.1' }];
+    s.perms.exec = { on: true, services: 'minecraft' };
+    s.perms.files = { on: true, paths: 'data/mods/**' };
+    s.perms.lifecycle = { on: true, start: false, stop: false, restart: true, redeploy: false, set_image: false };
+    s.tabs = [
+      {
+        id: 'server',
+        name: 'Server',
+        panels: [
+          newPanel('stat', { id: 'players', title: 'Players online', action: 'player_count', width: 'third' }),
+          newPanel('keyvalue', { id: 'build', title: 'Build', action: 'build_info', width: 'third' }),
+          newPanel('confirm', { id: 'restart', title: 'Lifecycle', label: 'Restart the server', action: 'restart_server', confirm: 'Restart it? Players are disconnected.', width: 'third' }),
+          newPanel('table', {
+            id: 'mods',
+            title: 'Installed mods',
+            action: 'list_mods',
+            columns: 'name, version',
+            rowLabel: 'Remove',
+            rowAction: 'remove_mod',
+            rowConfirm: 'Remove {{name}}?',
+            empty: 'No mods installed yet.',
+          }),
+          newPanel('form', { id: 'console', title: 'Console', fields: 'command', submitLabel: 'Send', action: 'run_command' }),
+        ],
+      },
+    ];
+    return s;
+  }
+
+  const root = document.querySelector<HTMLElement>('[data-station-builder]')!;
+  const appEl = root.querySelector<HTMLElement>('[data-app]')!;
+
+  let state: Dict = migrate(load()) ?? blank();
+
+  function load(): Dict | null {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Fills in what an older saved document has no key for. */
+  function migrate(saved: Dict | null): Dict | null {
+    if (!saved) return null;
+    const fresh = blank();
+    const merged = { ...fresh, ...saved };
+    merged.deploy = { ...fresh.deploy, ...saved.deploy };
+    merged.look = { ...fresh.look, ...saved.look };
+    merged.hooks = { ...fresh.hooks, ...saved.hooks };
+    merged.perms = { ...fresh.perms };
+    for (const key of Object.keys(fresh.perms)) merged.perms[key] = { ...fresh.perms[key], ...saved.perms?.[key] };
+    merged.tabs = (saved.tabs ?? []).map((t: Dict) => ({ ...t, panels: (t.panels ?? []).map((p: Dict) => newPanel(p.type, p)) }));
+    merged.full = false; // an overlay is a moment, not a setting
+    return merged;
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      /* private window: the page still works, it just forgets */
+    }
+  }
+
+  const getPath = (path: string) => path.split('.').reduce((o: any, k) => (o == null ? o : o[k]), state);
+
+  function setPath(path: string, value: any) {
+    const keys = path.split('.');
+    const last = keys.pop()!;
+    keys.reduce((o: any, k) => o[k], state)[last] = value;
+  }
+
+  // --------------------------------------------------------------- helpers --
+
+  const esc = (s: any) =>
+    String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+  const list = (s: string) =>
+    String(s ?? '')
+      .split(/[,\s]+/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+
+  const humanize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/[_-]+/g, ' ') : s);
+
+  function parseFields(raw: string) {
+    return String(raw ?? '')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [head, opts] = line.split('=');
+        const [name, type] = head.split(':').map((x) => x.trim());
+        return { name, type: type || 'text', options: opts ? opts.split('|').map((o) => o.trim()).filter(Boolean) : [] };
+      });
+  }
+
+  function text(path: string, label: string, opts: Dict = {}) {
+    return `<label class="sb-field${opts.wide ? ' sb-wide' : ''}">
+      <span class="sb-label">${esc(label)}${opts.required ? ' <em>required</em>' : ''}</span>
+      <input class="sb-input${opts.mono ? ' sb-mono' : ''}" type="${opts.type ?? 'text'}" data-bind="${path}" value="${esc(getPath(path) ?? '')}" placeholder="${esc(opts.placeholder ?? '')}">
+      ${opts.help ? `<span class="sb-help">${opts.help}</span>` : ''}
+    </label>`;
+  }
+
+  function area(path: string, label: string, opts: Dict = {}) {
+    return `<label class="sb-field sb-wide">
+      <span class="sb-label">${esc(label)}${opts.required ? ' <em>required</em>' : ''}</span>
+      <textarea class="sb-input sb-mono" rows="${opts.rows ?? 4}" spellcheck="false" data-bind="${path}" placeholder="${esc(opts.placeholder ?? '')}">${esc(getPath(path) ?? '')}</textarea>
+      ${opts.help ? `<span class="sb-help">${opts.help}</span>` : ''}
+    </label>`;
+  }
+
+  function select(path: string, label: string, options: [string, string][], opts: Dict = {}) {
+    const value = getPath(path) ?? '';
+    return `<label class="sb-field${opts.wide ? ' sb-wide' : ''}">
+      <span class="sb-label">${esc(label)}</span>
+      <select class="sb-input" data-bind="${path}"${opts.rerender ? ' data-rerender' : ''}>
+        ${options.map(([v, l]) => `<option value="${esc(v)}"${v === value ? ' selected' : ''}>${esc(l)}</option>`).join('')}
+      </select>
+      ${opts.help ? `<span class="sb-help">${opts.help}</span>` : ''}
+    </label>`;
+  }
+
+  const check = (path: string, label: string, opts: Dict = {}) => `<label class="sb-check">
+      <input type="checkbox" data-bind="${path}"${getPath(path) ? ' checked' : ''}${opts.rerender ? ' data-rerender' : ''}>
+      <span>${label}</span>
+    </label>`;
+
+  // ----------------------------------------------------------------- steps --
+
+  const STEPS = [
+    { title: 'Identity', hint: 'Name and version', render: stepIdentity },
+    { title: 'Deployment', hint: 'What it runs', render: stepDeploy },
+    { title: 'Questions', hint: 'Asked before deploying', render: stepParams },
+    { title: 'Permissions', hint: 'What the script may reach', render: stepPerms },
+    { title: 'Interface', hint: 'Tabs and panels', render: stepUI },
+    { title: 'Hooks', hint: 'Actions that run on their own', render: stepHooks },
+    { title: 'Review', hint: 'Check and download', render: stepReview },
+  ];
+
+  function stepIdentity() {
+    return {
+      intro: 'How the station is named, listed and versioned. Operators see all of this before installing.',
+      body: `<div class="sb-grid">
+        ${text('name', 'Name', { required: true, placeholder: 'Minecraft' })}
+        ${text('id', 'Id', { required: true, mono: true, placeholder: 'minecraft', help: 'Lowercase letters, digits and hyphens. Also the default subdomain.' })}
+        ${text('description', 'Description', { required: true, wide: true, placeholder: 'A server with a console and a mod manager' })}
+        ${text('version', 'Version', { required: true, mono: true, help: 'Yours, not Quasar’s. Raise it when you publish a change.' })}
+        ${text('author', 'Author', { placeholder: 'Optional' })}
+      </div>`,
+    };
+  }
+
+  function stepDeploy() {
+    const d = state.deploy;
+    const byType =
+      d.type === 'compose'
+        ? `${area('deploy.compose', 'Compose file', { required: true, rows: 8, placeholder: 'services:\n  web:\n    image: nginx:alpine' })}
+           ${text('deploy.compose_service', 'Service that serves the domain', { mono: true, placeholder: 'web', help: 'Leave empty if Quasar can work it out.' })}`
+        : `${text('deploy.image_ref', 'Image', { required: true, mono: true, placeholder: 'nginx:alpine' })}
+           ${text('deploy.data_mount', 'Persistent data mount', { mono: true, placeholder: '/data', help: 'A path in the container, kept in the application’s folder.' })}`;
+    return {
+      intro:
+        'What the station deploys. This block is an ordinary <a href="../../catalogue/format/#entry">catalogue entry</a>: the application it creates is a normal Quasar application.',
+      body: `<div class="sb-grid">
+        ${select('deploy.type', 'Deploy type', [['image', 'Docker image'], ['compose', 'Docker Compose']], { rerender: true })}
+        ${text('deploy.port', 'Port', { required: true, type: 'number', help: 'The port the domain routes to.' })}
+        ${byType}
+        ${area('deploy.env', 'Environment (.env)', { rows: 3, placeholder: 'VERSION={{VERSION}}\nSECRET={{RANDOM}}', help: '<code>{{NAME}}</code> is replaced by Quasar. <code>{{RANDOM}}</code>, <code>{{HOST}}</code> and <code>{{URL}}</code> need no question.' })}
+        ${text('deploy.app_name', 'Proposed application name', { placeholder: 'Defaults to the station name' })}
+        ${text('deploy.subdomain', 'Proposed subdomain', { mono: true, placeholder: 'Defaults to the id' })}
+        <div class="sb-wide">${check('deploy.raw', 'Not HTTP — a game server or a database, reached at the server address and port')}</div>
+      </div>`,
+    };
+  }
+
+  function stepParams() {
+    const rows = state.params
+      .map(
+        (p: Dict, i: number) => `<div class="sb-item">
+          <div class="sb-grid">
+            ${text(`params.${i}.name`, 'Name', { mono: true, placeholder: 'VERSION', help: 'Used as <code>{{NAME}}</code>.' })}
+            ${text(`params.${i}.label`, 'Question', { placeholder: 'Minecraft version' })}
+            ${select(`params.${i}.kind`, 'Kind', [['text', 'text'], ['select', 'select'], ['number', 'number'], ['port', 'port']], { rerender: true })}
+            ${text(`params.${i}.default`, 'Default answer')}
+            ${p.kind === 'select' ? text(`params.${i}.options`, 'Choices', { wide: true, placeholder: '1.21.4, 1.21.1', help: 'Comma-separated.' }) : ''}
+          </div>
+          <button type="button" class="sb-remove" data-act="remove" data-path="params" data-index="${i}">Remove</button>
+        </div>`,
+      )
+      .join('');
+    return {
+      intro:
+        'Questions asked before the application is created. Each answer replaces <code>{{NAME}}</code> in the image, the compose file, the environment, the name and the subdomain — which is what lets one station be deployed several times.',
+      body: `${rows || '<p class="sb-empty">No question. The station deploys the same thing every time, which is fine.</p>'}
+        <button type="button" class="sb-add" data-act="add-param">+ Add a question</button>`,
+    };
+  }
+
+  function stepPerms() {
+    const p = state.perms;
+    const block = (key: string, title: string, body: string, warn = '') => `<div class="sb-perm">
+        ${check(`perms.${key}.on`, `<code>${title}</code>`, { rerender: true })}
+        ${p[key].on ? `<div class="sb-perm-body">${warn ? `<p class="sb-warn">${warn}</p>` : ''}${body}</div>` : ''}
+      </div>`;
+    return {
+      intro:
+        'A station reaches nothing by default. Tick only what the script needs: operators read this list in plain words and accept it as a whole before installing. <a href="../../stations/permissions/">Reference</a>.',
+      body: [
+        block('exec', 'exec — run commands in containers', text('perms.exec.services', 'Services', { mono: true, placeholder: 'minecraft' }), 'This is root access to those containers. Ask for <code>logs</code> instead when reading output is all you need.'),
+        block('logs', 'logs — read container logs', text('perms.logs.services', 'Services', { mono: true, placeholder: 'minecraft' })),
+        block('files', 'files — read and write files', text('perms.files.paths', 'Paths', { mono: true, placeholder: 'data/mods/**, data/server.properties', help: 'Relative to the application folder. Comma-separated globs.' })),
+        block('env', 'env — environment variables', `<div class="sb-grid">${text('perms.env.read', 'Read', { mono: true, placeholder: 'VERSION' })}${text('perms.env.write', 'Write', { mono: true, placeholder: 'VERSION' })}</div>`),
+        block('netInternal', 'net.internal — the application’s own containers', `<div class="sb-grid">${text('perms.netInternal.services', 'Services', { mono: true, placeholder: 'web' })}${text('perms.netInternal.ports', 'Ports', { mono: true, placeholder: '8123' })}</div>`),
+        block('netExternal', 'net.external — the internet', text('perms.netExternal.allow', 'Hosts', { mono: true, placeholder: 'api.modrinth.com', help: 'Exact host names, HTTPS only.' })),
+        block('lifecycle', 'lifecycle — act on the application', `<div class="sb-row">${LIFECYCLE.map((v) => check(`perms.lifecycle.${v}`, v)).join('')}</div>`),
+        `<div class="sb-perm">${check('perms.notify.on', '<code>notify — send notifications</code>')}</div>`,
+      ].join(''),
+    };
+  }
+
+  function panelForm(t: number, i: number) {
+    const base = `tabs.${t}.panels.${i}`;
+    const p = state.tabs[t].panels[i];
+    const action = (label = 'Action', placeholder = `get_${p.id || 'data'}`) =>
+      text(`${base}.action`, label, { mono: true, placeholder, help: 'The script function this panel calls.' });
+    let body = '';
+
+    if (DATA_TYPES.includes(p.type)) {
+      body += action();
+      if (p.type === 'table') {
+        body += text(`${base}.columns`, 'Columns', { mono: true, wide: true, placeholder: 'name, version', help: 'Keys read from each row, comma-separated.' });
+        body += text(`${base}.empty`, 'Empty message', { wide: true, placeholder: 'Nothing here yet.' });
+        body += text(`${base}.rowLabel`, 'Row button', { placeholder: 'Remove' });
+        body += text(`${base}.rowAction`, 'Row button action', { mono: true, placeholder: 'remove_item' });
+        body += text(`${base}.rowConfirm`, 'Row button question', { wide: true, placeholder: 'Remove {{name}}?' });
+      }
+      body += text(`${base}.refresh`, 'Refresh every (s)', { type: 'number', placeholder: 'Never' });
+    } else if (p.type === 'form') {
+      body += area(`${base}.fields`, 'Fields', {
+        rows: 3,
+        placeholder: 'motd\ndifficulty:select=easy|normal|hard\npvp:toggle',
+        help: `One per line: <code>name</code>, <code>name:type</code> or <code>name:select=a|b</code>. Types: ${FIELD_TYPES.join(', ')}.`,
+      });
+      body += text(`${base}.submitLabel`, 'Button label');
+      body += text(`${base}.action`, 'Submit action', { mono: true, placeholder: `save_${p.id || 'form'}` });
+      body += text(`${base}.fillAction`, 'Fill action', { mono: true, placeholder: `read_${p.id || 'form'}`, help: 'Optional: returns the values the form opens with.' });
+    } else if (p.type === 'button' || p.type === 'confirm') {
+      body += text(`${base}.label`, 'Button label', { placeholder: 'Restart' });
+      body += action('Action', p.id || 'do_something');
+      if (p.type === 'confirm') body += text(`${base}.confirm`, 'Question asked first', { wide: true, placeholder: 'Restart it? Players are disconnected.' });
+      body += select(`${base}.tone`, 'Tone', [['', 'default'], ['accent', 'accent'], ['ok', 'ok'], ['warn', 'warn'], ['err', 'err']]);
+      body += `<div class="sb-wide">${check(`${base}.long`, 'Long action — runs in the background with a progress pane')}</div>`;
+    } else if (p.type === 'search') {
+      body += text(`${base}.placeholder`, 'Placeholder', { placeholder: 'Search…' });
+      body += action('Action', 'search');
+    } else if (p.type === 'log') {
+      body += text(`${base}.service`, 'Service', { mono: true, placeholder: 'minecraft', help: 'Needs the <code>logs</code> permission.' });
+      body += text(`${base}.tail`, 'Lines', { type: 'number' });
+    } else if (p.type === 'iframe') {
+      body += text(`${base}.service`, 'Service', { mono: true, placeholder: 'web', help: 'Needs <code>net.internal</code> for this service and port.' });
+      body += text(`${base}.port`, 'Port', { type: 'number', placeholder: '8123' });
+      body += text(`${base}.path`, 'Path', { mono: true });
+      body += text(`${base}.height`, 'Height', { mono: true, placeholder: '420px' });
+    } else if (p.type === 'chart') {
+      body += text(`${base}.series`, 'Series', { mono: true, placeholder: 'players', help: 'Recorded with <code>quasar.series.record</code> from a scheduled hook.' });
+      body += select(`${base}.kind`, 'Kind', [['line', 'line'], ['area', 'area'], ['bar', 'bar'], ['stacked', 'stacked']]);
+      body += text(`${base}.range`, 'Range', { mono: true, placeholder: '24h' });
+      body += text(`${base}.unit`, 'Unit', { placeholder: ' online' });
+    } else if (p.type === 'banner') {
+      body += text(`${base}.text`, 'Text', { wide: true, placeholder: 'Read this before touching anything.' });
+      body += select(`${base}.tone`, 'Tone', [['', 'default'], ['accent', 'accent'], ['ok', 'ok'], ['warn', 'warn'], ['err', 'err']]);
+    } else if (p.type === 'list' || p.type === 'timeline') {
+      body += text(`${base}.empty`, 'Empty message', { wide: true });
+    }
+
+    return `<div class="sb-item" data-panel="${p.id || ''}">
+      <div class="sb-grid">
+        ${select(`${base}.type`, 'Component', Object.entries(PANEL_TYPES) as [string, string][], { rerender: true })}
+        ${text(`${base}.id`, 'Panel id', { mono: true, required: true, placeholder: 'players' })}
+        ${p.type !== 'divider' ? text(`${base}.title`, 'Title') : ''}
+        ${p.type !== 'divider' ? select(`${base}.width`, 'Width', [['', 'full'], ['half', 'half'], ['third', 'third']]) : ''}
+        ${body}
+      </div>
+      <div class="sb-row">
+        <button type="button" class="sb-remove" data-act="move" data-path="tabs.${t}.panels" data-index="${i}" data-by="-1" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="sb-remove" data-act="move" data-path="tabs.${t}.panels" data-index="${i}" data-by="1" ${i === state.tabs[t].panels.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="sb-remove" data-act="remove" data-path="tabs.${t}.panels" data-index="${i}">Remove panel</button>
+      </div>
+    </div>`;
+  }
+
+  function stepUI() {
+    const tabs = state.tabs
+      .map(
+        (tab: Dict, t: number) => `<div class="sb-tab">
+          <div class="sb-grid">
+            ${text(`tabs.${t}.name`, 'Tab name', { required: true, placeholder: 'Server' })}
+            ${text(`tabs.${t}.id`, 'Tab id', { mono: true, required: true, placeholder: 'server' })}
+          </div>
+          ${tab.panels.map((_: Dict, i: number) => panelForm(t, i)).join('') || '<p class="sb-empty">No panel yet.</p>'}
+          <div class="sb-row">
+            <button type="button" class="sb-add" data-act="add-panel" data-tab="${t}">+ Add a panel</button>
+            <button type="button" class="sb-remove" data-act="remove" data-path="tabs" data-index="${t}">Remove tab</button>
+          </div>
+        </div>`,
+      )
+      .join('');
+    return {
+      intro:
+        'The tabs of the station’s block, at the top of the application’s page. Each panel shows what one script action returns; the preview shows the shape of the page, with sample data. <a href="../../stations/interface/">Reference</a>.',
+      body: `${tabs}
+        <button type="button" class="sb-add" data-act="add-tab">+ Add a tab</button>
+        <details class="sb-details">
+          <summary>Look (optional)</summary>
+          <p class="sb-help">A station sets an accent and a shape. The background, the text and the status colours always come from the operator’s theme, so it stays readable everywhere. <a href="../../stations/theme/">Reference</a>.</p>
+          <div class="sb-grid">
+            ${text('look.accent', 'Accent', { mono: true, placeholder: '#5b8c3a' })}
+            ${text('look.tint', 'Tint', { type: 'number', placeholder: '0.06', help: 'Accent mixed into surfaces, 0 to 0.2.' })}
+            ${text('look.radius', 'Corner radius', { mono: true, placeholder: '2px' })}
+          </div>
+        </details>`,
+    };
+  }
+
+  function stepHooks() {
+    const every = state.hooks.every
+      .map(
+        (_: Dict, i: number) => `<div class="sb-item">
+          <div class="sb-grid">
+            ${text(`hooks.every.${i}.minutes`, 'Every (minutes)', { type: 'number', help: 'One minute at the least.' })}
+            ${text(`hooks.every.${i}.action`, 'Action', { mono: true, placeholder: 'sample' })}
+          </div>
+          <button type="button" class="sb-remove" data-act="remove" data-path="hooks.every" data-index="${i}">Remove</button>
+        </div>`,
+      )
+      .join('');
+    return {
+      intro:
+        'Actions that run without anyone clicking. A failing hook never blocks a deployment, and scheduled actions only run while the application is running. Leave empty if you have none. <a href="../../stations/hooks-series/">Reference</a>.',
+      body: `<div class="sb-grid">
+        ${text('hooks.after_deploy', 'After each deployment', { mono: true })}
+        ${text('hooks.on_start', 'When it starts', { mono: true })}
+        ${text('hooks.on_stop', 'When it stops', { mono: true })}
+        ${text('hooks.on_health_fail', 'When a health check fails', { mono: true })}
+      </div>
+      ${every}
+      <button type="button" class="sb-add" data-act="add-every">+ Add a scheduled action</button>`,
+    };
+  }
+
+  /**
+   * What the form could not write. The document is complete and installable as
+   * it stands; the script is not, and saying which functions are still
+   * placeholders is more use than a general warning nobody acts on.
+   */
+  function todoBox(): string {
+    const actions = stubbedActions();
+    if (!actions.length) return '';
+    return `<div class="sb-todo">
+      <p class="sb-todo-head">The script is a skeleton: ${actions.length} function${actions.length > 1 ? 's' : ''} to write</p>
+      <p class="sb-help">Each one returns placeholder data, so every panel draws and the document installs. What a panel actually says can only be read from the application — a mod list, a player count, a dump — so those bodies are yours. Each carries a <code>TODO</code> and a suggested call, chosen from the permissions you granted.</p>
+      <ul class="sb-todo-list">${actions.map((a) => `<li><code>${esc(a)}</code></li>`).join('')}</ul>
+      <p class="sb-help">The <a href="../../stations/script/">script API</a> lists everything they can call.</p>
+    </div>`;
+  }
+
+  function stepReview() {
+    const yaml = toYaml();
+    const errors = issues.filter((i) => i.level === 'error');
+    return {
+      intro: 'What the document says, and what Quasar would say about it.',
+      body: `<div class="sb-review">
+        ${
+          errors.length
+            ? `<p class="sb-review-state sb-review-bad">${errors.length} thing${errors.length > 1 ? 's' : ''} to fix before this installs.</p>`
+            : '<p class="sb-review-state sb-review-good">Nothing to fix. Paste or import this in <strong>Settings → Stations</strong>, and Quasar will show you these permissions before installing it.</p>'
+        }
+        <ul class="sb-checks">${issuesHtml(issues)}</ul>
+        <div class="sb-row">
+          <button type="button" class="sb-btn sb-btn-primary" data-act="download">Download ${esc(state.id || 'station')}.yaml</button>
+          <button type="button" class="sb-btn" data-act="copy">Copy the document</button>
+        </div>
+        ${todoBox()}
+        <pre class="sb-yaml sb-yaml-full"><code>${esc(yaml)}</code></pre>
+      </div>`,
+    };
+  }
+
+  // ------------------------------------------------------------------ YAML --
+
+  function q(value: any): string {
+    const s = String(value);
+    if (s === '') return '""';
+    const plain = /^[A-Za-z_./@][A-Za-z0-9_ ./@:+-]*$/.test(s) && !/:\s|\s#|:$|\s$/.test(s);
+    const reserved = /^(true|false|yes|no|on|off|null|~)$/i.test(s);
+    return plain && !reserved ? s : JSON.stringify(s);
+  }
+
+  const flow = (items: (string | number)[], raw = false) => `[${items.map((i) => (raw ? String(i) : q(i))).join(', ')}]`;
+
+  function block(key: string, value: string, indent: string) {
+    const lines = value.replace(/\s+$/, '').split('\n');
+    return `${indent}${key}: |\n${lines.map((l) => (l ? `${indent}  ${l}` : '')).join('\n')}\n`;
+  }
+
+  function toYaml(): string {
+    const s = state;
+    const d = s.deploy;
+    let y = 'schema: 1\n';
+    y += `id: ${q(s.id)}\nname: ${q(s.name)}\ndescription: ${q(s.description)}\n`;
+    if (s.author) y += `author: ${q(s.author)}\n`;
+    y += `version: ${JSON.stringify(String(s.version))}\n`;
+
+    y += '\ndeploy:\n';
+    if (d.type === 'compose') y += '  deploy_type: compose\n';
+    if (d.type === 'image') {
+      y += `  image_ref: ${q(d.image_ref)}\n`;
+      if (d.data_mount) y += `  data_mount: ${q(d.data_mount)}\n`;
+    } else if (d.compose_service) y += `  compose_service: ${q(d.compose_service)}\n`;
+    y += `  port: ${Number(d.port) || 0}\n`;
+    if (d.raw) y += '  raw: true\n';
+    if (d.app_name) y += `  app_name: ${q(d.app_name)}\n`;
+    if (d.subdomain) y += `  subdomain: ${q(d.subdomain)}\n`;
+    if (s.params.length) {
+      y += '  params:\n';
+      for (const p of s.params) {
+        y += `    - name: ${q(p.name)}\n`;
+        if (p.label) y += `      label: ${q(p.label)}\n`;
+        if (p.kind && p.kind !== 'text') y += `      kind: ${p.kind}\n`;
+        if (p.default !== '' && p.default != null) y += `      default: ${JSON.stringify(String(p.default))}\n`;
+        if (p.kind === 'select') y += `      options: ${flow(list(p.options).map((o) => JSON.stringify(o)), true)}\n`;
+      }
+    }
+    if (d.env.trim()) y += block('env', d.env, '  ');
+    if (d.type === 'compose' && d.compose.trim()) y += block('compose', d.compose, '  ');
+
+    const p = s.perms;
+    const perms: string[] = [];
+    if (p.exec.on) perms.push(`  exec: {services: ${flow(list(p.exec.services))}}`);
+    if (p.logs.on) perms.push(`  logs: {services: ${flow(list(p.logs.services))}}`);
+    if (p.files.on) perms.push(`  files: {paths: ${flow(list(p.files.paths).map((x) => JSON.stringify(x)), true)}}`);
+    if (p.env.on) {
+      const parts = [];
+      if (list(p.env.read).length) parts.push(`read: ${flow(list(p.env.read))}`);
+      if (list(p.env.write).length) parts.push(`write: ${flow(list(p.env.write))}`);
+      perms.push(`  env: {${parts.join(', ')}}`);
+    }
+    if (p.netInternal.on) perms.push(`  net.internal: {services: ${flow(list(p.netInternal.services))}, ports: ${flow(list(p.netInternal.ports).map(Number), true)}}`);
+    if (p.netExternal.on) perms.push(`  net.external: {allow: ${flow(list(p.netExternal.allow))}}`);
+    if (p.lifecycle.on) perms.push(`  lifecycle: ${flow(LIFECYCLE.filter((v) => p.lifecycle[v]))}`);
+    if (p.notify.on) perms.push('  notify: true');
+    if (perms.length) y += `\npermissions:\n${perms.join('\n')}\n`;
+
+    const look = s.look;
+    const tabs = s.tabs.filter((t: Dict) => t.id || t.name || t.panels.length);
+    const themed = look.accent || look.tint || look.radius;
+    if (tabs.length || themed) {
+      y += '\nui:\n';
+      if (themed) {
+        y += '  theme:\n';
+        if (look.accent) y += `    accent: ${JSON.stringify(look.accent)}\n`;
+        if (look.tint) y += `    tint: ${Number(look.tint)}\n`;
+        if (look.radius) y += `    radius: ${q(look.radius)}\n`;
+      }
+      if (tabs.length) {
+        y += '  tabs:\n';
+        for (const t of tabs) {
+          y += `    - id: ${q(t.id)}\n      name: ${q(t.name)}\n      panels:\n`;
+          for (const pn of t.panels) y += panelYaml(pn);
+        }
+      }
+    }
+
+    const h = s.hooks;
+    const hooks: string[] = [];
+    for (const k of EVENT_HOOKS) if (h[k]) hooks.push(`  ${k}: {action: ${q(h[k])}}`);
+    const every = h.every.filter((e: Dict) => e.action);
+    if (every.length) {
+      hooks.push('  every:');
+      for (const e of every) hooks.push(`    - {minutes: ${Number(e.minutes) || 0}, action: ${q(e.action)}}`);
+    }
+    if (hooks.length) y += `\nhooks:\n${hooks.join('\n')}\n`;
+
+    const script = scriptStubs();
+    if (script) y += `\n${block('script', script, '')}`;
+    return y;
+  }
+
+  function panelYaml(p: Dict): string {
+    const i = '        ';
+    let y = `${i}- id: ${q(p.id)}\n${i}  type: ${p.type}\n`;
+    const line = (k: string, v: string) => (y += `${i}  ${k}: ${v}\n`);
+    if (p.title && p.type !== 'divider') line('title', q(p.title));
+    if (p.width) line('width', p.width);
+    if (p.tone && ['button', 'confirm', 'banner'].includes(p.type)) line('tone', p.tone);
+
+    if (DATA_TYPES.includes(p.type)) {
+      line('source', `{action: ${q(p.action)}}`);
+      if (p.type === 'table') {
+        y += `${i}  columns:\n`;
+        for (const c of list(p.columns)) y += `${i}    - {key: ${q(c)}, label: ${q(humanize(c))}}\n`;
+        if (p.rowAction) {
+          const parts = [`label: ${q(p.rowLabel || humanize(p.rowAction))}`, `action: ${q(p.rowAction)}`];
+          if (p.rowConfirm) parts.push(`confirm: ${JSON.stringify(p.rowConfirm)}`);
+          y += `${i}  row_actions:\n${i}    - {${parts.join(', ')}}\n`;
+        }
+      }
+      if (p.empty && ['table', 'list', 'timeline'].includes(p.type)) line('empty', JSON.stringify(p.empty));
+      if (Number(p.refresh) > 0) line('refresh', `{seconds: ${Number(p.refresh)}}`);
+    } else if (p.type === 'form') {
+      if (p.fillAction) line('source', `{action: ${q(p.fillAction)}}`);
+      y += `${i}  fields:\n`;
+      for (const f of parseFields(p.fields)) {
+        const parts = [`name: ${q(f.name)}`, `label: ${q(humanize(f.name))}`];
+        if (f.type !== 'text') parts.push(`type: ${f.type}`);
+        if (f.options.length) parts.push(`options: ${flow(f.options)}`);
+        y += `${i}    - {${parts.join(', ')}}\n`;
+      }
+      line('submit', `{label: ${q(p.submitLabel || 'Save')}, action: ${q(p.action)}}`);
+    } else if (p.type === 'button' || p.type === 'confirm') {
+      line('label', q(p.label));
+      line('action', q(p.action));
+      if (p.type === 'confirm') line('confirm', JSON.stringify(p.confirm));
+      if (p.long) line('long', 'true');
+    } else if (p.type === 'search') {
+      if (p.placeholder) line('placeholder', q(p.placeholder));
+      line('action', q(p.action));
+    } else if (p.type === 'log') {
+      line('service', q(p.service));
+      if (Number(p.tail) > 0) line('tail', String(Number(p.tail)));
+    } else if (p.type === 'iframe') {
+      const path = p.path ? (p.path.startsWith('/') ? p.path : `/${p.path}`) : '/';
+      line('src', JSON.stringify(`{{service:${p.service}:${p.port}}}${path}`));
+      if (p.height) line('height', q(p.height));
+    } else if (p.type === 'chart') {
+      if (p.kind && p.kind !== 'line') line('kind', p.kind);
+      if (p.range && p.range !== '24h') line('range', q(p.range));
+      if (p.unit) line('unit', JSON.stringify(p.unit));
+      line('source', `{series: ${flow(list(p.series))}}`);
+    } else if (p.type === 'banner') {
+      line('source', `{static: ${JSON.stringify(p.text)}}`);
+    }
+    return y;
+  }
+
+  /**
+   * What the station is allowed to reach, phrased as the call an author would
+   * most likely start from. The suggestions come from the permissions actually
+   * granted rather than from a fixed list, so a station that asked for nothing
+   * is never told to run a command it cannot run.
+   */
+  function reach() {
+    const p = state.perms;
+    const first = (value: string) => list(value)[0] ?? '';
+    return {
+      exec: p.exec.on ? first(p.exec.services) : '',
+      logs: p.logs.on ? first(p.logs.services) : '',
+      file: p.files.on ? first(p.files.paths).replace(/\/?\*+.*$/, '') : '',
+      envRead: p.env.on ? first(p.env.read) : '',
+      envWrite: p.env.on ? first(p.env.write) : '',
+      service: p.netInternal.on ? first(p.netInternal.services) : '',
+      port: p.netInternal.on ? first(p.netInternal.ports) : '',
+      host: p.netExternal.on ? first(p.netExternal.allow) : '',
+      verbs: p.lifecycle.on ? LIFECYCLE.filter((v) => p.lifecycle[v]) : [],
+    };
+  }
+
+  /** The call to suggest to an action that reads something. */
+  function readHint(): string {
+    const r = reach();
+    if (r.exec) return `const out = quasar.exec('${r.exec}', ['sh', '-c', 'your command']).stdout`;
+    if (r.service && r.port) return `const answer = quasar.http.get(quasar.service('${r.service}', ${r.port}) + '/').json()`;
+    if (r.file) return `const text = quasar.files.read('${r.file || 'data/your-file'}')`;
+    if (r.host) return `const answer = quasar.http.get('https://${r.host}/').json()`;
+    if (r.envRead) return `const value = quasar.env.get('${r.envRead}')`;
+    if (r.logs) return `const output = quasar.logs('${r.logs}', { tail: 50 })`;
+    return "const kept = quasar.store.get('something')";
+  }
+
+  /** The call to suggest to an action that changes something. */
+  function writeHint(): string {
+    const r = reach();
+    if (r.file) return `quasar.files.write('${r.file || 'data/your-file'}/a-file', 'new content')`;
+    if (r.envWrite) return `quasar.env.set('${r.envWrite}', 'a new value')`;
+    if (r.exec) return `quasar.exec('${r.exec}', ['sh', '-c', 'your command'])`;
+    if (r.verbs.includes('restart')) return 'quasar.app.restart()';
+    if (r.verbs.length) return `quasar.app.${r.verbs[0] === 'set_image' ? "setImage('image:tag')" : r.verbs[0] + '()'}`;
+    return "quasar.store.set('something', 'a value')";
+  }
+
+  /**
+   * The script, as far as a form can write one: every action the interface and
+   * the hooks name, each returning the shape its panel expects.
+   *
+   * The values are placeholders, and say so. A panel's *shape* follows from the
+   * document — a table of two columns is two columns whoever writes it — while
+   * what it *says* can only be read from the application, which is why every
+   * stub carries the line to replace and the call this station's own
+   * permissions make available.
+   */
+  function scriptStubs(): string {
+    const fns = new Map<string, string>();
+    const add = (name: string, body: string) => {
+      if (name && actionRe.test(name) && !fns.has(name)) fns.set(name, body);
+    };
+    /** One stub: what it feeds, what to write, then the placeholder it returns. */
+    const stub = (name: string, what: string, hint: string, args: string, body: string) =>
+      `// Feeds ${what}.\n// TODO — write this. For example: ${hint}\nexport function ${name}(${args}) {\n${body}\n}`;
+
+    for (const t of state.tabs) {
+      for (const p of t.panels) {
+        const refresh = p.id ? `, refresh: ['${p.id}']` : '';
+        const feeds = `the "${p.title || p.id}" ${p.type}`;
+        switch (p.type) {
+          case 'stat':
+          case 'gauge':
+            add(p.action, stub(p.action, feeds, readHint(), '', "  return { data: { value: 0, label: '' } }"));
+            break;
+          case 'keyvalue':
+            add(p.action, stub(p.action, feeds, readHint(), '', "  return { data: [\n    { key: 'Status', value: quasar.app.status },\n  ] }"));
+            break;
+          case 'table': {
+            const row = list(p.columns).map((c) => `${actionRe.test(c) ? c : JSON.stringify(c)}: ''`).join(', ');
+            add(p.action, stub(p.action, feeds, readHint(), '', `  return { data: [\n    { ${row} },\n  ] }`));
+            if (p.rowAction)
+              add(
+                p.rowAction,
+                stub(p.rowAction, `the row button of ${feeds}, and receives that row's fields`, writeHint(), 'row', `  return { toast: 'Done'${refresh} }`),
+              );
+            break;
+          }
+          case 'list':
+          case 'timeline':
+            add(p.action, stub(p.action, feeds, readHint(), '', "  return { data: [\n    { label: 'Something', note: '' },\n  ] }"));
+            break;
+          case 'markdown':
+          case 'code':
+            add(p.action, stub(p.action, feeds, readHint(), '', "  return { data: '' }"));
+            break;
+          case 'image':
+            add(p.action, stub(p.action, `${feeds}, and returns an https:// URL or a data:image/… URI`, readHint(), '', "  return { data: '' }"));
+            break;
+          case 'form': {
+            const names = parseFields(p.fields).map((f) => f.name).filter(Boolean);
+            if (p.fillAction)
+              add(
+                p.fillAction,
+                stub(
+                  p.fillAction,
+                  `the values ${feeds} opens with`,
+                  readHint(),
+                  '',
+                  `  return { data: { ${names.map((n) => `${actionRe.test(n) ? n : JSON.stringify(n)}: ''`).join(', ')} } }`,
+                ),
+              );
+            add(
+              p.action,
+              stub(
+                p.action,
+                `the submit button of ${feeds}, and receives ${names.length ? names.map((n) => `values.${n}`).join(', ') : 'the form values'}`,
+                writeHint(),
+                'values',
+                `  return { toast: 'Saved'${refresh} }`,
+              ),
+            );
+            break;
+          }
+          case 'button':
+          case 'confirm':
+            add(
+              p.action,
+              stub(
+                p.action,
+                feeds,
+                writeHint(),
+                '',
+                p.long ? "  quasar.progress(50, 'Halfway')\n  return { toast: 'Done' }" : "  return { toast: 'Done' }",
+              ),
+            );
+            break;
+          case 'search':
+            add(p.action, stub(p.action, `${feeds}, and receives what was typed as q`, readHint(), '{ q }', "  return { toast: 'Searched for ' + q }"));
+            break;
+        }
+      }
+    }
+
+    const hookOf: Record<string, string> = {
+      after_deploy: 'the after_deploy hook, which runs after each deployment',
+      on_start: 'the on_start hook, which runs when the application starts',
+      on_stop: 'the on_stop hook, which runs when the application stops',
+      on_health_fail: 'the on_health_fail hook, which runs when a health check fails',
+    };
+    for (const k of EVENT_HOOKS) if (state.hooks[k]) add(state.hooks[k], stub(state.hooks[k], hookOf[k], writeHint(), '', '  '));
+
+    const recorded = state.tabs.flatMap((t: Dict) => t.panels).filter((p: Dict) => p.type === 'chart').flatMap((p: Dict) => list(p.series));
+    for (const e of state.hooks.every) {
+      if (!e.action) continue;
+      const body = recorded.length
+        ? recorded.map((name: string) => `  quasar.series.record('${name}', 0)`).join('\n')
+        : '  ';
+      add(
+        e.action,
+        stub(
+          e.action,
+          `a schedule: it runs every ${Number(e.minutes) || '?'} minutes, while the application is running`,
+          recorded.length ? 'replace the 0 with what you measured' : readHint(),
+          '',
+          body,
+        ),
+      );
+    }
+
+    if (fns.size === 0) return '';
+
+    const banner = [
+      '// Written by the station builder: one function per action the interface',
+      '// and the hooks name, each returning the shape its panel expects.',
+      '//',
+      '// Every value below is a placeholder. The shape of a panel follows from',
+      '// this document, but what it says can only be read from the application',
+      '// itself — so each function is a TODO, and none of them is finished.',
+      '//',
+      '// The API is documented at /docs/stations/script/.',
+    ].join('\n');
+
+    return [banner, ...fns.values()].join('\n\n');
+  }
+
+  /** Every action the script still leaves to be written. */
+  const stubbedActions = (): string[] =>
+    [...scriptStubs().matchAll(/^export function ([A-Za-z_$][A-Za-z0-9_$]*)/gm)].map((m) => m[1]);
+
+  // ---------------------------------------------------------------- checks --
+
+  let issues: Issue[] = [];
+
+  function runChecks(): Issue[] {
+    const out: Issue[] = [];
+    const err = (step: number, text: string) => out.push({ level: 'error', text, step });
+    const warn = (step: number, text: string) => out.push({ level: 'warn', text, step });
+    const s = state;
+    const d = s.deploy;
+    const p = s.perms;
+
+    if (!s.name) err(0, 'The station needs a name.');
+    if (!s.id) err(0, 'The station needs an id.');
+    else if (!idRe.test(s.id)) err(0, `Id "${s.id}": lowercase letters, digits and hyphens only.`);
+    if (!s.description) err(0, 'The station needs a description.');
+    if (!s.version) err(0, 'The station needs a version.');
+
+    if (d.type === 'image' && !d.image_ref) err(1, 'An image is required.');
+    if (d.type === 'compose' && !d.compose.trim()) err(1, 'A compose file is required.');
+    if (!(Number(d.port) >= 1 && Number(d.port) <= 65535)) err(1, 'The port must be between 1 and 65535.');
+
+    const paramNames = new Set<string>();
+    for (const question of s.params) {
+      if (!question.name) err(2, 'A question has no name.');
+      else if (!paramRe.test(question.name)) err(2, `Question "${question.name}": letters, digits and underscores only.`);
+      else if (paramNames.has(question.name)) err(2, `Two questions are named "${question.name}".`);
+      paramNames.add(question.name);
+      if (question.kind === 'select' && !list(question.options).length) err(2, `Question "${question.name}" is a select with no choices.`);
+    }
+    for (const m of [d.image_ref, d.compose, d.env, d.app_name, d.subdomain].join('\n').matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)) {
+      if (!paramNames.has(m[1]) && !BUILTIN_PLACEHOLDERS.includes(m[1])) {
+        err(2, `{{${m[1]}}} is used in the deployment, but no question is named ${m[1]}.`);
+        paramNames.add(m[1]);
+      }
+    }
+
+    const services = (value: string, what: string) => {
+      if (!list(value).length) err(3, `${what}: name at least one service.`);
+      for (const sv of list(value)) if (!serviceRe.test(sv)) err(3, `${what}: "${sv}" is not a valid service name.`);
+    };
+    if (p.exec.on) {
+      services(p.exec.services, 'exec');
+      warn(3, 'exec is root access to those containers. Operators are warned about it on the install screen.');
+    }
+    if (p.logs.on) services(p.logs.services, 'logs');
+    if (p.files.on) {
+      if (!list(p.files.paths).length) err(3, 'files: name at least one path.');
+      for (const path of list(p.files.paths))
+        if (path.startsWith('/') || path.split('/').includes('..')) err(3, `files: "${path}" must be relative to the application folder, without "..".`);
+    }
+    if (p.env.on && !list(p.env.read).length && !list(p.env.write).length) err(3, 'env: name at least one key to read or write.');
+    if (p.netInternal.on) {
+      services(p.netInternal.services, 'net.internal');
+      if (!list(p.netInternal.ports).length) err(3, 'net.internal: name at least one port.');
+    }
+    if (p.netExternal.on) {
+      if (!list(p.netExternal.allow).length) err(3, 'net.external: name at least one host.');
+      for (const h of list(p.netExternal.allow)) if (!hostRe.test(h)) err(3, `net.external: "${h}" is not an exact host name.`);
+    }
+    if (p.lifecycle.on) {
+      if (!LIFECYCLE.some((v) => p.lifecycle[v])) err(3, 'lifecycle: tick at least one verb.');
+      if (p.lifecycle.stop) warn(3, 'lifecycle: most stations have no reason to ask for stop.');
+    }
+
+    const look = s.look;
+    if (look.accent && !hexRe.test(look.accent)) err(4, `Look: accent "${look.accent}" is not a hex colour like #5b8c3a.`);
+    if (look.tint && !(Number(look.tint) >= 0 && Number(look.tint) <= 0.2)) err(4, 'Look: tint goes from 0 to 0.2.');
+    if (look.radius && !lengthRe.test(look.radius)) err(4, `Look: radius "${look.radius}" is not a length like 2px.`);
+
+    const hooks = s.hooks;
+    const hasHooks = EVENT_HOOKS.some((k) => hooks[k]) || hooks.every.some((e: Dict) => e.action);
+    if (!state.tabs.length && !hasHooks) err(4, 'A station needs at least one tab, or one hook.');
+
+    const tabIds = new Set<string>();
+    const panelIds = new Set<string>();
+    const actionName = (name: string, where: string) => {
+      if (!name) err(4, `${where}: an action is required.`);
+      else if (!actionRe.test(name)) err(4, `${where}: "${name}" is not a valid function name.`);
+    };
+    const logServices = p.logs.on ? list(p.logs.services) : [];
+    const netServices = p.netInternal.on ? list(p.netInternal.services) : [];
+    const netPorts = p.netInternal.on ? list(p.netInternal.ports) : [];
+    let charts = 0;
+
+    state.tabs.forEach((t: Dict, ti: number) => {
+      const tw = `Tab ${ti + 1}`;
+      if (!t.id) err(4, `${tw}: an id is required.`);
+      else if (!panelIdRe.test(t.id)) err(4, `${tw}: id "${t.id}" may only use lowercase letters, digits, - and _.`);
+      else if (tabIds.has(t.id)) err(4, `Two tabs share the id "${t.id}".`);
+      tabIds.add(t.id);
+      if (!t.name) err(4, `${tw}: a name is required.`);
+      if (!t.panels.length) err(4, `${tw}: add at least one panel.`);
+
+      t.panels.forEach((pn: Dict, pi: number) => {
+        const w = `${tw}, panel ${pi + 1} (${pn.type})`;
+        if (!pn.id) err(4, `${w}: an id is required.`);
+        else if (!panelIdRe.test(pn.id)) err(4, `${w}: id "${pn.id}" may only use lowercase letters, digits, - and _.`);
+        else if (panelIds.has(pn.id)) err(4, `Two panels share the id "${pn.id}".`);
+        panelIds.add(pn.id);
+
+        if (DATA_TYPES.includes(pn.type)) actionName(pn.action, w);
+        if (pn.type === 'table') {
+          if (!list(pn.columns).length) err(4, `${w}: a table needs columns.`);
+          if (pn.rowAction) actionName(pn.rowAction, `${w}, row button`);
+        }
+        if (pn.type === 'form') {
+          const fields = parseFields(pn.fields);
+          if (!fields.length) err(4, `${w}: a form needs fields.`);
+          for (const f of fields) {
+            if (!FIELD_TYPES.includes(f.type)) err(4, `${w}: field "${f.name}" has an unknown type "${f.type}".`);
+            if (f.type === 'select' && !f.options.length && !pn.fillAction) err(4, `${w}: select "${f.name}" has no choices.`);
+          }
+          actionName(pn.action, `${w}, submit`);
+          if (pn.fillAction) actionName(pn.fillAction, `${w}, fill action`);
+        }
+        if (pn.type === 'button' || pn.type === 'confirm') {
+          if (!pn.label) err(4, `${w}: a label is required.`);
+          actionName(pn.action, w);
+          if (pn.type === 'confirm' && !pn.confirm) err(4, `${w}: the question is required.`);
+        }
+        if (pn.type === 'search') actionName(pn.action, w);
+        if (pn.type === 'log') {
+          if (!pn.service) err(4, `${w}: a service is required.`);
+          else if (!logServices.includes(pn.service)) err(4, `${w}: reading "${pn.service}" needs the logs permission for it.`);
+        }
+        if (pn.type === 'iframe') {
+          if (!pn.service || !pn.port) err(4, `${w}: a service and a port are required.`);
+          else if (!netServices.includes(pn.service) || !netPorts.includes(String(pn.port)))
+            err(4, `${w}: embedding ${pn.service}:${pn.port} needs the net.internal permission for that service and port.`);
+        }
+        if (pn.type === 'chart') {
+          charts++;
+          const series = list(pn.series);
+          if (!series.length) err(4, `${w}: name at least one series.`);
+          for (const name of series) if (!seriesRe.test(name)) err(4, `${w}: series "${name}" must start with a letter and use lowercase letters, digits and _.`);
+          if (pn.range && !/^[1-9][0-9]*[hd]$/.test(pn.range)) err(4, `${w}: range "${pn.range}" should look like 24h or 7d.`);
+        }
+      });
+    });
+
+    for (const k of EVENT_HOOKS) if (hooks[k] && !actionRe.test(hooks[k])) err(5, `Hook ${k}: "${hooks[k]}" is not a valid function name.`);
+    hooks.every.forEach((e: Dict, i: number) => {
+      if (!e.action) err(5, `Scheduled action ${i + 1}: an action is required.`);
+      else if (!actionRe.test(e.action)) err(5, `Scheduled action ${i + 1}: "${e.action}" is not a valid function name.`);
+      if (!(Number(e.minutes) >= 1)) err(5, `Scheduled action ${i + 1}: the shortest interval is one minute.`);
+    });
+    if (charts && !hooks.every.some((e: Dict) => e.action))
+      warn(5, 'A chart reads a series, but no scheduled action records one. Add a schedule that calls quasar.series.record.');
+
+    return out;
+  }
+
+  const issuesHtml = (found: Issue[]) =>
+    found.length
+      ? found.map((i) => `<li class="sb-${i.level}">${esc(i.text)}</li>`).join('')
+      : '<li class="sb-ok">Nothing to fix here.</li>';
+
+  // --------------------------------------------------------------- preview --
+
+  const SAMPLE = {
+    rows: (cols: string[]) => [cols.map((c) => `${humanize(c)} one`), cols.map((c) => `${humanize(c)} two`)],
+  };
+
+  function previewPanel(p: Dict): string {
+    const title = p.title ? `<p class="qp-h-label">${esc(p.title)}</p>` : '';
+    const tone = p.tone && ['button', 'confirm', 'banner'].includes(p.type) ? ` qp-tone-${p.tone}` : '';
+    let body = '';
+
+    switch (p.type) {
+      case 'stat':
+        body = `<p class="qp-stat">42<span class="qp-faint"> / 60</span></p><p class="qp-faint qp-xs">from ${esc(p.action || 'an action')}</p>`;
+        break;
+      case 'gauge':
+        body = `<p class="qp-stat">64<span class="qp-faint"> %</span></p><div class="qp-gauge"><span style="width:64%"></span></div>`;
+        break;
+      case 'keyvalue':
+        body = `<dl class="qp-kv">${[['Status', 'running'], ['Version', '1.21.4']].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
+        break;
+      case 'table': {
+        const cols = list(p.columns);
+        if (!cols.length) {
+          body = `<p class="qp-faint qp-sm">${esc(p.empty || 'No columns yet.')}</p>`;
+          break;
+        }
+        const head = cols.map((c) => `<th>${esc(humanize(c))}</th>`).join('') + (p.rowAction ? '<th></th>' : '');
+        const rows = SAMPLE.rows(cols)
+          .map(
+            (r) =>
+              `<tr>${r.map((cell) => `<td>${esc(cell)}</td>`).join('')}${p.rowAction ? `<td class="qp-right"><button class="qp-btn qp-btn-sm">${esc(p.rowLabel || humanize(p.rowAction))}</button></td>` : ''}</tr>`,
+          )
+          .join('');
+        body = `<table class="qp-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+        break;
+      }
+      case 'list':
+        body = `<ul class="qp-list">${['First item', 'Second item'].map((x) => `<li><span>${x}</span><span class="qp-faint qp-mono qp-xs">note</span></li>`).join('')}</ul>`;
+        break;
+      case 'timeline':
+        body = `<ol class="qp-timeline">${['Started', 'Restarted'].map((x) => `<li><span>${x}</span><span class="qp-faint qp-xs">12:0${x.length % 9}</span></li>`).join('')}</ol>`;
+        break;
+      case 'markdown':
+        body = `<p class="qp-sm">Text returned by <span class="qp-mono">${esc(p.action || 'an action')}</span>.</p>`;
+        break;
+      case 'code':
+        body = `<pre class="qp-code">key = value</pre>`;
+        break;
+      case 'image':
+        body = `<div class="qp-placeholder">Image from ${esc(p.action || 'an action')}</div>`;
+        break;
+      case 'chart': {
+        const points = [6, 9, 7, 12, 10, 15, 13, 18, 16, 20];
+        const d = points.map((v, i) => `${(i / (points.length - 1)) * 100},${30 - v}`).join(' ');
+        const shape =
+          p.kind === 'bar' || p.kind === 'stacked'
+            ? points.map((v, i) => `<rect x="${i * 10 + 1}" y="${30 - v}" width="8" height="${v}" fill="var(--qp-chart)"/>`).join('')
+            : `${p.kind === 'area' ? `<polygon points="0,30 ${d} 100,30" fill="var(--qp-chart)" opacity="0.18"/>` : ''}<polyline points="${d}" fill="none" stroke="var(--qp-chart)" stroke-width="1.5"/>`;
+        body = `<svg class="qp-chart" viewBox="0 0 100 30" preserveAspectRatio="none">${shape}</svg>
+          <p class="qp-faint qp-xs">${esc(list(p.series).join(', ') || 'no series')} · last ${esc(p.range || '24h')}</p>`;
+        break;
+      }
+      case 'log':
+        body = `<pre class="qp-log">[12:04:02] ${esc(p.service || 'service')} starting…\n[12:04:05] ready</pre>`;
+        break;
+      case 'form': {
+        const fields = parseFields(p.fields);
+        body = `<div class="qp-form">${
+          fields.length
+            ? fields
+                .map((f) => {
+                  const label = `<span class="qp-label">${esc(humanize(f.name))}</span>`;
+                  if (f.type === 'toggle') return `<label class="qp-field qp-field-inline"><input type="checkbox" disabled>${label}</label>`;
+                  if (f.type === 'select')
+                    return `<label class="qp-field">${label}<select class="qp-input" disabled>${(f.options.length ? f.options : ['…']).map((o) => `<option>${esc(o)}</option>`).join('')}</select></label>`;
+                  if (f.type === 'textarea') return `<label class="qp-field">${label}<textarea class="qp-input" rows="2" disabled></textarea></label>`;
+                  return `<label class="qp-field">${label}<input class="qp-input" disabled placeholder="${f.type === 'secret' ? '••••••' : ''}"></label>`;
+                })
+                .join('')
+            : '<p class="qp-faint qp-sm">No field yet.</p>'
+        }<button class="qp-btn qp-btn-primary">${esc(p.submitLabel || 'Save')}</button></div>`;
+        break;
+      }
+      case 'button':
+      case 'confirm':
+        body = `<button class="qp-btn${p.tone === 'err' ? ' qp-btn-danger' : ''}">${esc(p.label || 'Button')}</button>`;
+        break;
+      case 'search':
+        body = `<div class="qp-row"><input class="qp-input" disabled placeholder="${esc(p.placeholder || 'Search')}"><button class="qp-btn">Search</button></div>`;
+        break;
+      case 'iframe':
+        body = `<div class="qp-placeholder" style="height:${esc(p.height || '120px')}">${esc(p.service || 'service')}:${esc(p.port || '…')}${esc(p.path || '/')}</div>`;
+        break;
+      case 'banner':
+        body = `<p class="qp-sm">${esc(p.text || 'A banner says one thing.')}</p>`;
+        break;
+      case 'divider':
+        return '<div class="qp-cell qp-full"><hr class="qp-hr"></div>';
+    }
+
+    const width = p.width === 'half' ? 'qp-half' : p.width === 'third' ? 'qp-third' : 'qp-full';
+    return `<div class="qp-cell ${width}"><div class="qp-card${tone}">${title}${body}</div></div>`;
+  }
+
+  /** The station's own tokens, as Quasar puts them on the block and nowhere else. */
+  function lookStyle(): string {
+    return [
+      state.look.accent && hexRe.test(state.look.accent) ? `--qp-accent:${state.look.accent}` : '',
+      state.look.radius && lengthRe.test(state.look.radius) ? `--qp-radius:${state.look.radius}` : '',
+      state.look.tint && Number(state.look.tint) >= 0 ? `--qp-tint:${Math.min(Number(state.look.tint), 0.2) * 100}%` : '',
+    ]
+      .filter(Boolean)
+      .join(';');
+  }
+
+  function stationBlock(): string {
+    const openTab = Math.min(state.previewTab ?? 0, Math.max(state.tabs.length - 1, 0));
+    const tab = state.tabs[openTab];
+    return `<div class="qp-station">
+      <div class="qp-head">
+        <span class="qp-plate">◎</span>
+        <div class="qp-head-text">
+          <p class="qp-name">${esc(state.name || 'Your station')}</p>
+          <p class="qp-faint qp-xs">${esc(state.description || 'What it is for')}</p>
+        </div>
+        <span class="qp-chip">${esc(state.version || '1.0.0')}</span>
+      </div>
+      <div class="qp-tabs">
+        ${state.tabs.map((t: Dict, i: number) => `<button type="button" class="qp-tab${i === openTab ? ' is-on' : ''}" data-act="preview-tab" data-index="${i}">${esc(t.name || `Tab ${i + 1}`)}</button>`).join('')}
+      </div>
+      <div class="qp-grid">
+        ${tab && tab.panels.length ? tab.panels.map(previewPanel).join('') : '<div class="qp-cell qp-full"><p class="qp-faint qp-sm">No panel in this tab yet.</p></div>'}
+      </div>
+      ${state.author ? `<p class="qp-foot">Station Author: ${esc(state.author)}</p>` : ''}
+    </div>`;
+  }
+
+  const preview = () => `<div class="qp qp-${state.theme}" style="${lookStyle()}">${stationBlock()}</div>`;
+
+  /**
+   * The same block on the page it actually lands on: an application's page,
+   * with the platform's own header, status row and tab strip around it. The
+   * point of the full-screen view is the proportion — a panel that looks
+   * roomy in a narrow column can be three words lost in a wide card.
+   */
+  function fullPreview(): string {
+    const host = `${state.deploy.subdomain || state.id || 'your-app'}.your-domain.com`;
+    return `<div class="sb-full" data-full>
+      <div class="sb-full-bar">
+        <p class="sb-full-title">Preview · an application's page</p>
+        <div class="sb-row">
+          <button type="button" class="sb-btn sb-btn-sm" data-act="theme">${state.theme === 'dark' ? 'Light' : 'Dark'}</button>
+          <button type="button" class="sb-btn sb-btn-sm" data-act="full-close">Close <span class="sb-help">Esc</span></button>
+        </div>
+      </div>
+      <div class="sb-full-body qp qp-${state.theme}" style="${lookStyle()}">
+        <div class="sb-full-page">
+          <p class="qp-faint qp-xs">← Dashboard</p>
+          <div class="qp-app-head">
+            <div>
+              <p class="qp-app-name">${esc(state.deploy.app_name?.replace(/\{\{[A-Za-z0-9_]+\}\}/g, '…') || state.name || 'Your application')}</p>
+              <p class="qp-faint qp-mono qp-xs">${esc(state.deploy.raw ? 'server address, port ' + (state.deploy.port || '') : host)}</p>
+            </div>
+            <div class="qp-row">
+              <span class="qp-chip">${esc(state.id || 'station')}</span>
+              <span class="qp-chip">${state.deploy.type === 'compose' ? 'compose' : 'image'}</span>
+            </div>
+          </div>
+          <div class="qp-card qp-status">
+            <span class="qp-badge">running</span>
+            <span class="qp-faint qp-mono qp-xs">up 3d 4h</span>
+            <span class="qp-status-actions">
+              ${['Start', 'Stop', 'Restart', 'Redeploy'].map((b) => `<span class="qp-btn qp-btn-sm">${b}</span>`).join('')}
+              <span class="qp-btn qp-btn-sm qp-btn-primary">Update</span>
+            </span>
+          </div>
+          <div class="qp-page-tabs">
+            <span class="qp-page-tab is-on">Station</span>
+            <span class="qp-page-tab qp-faint">⚙ Advanced options</span>
+          </div>
+          ${stationBlock()}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // --------------------------------------------------------------- shell --
+
+  /**
+   * The steps, as a progress bar rather than a row of cards: seven labelled
+   * boxes competing for one line is a menu nobody reads, and the one thing
+   * somebody needs from it — where they are, and where the problems are — is
+   * what a bar says at a glance. Each segment is still a button, so jumping
+   * to a step stays one click.
+   */
+  function stepBar(): string {
+    return `<nav class="sb-progress" aria-label="Steps">
+      ${STEPS.map((s, i) => {
+        const errors = issuesFor(i, true).length;
+        const done = i < state.step && !errors;
+        const cls = [i === state.step ? 'is-on' : '', done ? 'is-done' : '', errors ? 'has-error' : ''].filter(Boolean).join(' ');
+        const title = errors ? `${s.title} — ${errors} to fix` : s.title;
+        return `<button type="button" class="sb-seg ${cls}" data-act="goto" data-index="${i}"
+                        title="${esc(title)}"${i === state.step ? ' aria-current="step"' : ''}>
+          <span class="sb-seg-bar"></span>
+          <span class="sb-seg-text">
+            <span class="sb-seg-mark">${errors ? '!' : done ? '✓' : i + 1}</span>
+            <span class="sb-seg-label">${esc(s.title)}</span>
+          </span>
+        </button>`;
+      }).join('')}
+    </nav>`;
+  }
+
+  function render() {
+    const step = STEPS[state.step];
+    const { intro, body } = step.render();
+    const stepIssues = issuesFor(state.step);
+
+    appEl.innerHTML = `
+      ${stepBar()}
+
+      <div class="sb-layout${state.step === STEPS.length - 1 ? ' sb-layout-wide' : ''}">
+        <section class="sb-pane">
+          <header class="sb-pane-head">
+            <p class="sb-step-of">Step ${state.step + 1} of ${STEPS.length} · ${step.hint}</p>
+            <h2 class="sb-h">${step.title}</h2>
+            <p class="sb-intro">${intro}</p>
+          </header>
+          <div class="sb-form">${body}</div>
+          ${
+            state.step === STEPS.length - 1
+              ? ''
+              : `<ul class="sb-checks">${issuesHtml(stepIssues)}</ul>`
+          }
+          <footer class="sb-nav">
+            <button type="button" class="sb-btn" data-act="prev" ${state.step === 0 ? 'disabled' : ''}>← ${STEPS[state.step - 1]?.title ?? 'Back'}</button>
+            <button type="button" class="sb-btn sb-btn-primary" data-act="next" ${state.step === STEPS.length - 1 ? 'disabled' : ''}>${STEPS[state.step + 1]?.title ?? 'Done'} →</button>
+          </footer>
+        </section>
+
+        <aside class="sb-side">
+          <div class="sb-side-head">
+            <div class="sb-switch" role="group" aria-label="Preview or document">
+              <button type="button" class="sb-switch-btn${state.view === 'preview' ? ' is-on' : ''}" data-act="view" data-view="preview">Preview</button>
+              <button type="button" class="sb-switch-btn${state.view === 'yaml' ? ' is-on' : ''}" data-act="view" data-view="yaml">station.yaml</button>
+            </div>
+            <div class="sb-row">
+              ${
+                state.view === 'preview'
+                  ? `<button type="button" class="sb-btn sb-btn-sm" data-act="theme">${state.theme === 'dark' ? 'Light' : 'Dark'}</button>
+                     <button type="button" class="sb-btn sb-btn-sm" data-act="full">Full screen</button>`
+                  : '<button type="button" class="sb-btn sb-btn-sm" data-act="copy">Copy</button>'
+              }
+            </div>
+          </div>
+          <div data-side></div>
+          ${state.view === 'preview' ? '<p class="sb-help">The page an operator gets, with sample data. Colours come from their theme, not from the station.</p>' : ''}
+        </aside>
+      </div>
+
+      <div class="sb-toolbar">
+        <button type="button" class="sb-btn sb-btn-sm" data-act="example">Load an example</button>
+        <button type="button" class="sb-btn sb-btn-sm" data-act="reset">Start over</button>
+        <span class="sb-help">Saved in this browser as you type.</span>
+      </div>
+
+      ${state.full ? fullPreview() : ''}`;
+    document.body.classList.toggle('sb-locked', !!state.full);
+    update();
+  }
+
+  const issuesFor = (step: number, errorsOnly = false) => issues.filter((i) => i.step === step && (!errorsOnly || i.level === 'error'));
+
+  /** Recomputes everything the state feeds, without redrawing the form. */
+  function update() {
+    issues = runChecks();
+    const side = appEl.querySelector<HTMLElement>('[data-side]');
+    if (side) side.innerHTML = state.view === 'preview' ? preview() : `<pre class="sb-yaml"><code>${esc(toYaml())}</code></pre>`;
+    const checks = appEl.querySelector<HTMLElement>('.sb-pane > .sb-checks');
+    if (checks) checks.innerHTML = issuesHtml(issuesFor(state.step));
+    const bar = appEl.querySelector<HTMLElement>('.sb-progress');
+    if (bar) bar.outerHTML = stepBar();
+    save();
+  }
+
+  appEl.addEventListener('input', (event) => {
+    const el = event.target as HTMLInputElement;
+    const path = el.dataset.bind;
+    if (!path) return;
+    setPath(path, el.type === 'checkbox' ? el.checked : el.value);
+    if (el.hasAttribute('data-rerender')) render();
+    else update();
+  });
+
+  appEl.addEventListener('click', async (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-act]');
+    if (!button) return;
+    const act = button.dataset.act;
+    const to = (step: number) => {
+      state.step = Math.max(0, Math.min(STEPS.length - 1, step));
+      window.scrollTo({ top: (appEl.getBoundingClientRect().top ?? 0) + window.scrollY - 80, behavior: 'smooth' });
+    };
+
+    switch (act) {
+      case 'goto':
+        to(Number(button.dataset.index));
+        break;
+      case 'prev':
+        to(state.step - 1);
+        break;
+      case 'next':
+        to(state.step + 1);
+        break;
+      case 'view':
+        state.view = button.dataset.view!;
+        break;
+      case 'theme':
+        state.theme = state.theme === 'dark' ? 'light' : 'dark';
+        break;
+      case 'full':
+        state.full = true;
+        break;
+      case 'full-close':
+        state.full = false;
+        break;
+      case 'preview-tab':
+        state.previewTab = Number(button.dataset.index);
+        break;
+      case 'add-param':
+        state.params.push({ name: '', label: '', kind: 'text', default: '', options: '' });
+        break;
+      case 'add-tab':
+        state.tabs.push({ id: '', name: '', panels: [] });
+        break;
+      case 'add-panel':
+        state.tabs[Number(button.dataset.tab)].panels.push(newPanel('stat'));
+        break;
+      case 'add-every':
+        state.hooks.every.push({ minutes: 5, action: '' });
+        break;
+      case 'remove':
+        getPath(button.dataset.path!).splice(Number(button.dataset.index), 1);
+        break;
+      case 'move': {
+        const items = getPath(button.dataset.path!);
+        const from = Number(button.dataset.index);
+        const at = from + Number(button.dataset.by);
+        if (at < 0 || at >= items.length) return;
+        items.splice(at, 0, items.splice(from, 1)[0]);
+        break;
+      }
+      case 'example':
+        state = example();
+        break;
+      case 'reset':
+        if (!confirmReset(button)) return;
+        state = blank();
+        break;
+      case 'copy':
+        try {
+          await navigator.clipboard.writeText(toYaml());
+          flash(button, 'Copied');
+        } catch {
+          flash(button, 'Copy failed');
+        }
+        return;
+      case 'download': {
+        const blob = new Blob([toYaml()], { type: 'application/yaml' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${state.id || 'station'}.yaml`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+        return;
+      }
+      default:
+        return;
+    }
+    render();
+  });
+
+  /* Escape closes the full-screen preview, the way every overlay does. It is
+     bound once, on the document, because the overlay is redrawn on every
+     change and a listener on it would go with the markup it was bound to. */
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state.full) {
+      state.full = false;
+      render();
+    }
+  });
+
+  /* Clicking the backdrop — anywhere that is not the page being previewed —
+     closes it too. */
+  appEl.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement;
+    if (state.full && target.classList.contains('sb-full-body')) {
+      state.full = false;
+      render();
+    }
+  });
+
+  /* Starting over loses everything typed, so the button asks by changing its
+     own label rather than with a browser dialog. */
+  function confirmReset(button: HTMLButtonElement) {
+    if (button.dataset.armed) return true;
+    button.dataset.armed = '1';
+    const label = button.textContent;
+    button.textContent = 'Click again to clear';
+    setTimeout(() => {
+      delete button.dataset.armed;
+      button.textContent = label;
+    }, 3000);
+    return false;
+  }
+
+  function flash(button: HTMLButtonElement, message: string) {
+    const label = button.textContent;
+    button.textContent = message;
+    setTimeout(() => (button.textContent = label), 1500);
+  }
+
+  issues = runChecks();
+  render();
+</script>
+
+<style is:global>
+  .sb {
+    margin-block: 1.5rem;
+  }
+
+  .sb-row,
+  .sb-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .sb-toolbar {
+    margin-top: 1rem;
+  }
+
+  /* --- steps ------------------------------------------------------------
+     A progress bar rather than seven cards on one line: the bar says where
+     you are and where the problems are without being read, which is all this
+     control is for. Each segment is still a button. */
+
+  .sb-progress {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .sb-seg {
+    flex: 1 1 0;
+    display: grid;
+    gap: 0.375rem;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-2);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .sb-seg-bar {
+    height: 3px;
+    border-radius: 999px;
+    background: var(--border);
+  }
+
+  .sb-seg:hover .sb-seg-bar {
+    background: color-mix(in oklab, var(--accent) 45%, var(--border));
+  }
+
+  .sb-seg.is-done .sb-seg-bar {
+    background: color-mix(in oklab, var(--accent) 55%, var(--border));
+  }
+
+  .sb-seg.is-on .sb-seg-bar {
+    background: var(--accent);
+  }
+
+  .sb-seg.has-error .sb-seg-bar {
+    background: oklch(62% 0.2 25);
+  }
+
+  .sb-seg-text {
+    display: flex;
+    gap: 0.375rem;
+    align-items: center;
+    min-width: 0;
+    font-size: 0.75rem;
+  }
+
+  .sb-seg-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 1.125rem;
+    height: 1.125rem;
+    border-radius: 999px;
+    background: var(--background-2);
+    font-size: 0.6875rem;
+    line-height: 1;
+  }
+
+  .sb-seg.is-done .sb-seg-mark {
+    background: color-mix(in oklab, var(--accent) 22%, transparent);
+    color: var(--text);
+  }
+
+  .sb-seg.is-on .sb-seg-mark {
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+
+  .sb-seg.has-error .sb-seg-mark {
+    background: oklch(62% 0.2 25);
+    color: white;
+  }
+
+  .sb-seg-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sb-seg.is-on {
+    color: var(--text);
+  }
+
+  /* Narrow: the bar keeps every segment, the labels keep only the one being
+     worked on. The step name is in the pane heading underneath anyway. */
+  @media (max-width: 52rem) {
+    .sb-seg:not(.is-on) .sb-seg-label {
+      display: none;
+    }
+
+    .sb-seg.is-on {
+      flex: 2 1 0;
+    }
+  }
+
+  /* --- layout ----------------------------------------------------------- */
+
+  .sb-layout {
+    display: grid;
+    gap: 1.25rem;
+    align-items: start;
+  }
+
+  @media (min-width: 72rem) {
+    .sb-layout {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .sb-layout-wide {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sb-side {
+      position: sticky;
+      top: 5rem;
+      max-height: calc(100vh - 6rem);
+      overflow: auto;
+    }
+  }
+
+  .sb-pane,
+  .sb-side {
+    display: grid;
+    gap: 1rem;
+    align-content: start;
+  }
+
+  .sb-pane > *,
+  .sb-side > * {
+    min-width: 0;
+  }
+
+  .sb-pane {
+    padding: 1rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: var(--radius-main, 0.75rem);
+    background: var(--background-2);
+  }
+
+  .sb-pane-head {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .sb-step-of {
+    margin: 0;
+    color: var(--text-2);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .sb .sb-h {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-size: 1.125rem;
+  }
+
+  .sb-intro,
+  .sb-note {
+    margin: 0;
+    color: var(--text-2);
+    font-size: 0.875rem;
+  }
+
+  .sb-form {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .sb-nav {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+  }
+
+  /* --- fields ----------------------------------------------------------- */
+
+  .sb-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 0.75rem;
+  }
+
+  .sb-field {
+    display: grid;
+    gap: 0.25rem;
+    align-content: start;
+  }
+
+  .sb-wide {
+    grid-column: 1 / -1;
+  }
+
+  .sb-label {
+    color: var(--text-2);
+    font-size: 0.8125rem;
+  }
+
+  .sb-label em {
+    color: var(--accent);
+    font-size: 0.6875rem;
+    font-style: normal;
+  }
+
+  .sb-help {
+    color: var(--text-2);
+    font-size: 0.75rem;
+  }
+
+  .sb-input {
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: 0.375rem;
+    background: var(--background);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.875rem;
+  }
+
+  .sb-input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+
+  .sb-mono {
+    font-family: var(--mono-family, monospace);
+    font-size: 0.8125rem;
+  }
+
+  textarea.sb-input {
+    resize: vertical;
+  }
+
+  .sb-check {
+    display: inline-flex;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.875rem;
+  }
+
+  .sb-check input {
+    accent-color: var(--accent);
+  }
+
+  .sb-empty {
+    margin: 0;
+    color: var(--text-2);
+    font-size: 0.875rem;
+  }
+
+  .sb-details {
+    padding: 0.5rem 0.75rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: 0.5rem;
+  }
+
+  .sb-details summary {
+    cursor: pointer;
+    font-size: 0.875rem;
+  }
+
+  .sb-details .sb-grid {
+    margin-top: 0.5rem;
+  }
+
+  .sb-perm {
+    padding-block: 0.5rem;
+    border-top: var(--border-width, 1px) solid var(--border);
+  }
+
+  .sb-perm:first-of-type {
+    border-top: 0;
+  }
+
+  .sb-perm-body {
+    margin-top: 0.5rem;
+    padding-left: 1.5rem;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .sb-warn {
+    margin: 0;
+    color: oklch(75% 0.15 70);
+    font-size: 0.8125rem;
+  }
+
+  .sb-tab,
+  .sb-item {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--background);
+  }
+
+  .sb-tab .sb-item {
+    background: var(--background-2);
+  }
+
+  /* --- buttons ---------------------------------------------------------- */
+
+  .sb-btn,
+  .sb-add,
+  .sb-remove,
+  .sb-switch-btn {
+    padding: 0.3125rem 0.75rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: 999px;
+    background: var(--background);
+    color: var(--text);
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+
+  .sb-btn:hover:not(:disabled),
+  .sb-add:hover,
+  .sb-switch-btn:hover {
+    border-color: var(--accent);
+  }
+
+  .sb-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .sb-btn-primary {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+
+  .sb-btn-sm {
+    padding: 0.1875rem 0.625rem;
+    font-size: 0.75rem;
+  }
+
+  .sb-add {
+    justify-self: start;
+    border-style: dashed;
+  }
+
+  .sb-remove {
+    color: var(--text-2);
+  }
+
+  .sb-remove:hover:not(:disabled) {
+    border-color: oklch(62% 0.2 25);
+    color: oklch(62% 0.2 25);
+  }
+
+  .sb-remove:disabled {
+    opacity: 0.35;
+  }
+
+  .sb-switch {
+    display: inline-flex;
+    gap: 0.25rem;
+  }
+
+  .sb-switch-btn.is-on {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .sb-side-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* --- checks and output ------------------------------------------------ */
+
+  .sb-checks {
+    display: grid;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.8125rem;
+  }
+
+  .sb-checks li {
+    padding: 0.375rem 0.5rem;
+    border-left: 3px solid var(--border);
+    border-radius: 0.25rem;
+    background: var(--background);
+  }
+
+  .sb-checks .sb-error {
+    border-color: oklch(62% 0.2 25);
+  }
+
+  .sb-checks .sb-warn {
+    border-color: oklch(75% 0.15 70);
+    color: var(--text);
+  }
+
+  .sb-checks .sb-ok {
+    border-color: var(--accent);
+    color: var(--text-2);
+  }
+
+  .sb-review {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .sb-review-state {
+    margin: 0;
+    font-size: 0.9375rem;
+  }
+
+  .sb-review-good {
+    color: var(--accent);
+  }
+
+  .sb-review-bad {
+    color: oklch(62% 0.2 25);
+  }
+
+  .sb-todo {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-left: 3px solid oklch(75% 0.15 70);
+    border-radius: 0.5rem;
+    background: var(--background);
+  }
+
+  .sb-todo-head {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .sb-todo-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sb-todo-list li {
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
+    background: var(--background-2);
+    font-size: 0.75rem;
+  }
+
+  .sb-yaml {
+    margin: 0;
+    padding: 0.75rem;
+    overflow: auto;
+    border-radius: 0.5rem;
+    background: var(--background);
+    font-family: var(--mono-family, monospace);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    white-space: pre;
+  }
+
+  .sb-yaml-full {
+    max-height: 30rem;
+  }
+
+  /* --- full screen ------------------------------------------------------ */
+
+  .sb-locked {
+    overflow: hidden;
+  }
+
+  .sb-full {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    background: var(--background);
+  }
+
+  .sb-full-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: var(--border-width, 1px) solid var(--border);
+    background: var(--background-2);
+  }
+
+  .sb-full-title {
+    margin: 0;
+    color: var(--text-2);
+    font-size: 0.8125rem;
+  }
+
+  .sb-full-body {
+    overflow: auto;
+    padding: 1.5rem 1rem 3rem;
+    border-radius: 0;
+  }
+
+  .sb-full-page {
+    display: grid;
+    gap: 0.75rem;
+    max-width: 64rem;
+    margin: 0 auto;
+  }
+
+  /* --- preview ----------------------------------------------------------
+     Quasar's own shapes and tokens, with sample data. Nebula and Paper are
+     copied from the product's themes.css so the preview is the page an
+     operator would actually get. */
+
+  .qp {
+    container-type: inline-size;
+    --qp-accent: #d4e815;
+    --qp-radius: 4px;
+    --qp-tint: 0%;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .qp-dark {
+    --qp-bg: #08080a;
+    --qp-surface: #0f1013;
+    --qp-surface-2: #15161a;
+    --qp-border: #23242a;
+    --qp-text: #e8e9ec;
+    --qp-muted: #9b9da6;
+    --qp-faint: #696c77;
+    --qp-accent-text: #08080a;
+    --qp-chart: #38bdf8;
+    --qp-err: #f87171;
+    --qp-ok: #34d399;
+    --qp-warn: #fbbf24;
+  }
+
+  .qp-light {
+    --qp-bg: #fafaf9;
+    --qp-surface: #ffffff;
+    --qp-surface-2: #f5f5f4;
+    --qp-border: #e7e5e4;
+    --qp-text: #1c1917;
+    --qp-muted: #57534e;
+    --qp-faint: #78716c;
+    --qp-accent: #1c1917;
+    --qp-accent-text: #fafaf9;
+    --qp-chart: #0284c7;
+    --qp-err: #dc2626;
+    --qp-ok: #16a34a;
+    --qp-warn: #d97706;
+  }
+
+  .qp {
+    background: var(--qp-bg);
+    color: var(--qp-text);
+  }
+
+  .qp-station {
+    border: 1px solid var(--qp-border);
+    border-radius: var(--qp-radius);
+    background: color-mix(in srgb, var(--qp-accent) var(--qp-tint), var(--qp-surface));
+    overflow: hidden;
+  }
+
+  .qp-head {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--qp-border);
+  }
+
+  .qp-plate {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--qp-radius);
+    background: color-mix(in srgb, var(--qp-accent) 14%, var(--qp-surface-2));
+    color: var(--qp-accent);
+  }
+
+  .qp-head-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .qp-name {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .qp p {
+    margin: 0;
+  }
+
+  .qp-chip {
+    padding: 0.125rem 0.375rem;
+    border: 1px solid var(--qp-border);
+    border-radius: var(--qp-radius);
+    color: var(--qp-muted);
+    font-family: var(--mono-family, monospace);
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .qp-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    padding: 0.5rem 0.5rem 0;
+    border-bottom: 1px solid var(--qp-border);
+  }
+
+  .qp-tab {
+    padding: 0.3125rem 0.625rem;
+    margin-bottom: -1px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: var(--qp-radius) var(--qp-radius) 0 0;
+    background: none;
+    color: var(--qp-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+
+  .qp-tab.is-on {
+    border-color: var(--qp-border);
+    background: var(--qp-surface);
+    color: var(--qp-text);
+  }
+
+  .qp-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .qp-cell {
+    grid-column: span 6;
+    display: flex;
+  }
+
+  /* Quasar puts half and third panels side by side from 48rem of page width.
+     The preview is a column of the page rather than the page, so the same
+     arrangement has to arrive earlier — it is measured against the preview's
+     own width, not the window's. */
+  @container (min-width: 22rem) {
+    .qp-half,
+    .qp-third {
+      grid-column: span 3;
+    }
+  }
+
+  @container (min-width: 32rem) {
+    .qp-third {
+      grid-column: span 2;
+    }
+  }
+
+  .qp-card {
+    flex: 1;
+    min-width: 0;
+    padding: 0.625rem;
+    border: 1px solid var(--qp-border);
+    border-radius: var(--qp-radius);
+    background: var(--qp-surface);
+  }
+
+  .qp-tone-accent {
+    border-color: var(--qp-accent);
+  }
+  .qp-tone-ok {
+    border-color: var(--qp-ok);
+  }
+  .qp-tone-warn {
+    border-color: var(--qp-warn);
+  }
+  .qp-tone-err {
+    border-color: var(--qp-err);
+  }
+
+  .qp-h-label {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.5rem !important;
+    color: var(--qp-muted);
+    font-family: var(--mono-family, monospace);
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  .qp-h-label::before {
+    content: '';
+    width: 0.75rem;
+    height: 2px;
+    background: var(--qp-accent);
+  }
+
+  .qp-faint {
+    color: var(--qp-faint);
+  }
+
+  .qp-xs {
+    font-size: 0.6875rem;
+  }
+
+  .qp-sm {
+    font-size: 0.8125rem;
+  }
+
+  .qp-mono {
+    font-family: var(--mono-family, monospace);
+  }
+
+  .qp-right {
+    text-align: right;
+  }
+
+  .qp-stat {
+    font-size: 1.5rem;
+    line-height: 1.1;
+  }
+
+  .qp-stat .qp-faint {
+    font-size: 0.875rem;
+  }
+
+  .qp-gauge {
+    margin-top: 0.375rem;
+    height: 0.375rem;
+    border-radius: 999px;
+    background: var(--qp-surface-2);
+    overflow: hidden;
+  }
+
+  .qp-gauge > span {
+    display: block;
+    height: 100%;
+    background: var(--qp-accent);
+  }
+
+  .qp-kv > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.8125rem;
+  }
+
+  .qp-kv dt {
+    color: var(--qp-faint);
+  }
+
+  .qp-kv dd {
+    margin: 0;
+    font-family: var(--mono-family, monospace);
+    font-size: 0.75rem;
+  }
+
+  .qp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+  }
+
+  .qp-table th {
+    padding-bottom: 0.25rem;
+    color: var(--qp-muted);
+    font-family: var(--mono-family, monospace);
+    font-size: 0.625rem;
+    font-weight: 500;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .qp-table td {
+    padding: 0.25rem 0.75rem 0.25rem 0;
+    border-top: 1px solid var(--qp-border);
+  }
+
+  .qp-table th {
+    padding-right: 0.75rem;
+  }
+
+  .qp-table th:last-child,
+  .qp-table td:last-child {
+    padding-right: 0;
+  }
+
+  .qp-list,
+  .qp-timeline {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.8125rem;
+  }
+
+  .qp-list li,
+  .qp-timeline li {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+    padding-block: 0.125rem;
+  }
+
+  .qp-timeline li {
+    padding-left: 0.75rem;
+    border-left: 1px solid var(--qp-border);
+  }
+
+  .qp-code,
+  .qp-log {
+    margin: 0;
+    padding: 0.5rem;
+    overflow-x: auto;
+    border-radius: var(--qp-radius);
+    background: var(--qp-surface-2);
+    font-family: var(--mono-family, monospace);
+    font-size: 0.6875rem;
+  }
+
+  .qp-log {
+    background: #050506;
+    color: #cbd5e1;
+  }
+
+  .qp-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3rem;
+    border: 1px dashed var(--qp-border);
+    border-radius: var(--qp-radius);
+    color: var(--qp-faint);
+    font-size: 0.75rem;
+  }
+
+  .qp-chart {
+    width: 100%;
+    height: 3.5rem;
+  }
+
+  .qp-form {
+    display: grid;
+    gap: 0.5rem;
+    justify-items: start;
+  }
+
+  .qp-field {
+    display: grid;
+    gap: 0.125rem;
+    width: 100%;
+  }
+
+  .qp-field-inline {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    width: auto;
+  }
+
+  .qp-label {
+    color: var(--qp-muted);
+    font-size: 0.75rem;
+  }
+
+  .qp .qp-input {
+    width: 100%;
+    padding: 0.3125rem 0.5rem;
+    border: 1px solid var(--qp-border);
+    border-radius: var(--qp-radius);
+    background: var(--qp-surface);
+    color: var(--qp-text);
+    font: inherit;
+    font-size: 0.8125rem;
+  }
+
+  .qp-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .qp-btn {
+    padding: 0.3125rem 0.75rem;
+    border: 1px solid var(--qp-border);
+    border-radius: var(--qp-radius);
+    background: var(--qp-surface);
+    color: var(--qp-text);
+    font-size: 0.8125rem;
+    white-space: nowrap;
+  }
+
+  .qp-btn-primary {
+    border-color: var(--qp-accent);
+    background: var(--qp-accent);
+    color: var(--qp-accent-text);
+    font-weight: 500;
+  }
+
+  .qp-btn-danger {
+    border-color: color-mix(in srgb, var(--qp-err) 50%, transparent);
+    color: var(--qp-err);
+  }
+
+  .qp-btn-sm {
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+  }
+
+  .qp-hr {
+    width: 100%;
+    border: 0;
+    border-top: 1px solid var(--qp-border);
+  }
+
+  .qp-foot {
+    padding: 0.25rem 0.75rem 0.5rem;
+    color: var(--qp-faint);
+    font-size: 0.625rem;
+    text-align: right;
+  }
+
+  /* The application page around the block, in the full-screen view: what
+     Quasar draws above every station, so the block is seen at the size and in
+     the company it actually keeps. */
+
+  .qp-app-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .qp-app-name {
+    font-size: 1.5rem;
+    line-height: 1.2;
+  }
+
+  .qp-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .qp-status-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-left: auto;
+  }
+
+  .qp-badge {
+    padding: 0.125rem 0.5rem;
+    border: 1px solid color-mix(in srgb, var(--qp-ok) 45%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--qp-ok) 8%, transparent);
+    color: var(--qp-ok);
+    font-family: var(--mono-family, monospace);
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+
+  .qp-page-tabs {
+    display: flex;
+    gap: 1rem;
+    padding-bottom: 0.375rem;
+    border-bottom: 1px solid var(--qp-border);
+    font-size: 0.8125rem;
+  }
+
+  .qp-page-tab.is-on {
+    padding-bottom: 0.375rem;
+    margin-bottom: -0.4375rem;
+    border-bottom: 2px solid var(--qp-accent);
+  }
+</style>

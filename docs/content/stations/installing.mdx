@@ -1,0 +1,71 @@
+---
+title: Installing and updating
+description: Install a station, deploy it, update it and roll it back.
+sidebar:
+  label: Install & update
+---
+
+## Installing
+
+Stations are installed from **Stations** in the navigation, or from **Settings → Stations**.
+
+<Steps>
+  <Step>
+    ### Add the document
+
+    Either:
+
+    - enter its URL and click **Fetch and read**, for example:
+
+      ```
+      https://raw.githubusercontent.com/AymericChaverot/quasar/main/stations/minecraft.yaml
+      ```
+
+    - or open **Write or paste one instead**, paste the document and click **Read it**.
+
+    Nothing is stored yet. A document with errors is refused, with the full list of problems.
+  </Step>
+  <Step>
+    ### Review what it may do
+
+    Quasar lists, in plain words, everything the station will be allowed to do on the server. You can also read the whole document.
+
+    Permissions are accepted **as a whole**: there is nothing to tick. If the list is more than you want to give, don't install the station.
+
+    :::warning
+    A station asking for `exec` can run commands in its containers, which means root access to them. Only accept it from an author you trust.
+    :::
+  </Step>
+  <Step>
+    ### Accept
+
+    Click **Accept and install**. The station now appears on the **Stations** page.
+  </Step>
+</Steps>
+
+## Deploying
+
+1. Open **Stations** and pick the station.
+2. Answer its questions (a version, a port…).
+3. Review the summary: what will be created, your answers, and what the station may do.
+4. Deploy.
+
+The deployment then works like any other application. You can deploy the same station several times.
+
+## Updating
+
+Stations are never refreshed automatically. In **Settings → Stations**, click **Re-fetch** on a station imported from a URL.
+
+- If the new revision asks for **the same permissions or fewer**, it is applied right away.
+- If it asks for **more**, it is **put on hold**. The station shows *revision waiting* and keeps running the version you accepted. Review what it adds, then **Accept** or **Discard** it.
+
+An update changes the station's tabs, script, hooks and theme, for **every application** using it. It never changes what those applications run: their compose file, image and environment stay the same. To change those, use **Update** on each application.
+
+## Rolling back
+
+Every accepted revision is kept. Click **Back to &lt;version&gt;** to return to the previous one. The application doesn't stop.
+
+## Disabling and removing
+
+- **Disable** turns the station off without removing it.
+- **Remove** deletes the station. Applications deployed from it keep running, without the Station tab. What the station stored for them is deleted.

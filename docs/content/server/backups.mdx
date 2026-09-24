@@ -1,0 +1,57 @@
+---
+title: Backups
+description: Back up the server, copy archives offsite, and restore.
+---
+
+Backups are managed in **System → Backups**.
+
+## What a backup contains
+
+A `quasar-<date>.tar.gz` archive with:
+
+- a consistent snapshot of the database,
+- each application's data folder (`apps/<id>/data/`) and `.env` file,
+- the output of each application's [backup dump command](/applications/storage/#backing-up-a-database), if set.
+
+Archives are stored in `/opt/quasar/backups/`, and can be downloaded from the page.
+
+## Creating backups
+
+- **Back up now** creates one immediately.
+- Enable the **daily backup** to create one every day.
+- **Keep last** sets how many archives to keep (7 by default). Older ones are deleted.
+
+## Offsite copy
+
+Backups on the server are lost with the server. To keep a copy elsewhere, fill in **Offsite copy** with S3-compatible storage: AWS S3, Cloudflare R2, Backblaze B2, Wasabi, Hetzner, MinIO…
+
+| Field | Example |
+| --- | --- |
+| Endpoint | `s3.eu-central-1.amazonaws.com` |
+| Bucket | `my-backups` |
+| Region | `eu-central-1` |
+| Prefix | `quasar/prod` |
+| Access key / Secret key | Credentials allowed to upload objects. |
+
+Each backup is uploaded right after it is created. If the upload fails, the backup is kept locally and you are notified.
+
+Click **Send test upload** to check the settings.
+
+## The master key
+
+Environment variables and compose files are encrypted in the database with a master key. **This key is never included in backups**, so a stolen archive is useless.
+
+:::danger
+Without the key, a backup can't be restored onto a new server. Click **Download key** and store it somewhere other than the server and its backups.
+:::
+
+## Restoring
+
+1. In the backup list, click **Restore** on an archive.
+2. If the archive comes from **another server**, first click **Key…** and select that server's `master.key` file.
+3. Confirm.
+4. **Redeploy your applications** afterwards.
+
+:::warning
+Restoring overwrites the current applications' configuration and data.
+:::

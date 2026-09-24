@@ -1,0 +1,37 @@
+---
+title: First steps
+description: What to set up right after installing.
+---
+
+A short checklist for a new server. Each item takes a minute.
+
+## 1. Turn on two-factor authentication
+
+**Settings → Two-factor authentication.** Scan the QR code with an authenticator app, then confirm with a code. From then on, signing in asks for a code as well as the password.
+
+## 2. Set up notifications
+
+**Settings → Integrations.** Add at least one channel, so that failures reach you:
+
+- a Discord or Slack webhook,
+- an [ntfy](https://ntfy.sh) topic, for push notifications on a phone,
+- an SMTP server, for email.
+
+Press **Send test** to check that messages arrive. See [notifications](/server/notifications/).
+
+## 3. Turn on backups
+
+**System → Backups.** Enable the daily backup and choose how many archives to keep.
+
+Then, in the same section:
+
+- **Download the master key** and store it somewhere other than the server. Without it, a backup cannot be restored onto a new server.
+- Optionally, set up an **offsite copy** to S3-compatible storage.
+
+See [backups](/server/backups/).
+
+## 4. Deploy an application
+
+Click **New application**, then **See the catalogue** and pick a service. The form is filled in for you: check the subdomain, then click **Create and deploy**.
+
+See [deploying an application](/applications/deploying/) for the other ways to deploy.

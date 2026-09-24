@@ -1,0 +1,40 @@
+---
+title: Security model
+description: How Quasar contains a station's code, and what it logs.
+---
+
+A station is code written by someone else, running on your server with the permissions you accepted. These are the protections, from the most important.
+
+## Layers
+
+1. **Separate process.** The script runs in a new process for each call, with no Docker access, no database, no disk and no network. Every request goes through the dashboard, which checks it against the permissions. Escaping the JavaScript engine gains nothing.
+2. **No markup.** The script returns data, never HTML, so it can't inject anything into the dashboard.
+3. **Nothing by default.** A station gets only the permissions it declared and you accepted.
+4. **Narrowed by name.** Services for `exec`, patterns for `files`, keys for `env`, hosts for `net.external`, verbs for `lifecycle`.
+5. **Paths checked after resolving links.** A symbolic link can't lead outside the application's folder.
+6. **Limits enforced from outside.** Time and memory are bounded by the dashboard, which kills the process if needed.
+7. **Theme contained.** A station can't restyle the dashboard's navigation, so it can't imitate a login page or an update prompt.
+8. **No silent upgrades.** A revision that asks for more is held until accepted.
+9. **Everything logged.** See below.
+
+## What it does not protect against
+
+Accepting `exec` from a malicious author. `exec` is root access to the container, by design, and the install screen says so.
+
+## Audit log
+
+Station activity is recorded in the [audit log](/server/monitoring/#audit-log):
+
+| Event | Recorded when |
+| --- | --- |
+| `station.import` | A station is installed. |
+| `station.permissions.grant` | Permissions are accepted. |
+| `station.revert` | A station is rolled back. |
+| `station.action` | An action runs. |
+| `station.exec` | A command runs in a container. |
+| `station.files.write` | A file is written. |
+| `station.files.delete` | A file is deleted. |
+| `station.env.write` | An environment variable is written. |
+| `station.lifecycle` | The application is started, stopped, restarted… |
+| `station.http.external` | A request is sent to the internet. |
+| `station.hook.fail` | A hook fails. |

@@ -1,0 +1,12 @@
+{
+  "title": "Reference",
+  "icon": "file",
+  "collapsible": false,
+  "pages": [
+    "api",
+    "configuration",
+    "server-layout",
+    "security",
+    "development"
+  ]
+}

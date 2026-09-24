@@ -1,0 +1,66 @@
+---
+title: What is a station
+description: An application that comes with its own control panel.
+sidebar:
+  label: What it is
+---
+
+A **station** is an application that comes with a control panel written for it.
+
+A catalogue entry says *what to deploy*. A station says that, **and** what the application's page looks like afterwards: tabs, tables, forms and buttons made for that service.
+
+For example, a Minecraft station doesn't only start a server. It also gives you a console, player management, world backups and a mod manager.
+
+## What you get
+
+A station deploys an **ordinary application**, with everything Quasar gives any application: containers, logs, storage, backups, limits, TLS. On top of that, the application's page opens on a **Station** tab.
+
+The platform's usual tabs are hidden behind **Advanced options**, at the end of the tab bar. Editing them by hand can break what the station manages, so Quasar asks once before showing them.
+
+Removing a station leaves the application running, without the Station tab.
+
+## A station is one YAML document
+
+```yaml
+schema: 1
+id: minecraft-station
+name: Minecraft
+version: "1.0.0"
+deploy: { ... }        # what to run: a catalogue entry
+permissions: { ... }   # what the script may reach
+ui: { ... }            # what the page shows
+hooks: { ... }         # when the script runs on its own
+script: |              # the logic, in JavaScript
+  export function list_mods() { ... }
+```
+
+Like a catalogue, you install it by pasting it or importing it from a URL.
+
+## Safe by design
+
+A station is a program written by someone else, so it runs under strict rules:
+
+- **Nothing is allowed by default.** Every permission is declared in the document, narrowed by name, and shown to you before installing.
+- **A new revision that asks for more is put on hold** until you accept it.
+- **The script runs in a separate, disposable process**, with no access to Docker, the database, the disk or the network. Everything goes through Quasar, which checks permissions.
+- **The script never produces HTML.** It returns data, and Quasar draws it with its own components.
+
+See [security model](/stations/security/) for details.
+
+## Examples
+
+The Quasar repository has six stations in [`stations/`](https://github.com/AymericChaverot/quasar/tree/main/stations):
+
+| File | What it is |
+| --- | --- |
+| `minecraft.yaml` | A Minecraft server with a console, players, world archives, mods from Modrinth, and player history. Uses every feature. |
+| `postgres.yaml` | PostgreSQL with a query console, scheduled dumps and restore. No network access at all. |
+| `gitea.yaml` | A Git forge: reads its own API, embeds its pages, and watches GitHub for new releases. |
+| `components.yaml` | One of every panel, with no permissions. A good starting point. |
+| `permissions.yaml` | Every permission, each next to what a refusal looks like. |
+| `limits.yaml` | A station that breaks every limit on purpose, to show the dashboard survives. |
+
+## Next
+
+- [Install and deploy a station](/stations/installing/)
+- [Write your own](/stations/writing/)

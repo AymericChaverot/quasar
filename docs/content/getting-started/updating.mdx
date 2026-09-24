@@ -1,0 +1,31 @@
+---
+title: Updating
+description: Update Quasar and Traefik from the dashboard.
+---
+
+## Updating Quasar
+
+Quasar checks GitHub for a new release every 30 minutes. When one is available, a button appears in the top bar.
+
+To update:
+
+1. Open **System → Software update**.
+2. Click the update button and confirm.
+
+Only the dashboard container is replaced. It is unavailable for a few seconds; **your applications keep running**.
+
+You can also press **Check for updates** to check right away.
+
+:::note
+The updater replaces the dashboard image only. It never changes `/opt/quasar/docker-compose.yml`, so edits you made to that file are kept.
+:::
+
+## Updating Traefik
+
+**System → Environment** shows the Traefik version in use. When the current Quasar release was tested with a newer one, an update button appears.
+
+- Quasar only offers the version it was tested with, never the latest one on Docker Hub.
+- During the update, **every site is unavailable for a few seconds**, the dashboard included.
+- If the new version does not start, Quasar puts the previous one back automatically.
+
+The chosen version is written to `/opt/quasar/docker-compose.override.yml`. Delete that file to go back to the version pinned in `docker-compose.yml`.

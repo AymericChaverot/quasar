@@ -1,0 +1,146 @@
+---
+title: Script
+description: The JavaScript runtime, the quasar API, and its limits.
+sidebar:
+  label: Script API
+---
+
+The `script` block holds a station's logic, in JavaScript. Every function the interface or hooks call must be **exported**:
+
+```js
+export function player_count() {
+  const out = quasar.exec('minecraft', ['rcon-cli', 'list']).stdout
+  return { data: { value: out.match(/There are (\d+)/)[1] } }
+}
+```
+
+An action receives one argument: the form values, the row's fields, or `{q}` for a search.
+
+## The runtime
+
+- Scripts are **synchronous**: no `async`, no promises, no `setTimeout`. A function runs and returns.
+- There is no `fetch`, `require`, `import`, file system or network. The only way to reach anything is the `quasar` object.
+- Each call runs in a **new process**, which stops afterwards. Nothing is kept between calls, except what you save in the [store](#store).
+- Calling something a permission doesn't cover throws an error that names the missing permission.
+
+## API
+
+### Application
+
+```js
+quasar.app                 // {id, name, domain, status, params, image}
+quasar.app.params.VERSION  // answers given when deploying
+```
+
+With the [`lifecycle` permission](/stations/permissions/#lifecycle), for the listed verbs:
+
+```js
+quasar.app.start()
+quasar.app.stop()
+quasar.app.restart()
+quasar.app.redeploy()
+quasar.app.setImage('nginx:1.27')
+```
+
+### Environment
+
+Needs [`env`](/stations/permissions/#env), for the declared keys.
+
+```js
+quasar.env.get('MINECRAFT_VERSION')
+quasar.env.set('MINECRAFT_VERSION', '1.21.4')   // applied at the next deployment
+```
+
+### Containers
+
+```js
+quasar.exec('web', ['sh', '-c', 'nginx -v'])    // -> {code, stdout, stderr}   needs exec
+quasar.logs('web', {tail: 100, since: '1h'})    // -> string                  needs logs
+```
+
+### Files
+
+Needs [`files`](/stations/permissions/#files). Paths are relative to the application's folder.
+
+```js
+quasar.files.list('data/mods')              // -> [{name, size, dir, mtime}]
+quasar.files.read('data/server.properties') // -> string
+quasar.files.readBytes('data/world.zip')    // -> Uint8Array
+quasar.files.write('data/notes.txt', text)  // string or Uint8Array, atomic
+quasar.files.delete('data/old.jar')
+quasar.files.mkdir('data/backups')
+```
+
+### HTTP
+
+```js
+const r = quasar.http.get(url, opts)   // also quasar.http.post(url, opts)
+r.status    // number
+r.headers
+r.body      // text
+r.json()    // parsed JSON
+r.bytes()   // Uint8Array
+
+quasar.service('web', 80)              // base URL of a service on the internal network
+```
+
+External hosts need [`net.external`](/stations/permissions/#netexternal); the app's own services need [`net.internal`](/stations/permissions/#netinternal).
+
+:::warning[Binary files]
+Use `bytes()`, not `body`, for anything that isn't text (archives, images, `.jar` files). `body` is decoded as UTF-8 and silently corrupts binary data.
+
+```js
+quasar.files.write('data/mods/mod.jar', quasar.http.get(url).bytes())
+```
+:::
+
+### Store
+
+A small key-value space for this station and this application. No permission needed.
+
+```js
+quasar.store.get('count')
+quasar.store.set('count', 3)     // any JSON value
+quasar.store.delete('count')
+quasar.store.keys()
+```
+
+Limited to 256 KB per application. For values over time, use [series](/stations/hooks-series/#series).
+
+### Series
+
+Measurements over time, drawn by a `chart` panel. No permission needed. See [series](/stations/hooks-series/#series).
+
+```js
+quasar.series.record('players', 12)
+quasar.series.read('players', {hours: 24})   // -> [{at, value}], oldest first
+quasar.series.names()
+```
+
+### Other
+
+```js
+quasar.notify('Backup finished')          // needs notify
+quasar.log('step', 3, 'done')             // the station's own log, visible in the interface
+quasar.progress(40, 'Downloading mods')   // long actions only
+```
+
+## Limits
+
+Limits are enforced from outside the script's process. A station that hits one fails its panel; the dashboard and other applications are not affected.
+
+| Limit | Panel source | Action | Hook |
+| --- | --- | --- | --- |
+| Run time | 10 s | 60 s | 120 s |
+| Returned value | 1 MB | 1 MB | — |
+
+| Limit | Value |
+| --- | --- |
+| Memory | 128 MB |
+| `quasar.exec` output | 1 MB per call |
+| `quasar.http` response | 8 MB per call |
+| `quasar.files.read` | 4 MB |
+| `quasar.store` | 256 KB per application |
+| Series | 8 per application |
+
+For work longer than 60 seconds, use a [long action](/stations/interface/#long-actions).

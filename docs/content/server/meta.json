@@ -1,0 +1,13 @@
+{
+  "title": "Server",
+  "icon": "cloud",
+  "collapsible": false,
+  "pages": [
+    "monitoring",
+    "notifications",
+    "backups",
+    "disk",
+    "users",
+    "credentials"
+  ]
+}

@@ -1,0 +1,125 @@
+---
+title: Permissions
+description: Declare what a station's script may reach.
+---
+
+A station's script can reach **nothing** by default: it can compute and return values, and use its own [store](/stations/script/#store). Everything else needs a permission, declared in the document and accepted at install.
+
+```yaml
+permissions:
+  exec:         {services: [minecraft]}
+  logs:         {services: [minecraft]}
+  files:        {paths: ["data/mods/**", "data/server.properties"]}
+  env:          {read: [TYPE, MINECRAFT_VERSION], write: [MINECRAFT_VERSION]}
+  net.internal: {services: [minecraft], ports: [8123]}
+  net.external: {allow: ["api.modrinth.com"]}
+  lifecycle:    [restart, redeploy]
+  notify:       true
+```
+
+Every permission is **narrowed by name**: services, paths, keys, hosts or verbs. Calling something that isn't covered throws an error naming the missing permission.
+
+:::tip
+Ask for as little as possible. Operators read this list before installing, and a short one is easier to trust.
+:::
+
+## Summary
+
+| Permission | Allows | Narrowed by |
+| --- | --- | --- |
+| `exec` | Running commands in containers | Service names |
+| `logs` | Reading container logs | Service names |
+| `files` | Reading and writing files in the app's folder | Glob patterns |
+| `env` | Reading and writing environment variables | Keys, separately for read and write |
+| `net.internal` | HTTP requests to the app's own containers | Service names and ports |
+| `net.external` | HTTPS requests to the internet | Exact host names |
+| `lifecycle` | Starting, stopping, restarting, redeploying | Verbs |
+| `notify` | Sending notifications | — |
+
+## exec
+
+```yaml
+exec: {services: [web]}
+```
+
+Runs commands with `quasar.exec` in the named services.
+
+:::warning
+This is the most powerful permission: it gives root access to those containers. The install screen says so.
+:::
+
+If you only need to read output, use `logs` instead.
+
+## logs
+
+```yaml
+logs: {services: [web]}
+```
+
+Reads container logs with `quasar.logs`. Also required by a [`log` panel](/stations/interface/#log).
+
+## files
+
+```yaml
+files: {paths: ["data/mods/**", "data/server.properties"]}
+```
+
+Reads and writes files with `quasar.files`. Paths are relative to the application's folder (`/opt/quasar/apps/<id>/`), and must match one of the patterns.
+
+- Symbolic links are resolved **before** checking, so a link can't escape the folder.
+- Writes are atomic and keep the file's permissions.
+- A file can only be offered for [download](/stations/interface/#action-results) if it is covered here.
+
+## env
+
+```yaml
+env: {read: [GREETING], write: [GREETING]}
+```
+
+Reads and writes keys of the application's `.env` with `quasar.env`. Read and write are declared separately, key by key.
+
+A written value takes effect at the next deployment.
+
+## net.internal
+
+```yaml
+net.internal: {services: [web], ports: [80]}
+```
+
+HTTP requests to the application's own containers. Get their address with `quasar.service(name, port)`.
+
+Also required by an [`iframe` panel](/stations/interface/#iframe) pointing at a service. No port needs to be published.
+
+## net.external
+
+```yaml
+net.external: {allow: ["api.github.com"]}
+```
+
+HTTPS requests to the listed hosts:
+
+- exact host names only, no wildcards;
+- HTTPS only;
+- redirects are only followed to hosts that are also on the list.
+
+## lifecycle
+
+```yaml
+lifecycle: [restart, redeploy]
+```
+
+Lets the script act on its own application. Verbs: `start`, `stop`, `restart`, `redeploy`, `set_image`.
+
+Only list the ones you need. Most stations have no reason to ask for `stop`.
+
+## notify
+
+```yaml
+notify: true
+```
+
+Sends a message with `quasar.notify`, to the channels set in [Settings → Integrations](/server/notifications/). Rate-limited.
+
+## When permissions change
+
+A new revision that asks for more permissions is **held** until an operator accepts it. The station keeps running the accepted revision in the meantime. See [updating](/stations/installing/#updating).

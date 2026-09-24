@@ -1,0 +1,212 @@
+---
+title: Interface
+description: Tabs, panels, components, and what actions return.
+---
+
+The `ui` block describes the Station tab of the application: a strip of tabs, each holding panels.
+
+```yaml
+ui:
+  tabs:
+    - id: mods
+      name: Mods
+      panels:
+        - id: mod_list
+          type: table
+          title: Installed mods
+          source: {action: list_mods}
+          columns:
+            - {key: name, label: Mod}
+            - {key: version, label: Version, align: right}
+          row_actions:
+            - {label: Remove, action: remove_mod, tone: err, confirm: "Remove {{name}}?"}
+          empty: "No mods installed yet."
+          refresh: {seconds: 30}
+```
+
+The script **never returns HTML**. It returns data, and Quasar draws it with its own components. This keeps stations safe, and readable with every theme.
+
+## Tabs
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `id` | yes | Lowercase letters, digits, `-` and `_`. |
+| `name` | yes | Label in the tab strip. |
+| `panels` | yes | At least one panel. |
+
+## Panel fields
+
+Every panel accepts:
+
+| Field | Description |
+| --- | --- |
+| `id` | **Required.** Unique across the station. Used to refresh the panel. Lowercase letters, digits, `-` and `_`. |
+| `type` | **Required.** One of the components below. |
+| `title` | Heading. |
+| `help` | A line of help. |
+| `width` | `full` (default), `half` or `third`. |
+| `variant` | `hero`, `plain` or `inset`. |
+| `tone` | `accent`, `ok`, `warn` or `err`. |
+| `refresh` | `{seconds: N}`: reload the panel on a timer. |
+| `source` | Where the data comes from. See below. |
+
+## Sources
+
+| Source | Description |
+| --- | --- |
+| `{action: name}` | Calls the script's `name` action and draws what it returns. |
+| `{static: ...}` | Content written in the document. Nothing runs. |
+| `{series: [a, b]}` | Recorded [series](/stations/hooks-series/#series). Only for `chart`. |
+
+## Components
+
+### Structure
+
+| Type | Description |
+| --- | --- |
+| `section` | Groups panels under a title. Takes `panels`. |
+| `grid` | Lays panels out in a grid. Takes `panels`. |
+| `divider` | A horizontal rule. |
+| `banner` | A message across the tab. Usually `source: {static: "..."}`. |
+
+### Data
+
+Each data panel expects a specific shape in `data`:
+
+| Type | Expected data | Example |
+| --- | --- | --- |
+| `stat` | A value, or `{value, suffix, label}` | `{value: 3, suffix: "/ 20"}` |
+| `gauge` | Same as `stat`, value as a percentage | `{value: 72, suffix: "%"}` |
+| `keyvalue` | A list of `{key, value}`, or an object | `[{key: "Version", value: "1.21"}]` |
+| `table` | A list of rows (objects) | `[{name: "Sodium", version: "0.5"}]` |
+| `list` | A list of strings or `{label, note}` | `["first", "second"]` |
+| `timeline` | Same as `list` | `[{label: "Restarted", note: "12:04"}]` |
+| `markdown` | Text, rendered as Markdown | `"**Ready**"` |
+| `code` | Text, shown as code | `"key=value"` |
+| `image` | An `https://` URL or a `data:image/...` URI | `"data:image/svg+xml,..."` |
+| `chart` | Drawn from series, see [charts](/stations/hooks-series/#charts) | — |
+| `log` | Streams a container's logs, see below | — |
+
+### Input
+
+| Type | Description |
+| --- | --- |
+| `form` | Fields and a submit button. |
+| `button` | One button: `label` and `action`. |
+| `confirm` | A button that asks first: `label`, `action` and `confirm` (the question). |
+| `search` | A search box: `action` and `placeholder`. The action receives `{q}`. |
+
+`button` and `search` also accept `long: true` to run as a [long action](#long-actions).
+
+### Embedding
+
+| Type | Description |
+| --- | --- |
+| `iframe` | Embeds a page. See below. |
+
+## table
+
+```yaml
+- id: players
+  type: table
+  source: {action: list_players}
+  columns:
+    - {key: name, label: Player}
+    - {key: role, label: Role, type: badge}
+  row_actions:
+    - {label: Kick, action: kick, tone: err, confirm: "Kick {{name}}?"}
+  empty: "Nobody online."
+```
+
+- **Columns**: `key` (field of the row), `label`, `align` (`left`, `right`, `center`), `type` (`text`, `badge`, `code`).
+- **Badge cells**: a string, or `{label, tone}`. An empty value shows no badge.
+- **Row actions**: `label`, `action`, `tone`, `confirm`, `long`. The action receives the row's fields. `{{field}}` in `confirm` is replaced with the row's value.
+
+## form
+
+```yaml
+- id: settings
+  type: form
+  source: {action: read_settings}
+  fields:
+    - {name: motd, label: Message of the day}
+    - {name: difficulty, label: Difficulty, type: select, options: [easy, normal, hard]}
+    - {name: pvp, label: PvP, type: toggle}
+  submit: {label: Save, action: write_settings}
+```
+
+- **Field types**: `text` (default), `number`, `select`, `toggle`, `secret`, `port`, `textarea`, `file`.
+- **Field options**: `name` (required), `label`, `default`, `options`, `placeholder`, `help`.
+- **Submit**: `label`, `action`, `tone`, `confirm`, `long`. The action receives the values, keyed by field name.
+
+The form's `source` fills in the fields: return an object keyed by field name. For a `select`, a value can also carry its options:
+
+```js
+return { data: { version: { value: '1.21.1', options: ['1.21.4', '1.21.1'] } } }
+```
+
+## log
+
+```yaml
+- {id: console, type: log, title: Server output, service: minecraft, tail: 100}
+```
+
+Streams the logs of a service live. Requires the [`logs` permission](/stations/permissions/#logs) for that service.
+
+## iframe
+
+```yaml
+- id: map
+  type: iframe
+  src: "{{service:web:8123}}/"
+  height: 500px
+```
+
+`src` is either:
+
+- `{{service:name:port}}` followed by a path: a page served by one of the application's containers. Quasar proxies it, so no port needs to be published. Requires [`net.internal`](/stations/permissions/#netinternal) for that service and port.
+- an `https://` address.
+
+`height` defaults to `420px`.
+
+## Action results
+
+An action returns an object. Every key is optional:
+
+| Key | Effect |
+| --- | --- |
+| `data` | Draws the panel that called the action. |
+| `toast` | A success message (green). |
+| `warn` | A warning message (orange): it worked, but not fully. |
+| `error` | An error message (red). The action counts as failed. |
+| `waiting` | Not ready yet: the panel shows a spinner and tries again shortly. |
+| `refresh` | A list of panel ids to reload. |
+| `navigate` | A tab id to switch to. |
+| `download` | A file path in the app's folder, offered for download. Must be covered by the [`files` permission](/stations/permissions/#files). |
+
+```js
+export function remove_mod({ file }) {
+  quasar.files.delete(`data/mods/${file}`)
+  return { toast: 'Removed', refresh: ['mod_list'] }
+}
+```
+
+An action can also return the data directly, without `{data: ...}`.
+
+Messages stack in a corner of the page. Success and warning messages disappear after a few seconds; errors stay until dismissed.
+
+:::tip[Waiting is not failing]
+When a panel's action fails while the application is stopped, Quasar shows a spinner and retries on its own. For cases only the script can detect (the container is up but the service isn't ready), return `{waiting: 'Starting…'}` instead of throwing.
+:::
+
+## Long actions
+
+An action that takes a while (downloading many files, upgrading a server) should declare `long: true` on its button, row action or submit.
+
+It then runs in the background, with a progress pane:
+
+- report progress with `quasar.progress(percent, message)`;
+- the job survives a page reload;
+- its output stays visible afterwards.
+
+A `download` returned by a long action appears as a link in the progress pane.

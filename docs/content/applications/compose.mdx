@@ -1,0 +1,57 @@
+---
+title: Compose stacks
+description: How Quasar runs a docker-compose.yml behind Traefik.
+---
+
+A compose stack is an application made of several containers, described by a `docker-compose.yml`. It comes either from a pasted file or from a Git repository that has one at its root.
+
+You don't need to write a special compose file. The one that works on your laptop works on Quasar.
+
+## What Quasar changes
+
+On every deployment, Quasar writes an adapted copy named `docker-compose.quasar.yml` next to the original, and runs that copy. In it:
+
+- the service that serves the site gets the Traefik routing labels,
+- that service is attached to the `traefik-net` network,
+- host bindings on ports 80 and 443 are removed, because Traefik uses them for every application.
+
+**The original file is never modified**, and neither is your repository.
+
+The **Routing** section of the application's page shows which service is routed, on which port, and what was changed.
+
+## Which service gets the domain
+
+Quasar never guesses from service or image names. It picks, in this order:
+
+1. the service that published host port 80 or 443;
+2. otherwise, the service the rest of the stack sits behind: it `depends_on` others, and nothing depends on it;
+3. otherwise, the only service offering the port configured for the application;
+4. otherwise, the only service in the file.
+
+If none of these rules gives a single answer, Quasar routes nothing. Pick the service yourself in the **Routing** section, then redeploy.
+
+YAML anchors and merge keys (`&anchor`, `<<: *defaults`) are supported.
+
+## Other published ports
+
+Host ports other than 80 and 443 are **kept**: a stack may need to expose a database or a game server on purpose.
+
+:::warning
+Those ports are reached directly, without Traefik. TLS, password protection, rate limits and address lists don't apply to them. The **Routing** section lists them.
+:::
+
+## Files with their own Traefik labels
+
+If the compose file already has `traefik.*` labels, Quasar runs it exactly as written and adds nothing. As a consequence, [password protection](/applications/protection/) set in Quasar is not applied.
+
+Remove the labels from the file to let Quasar handle the routing.
+
+## Git repositories: compose or Dockerfile
+
+When a repository has both a compose file and a `Dockerfile`, Quasar uses the compose file by default.
+
+If the compose file is only for local development, open the **Build** section of the application and choose **Dockerfile**, then redeploy. Switching removes the containers from the other mode but keeps their volumes.
+
+## Resource limits
+
+The CPU and memory limits of the application form don't apply to stacks. Set them per service in the compose file, with `deploy.resources.limits`.

@@ -1,0 +1,72 @@
+---
+title: Installation
+description: Install Quasar on a Linux VPS.
+---
+
+## Requirements
+
+- A Linux VPS with root access. Ubuntu or Debian recommended; 1 GB of RAM is enough.
+- A domain name whose DNS records you can edit.
+
+## Steps
+
+<Steps>
+  <Step>
+    ### Point your DNS at the server
+
+    At your registrar, create two `A` records pointing at the VPS's IP address:
+
+    ```
+    A   your-domain.com     -> VPS IP
+    A   *.your-domain.com   -> VPS IP
+    ```
+
+    Do this **before** installing: Let's Encrypt can only issue certificates once the domain resolves to the server.
+
+    :::warning[Both records are needed]
+    The wildcard covers `admin.` and every application subdomain, but not the root domain itself. An application served on the root domain gets no certificate without the first record.
+    :::
+
+    :::warning[Delete the registrar's default records]
+    Many registrars (OVH, for example) add an `A` record on the root domain pointing at their own hosting, and a `CNAME` for `www`. If one stays next to yours, certificate issuance fails at random. The TLS section of an application's page detects this.
+    :::
+  </Step>
+  <Step>
+    ### Open the ports
+
+    Only ports 22 (SSH), 80 and 443 need to be reachable. With `ufw`:
+
+    ```bash
+    ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw enable
+    ```
+  </Step>
+  <Step>
+    ### Run the installer
+
+    On the VPS, as root:
+
+    ```bash
+    curl -sSL https://raw.githubusercontent.com/AymericChaverot/quasar/main/setup.sh | sudo bash
+    ```
+
+    The script installs Docker if needed, then asks four questions:
+
+    1. the root domain (`your-domain.com`),
+    2. an email address for Let's Encrypt,
+    3. the admin username,
+    4. the admin password (8 characters minimum).
+
+    It then installs Quasar in `/opt/quasar` and starts it.
+  </Step>
+  <Step>
+    ### Sign in
+
+    Open `https://admin.your-domain.com` and sign in with the account you just created.
+
+    The first load can take a few seconds while the certificate is issued.
+  </Step>
+</Steps>
+
+## Next
+
+Continue with the [first steps](/getting-started/first-steps/) to secure the account and deploy a first application.

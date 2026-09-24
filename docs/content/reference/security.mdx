@@ -1,0 +1,59 @@
+---
+title: Security
+description: How the dashboard is isolated, and what to know about exposed ports.
+---
+
+## Docker access
+
+The dashboard never mounts the Docker socket. It talks to Docker through a **socket proxy** that only exposes the API sections Quasar needs: containers, images, networks, build, volumes, system information and exec.
+
+Two of these can be turned off in `/opt/quasar/docker-compose.yml`:
+
+| Setting | Needed by | If removed |
+| --- | --- | --- |
+| `EXEC: 1` | The web terminal and tasks. | Those two features stop working. |
+| `SESSION: 1` and `GRPC: 1` | Builds through Docker's own BuildKit. | `docker compose build` starts a **privileged** BuildKit container for each build. Keep them. |
+
+## Accounts and sessions
+
+- Passwords are hashed with bcrypt.
+- Session cookies are HTTP-only, Secure and SameSite=Lax.
+- Two-factor authentication is available for every account. See [users](/server/users/).
+
+## Secrets
+
+- Environment variables, compose files and Git tokens are encrypted in the database.
+- The encryption key is kept outside backups. See [the master key](/server/backups/#the-master-key).
+- API tokens are stored as hashes.
+
+## Host file system
+
+The host's `/` is mounted **read-only** in the dashboard, for disk metrics, certificates and the storage explorer.
+
+The storage explorer can't leave the folder it was opened on:
+
+- paths are normalised before use, so `..` can't climb out;
+- symbolic links are resolved and checked, so a link written by an application can't lead elsewhere;
+- files are downloaded as attachments, except a fixed list of image types (SVG is not on it).
+
+When writing files:
+
+- an uploaded file's name is reduced to its last part;
+- writes go through a temporary file that replaces the target, so a symbolic link is replaced, not followed;
+- only regular files can be written.
+
+Named volumes are only writable if you mount `/var/lib/docker/volumes` read-write yourself. See [editing files](/applications/storage/#editing-files).
+
+## Ports published by compose stacks
+
+Quasar removes host bindings on ports 80 and 443 from compose files, but **keeps other published ports**: a stack may need to expose a database or a game server.
+
+:::warning
+Those ports bypass Traefik: no TLS, no password protection, no rate limit, no address list. The **Routing** section of the application lists them. Remove them from the compose file unless you need them.
+:::
+
+A compose file with its own `traefik.*` labels is run as written, without any change.
+
+## Stations
+
+Stations run third-party code under a dedicated security model. See [stations security](/stations/security/).

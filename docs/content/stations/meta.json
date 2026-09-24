@@ -1,0 +1,16 @@
+{
+  "title": "Stations",
+  "icon": "layers",
+  "collapsible": false,
+  "pages": [
+    "overview",
+    "installing",
+    "writing",
+    "permissions",
+    "interface",
+    "script",
+    "hooks-series",
+    "theme",
+    "security"
+  ]
+}

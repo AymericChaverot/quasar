@@ -1,0 +1,532 @@
+---
+/**
+ * Reads a station document the way Quasar does before installing one: what it
+ * would refuse, what the document deploys, and — the part worth the page — the
+ * permissions in the same plain words the install screen uses.
+ *
+ * The checks mirror internal/station/validate.go and the wording comes from
+ * Permissions.Summary in internal/station/approval.go. Nothing is installed and
+ * nothing leaves the browser: this reads a document, it does not run a station.
+ */
+---
+
+<div class="sc" data-station-checker>
+  <noscript>
+    <p class="sc-note">This tool needs JavaScript. <a href="../../stations/permissions/">Permissions</a> explains what a station may ask for.</p>
+  </noscript>
+  <div data-app></div>
+</div>
+
+<script>
+  import { parse } from 'yaml';
+
+  type Dict = Record<string, any>;
+
+  const root = document.querySelector<HTMLElement>('[data-station-checker]')!;
+  const app = root.querySelector<HTMLElement>('[data-app]')!;
+  const STORAGE_KEY = 'quasar-station-checker';
+
+  const state = { doc: '' };
+  try {
+    Object.assign(state, JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'));
+  } catch {
+    /* private window: the page still works, it just forgets */
+  }
+
+  const esc = (s: any) =>
+    String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+  const idRe = /^[a-z0-9][a-z0-9-]*$/;
+  const panelIdRe = /^[a-z0-9][a-z0-9_-]*$/;
+  const paramRe = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  const serviceRe = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+  const hostRe = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+  const seriesRe = /^[a-z][a-z0-9_]{0,31}$/;
+  /** What Quasar's own exportRe matches in a script. */
+  const exportRe = /(?:^|\n)[ \t]*export[ \t]+function[ \t]+([A-Za-z_$][A-Za-z0-9_$]*)[ \t]*\(/g;
+
+  const SCHEMA = 1;
+  const DATA_PANELS = ['table', 'stat', 'list', 'keyvalue', 'markdown', 'code', 'log', 'gauge', 'timeline', 'image', 'chart'];
+  const PANEL_TYPES = [
+    'section', 'grid', 'divider', 'banner',
+    ...DATA_PANELS,
+    'form', 'button', 'search', 'confirm',
+    'iframe',
+  ];
+  const FIELD_TYPES = ['text', 'number', 'select', 'toggle', 'secret', 'port', 'textarea', 'file'];
+  const LIFECYCLE = ['start', 'stop', 'restart', 'redeploy', 'set_image'];
+  const EVENT_HOOKS = ['after_deploy', 'on_start', 'on_stop', 'on_health_fail'];
+
+  const arr = (v: any): any[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
+  const strs = (v: any): string[] => arr(v).map(String);
+
+  /** Every panel of every tab, nested ones included. */
+  function panelsOf(doc: Dict): Dict[] {
+    const out: Dict[] = [];
+    const walk = (panels: any) => {
+      for (const p of arr(panels)) {
+        if (p && typeof p === 'object') {
+          out.push(p);
+          walk(p.panels);
+        }
+      }
+    };
+    for (const tab of arr(doc?.ui?.tabs)) walk(tab?.panels);
+    return out;
+  }
+
+  /** Every action the document reaches: panel sources, buttons, row actions, submits, hooks, and the deploy form. */
+  function actionsOf(doc: Dict): string[] {
+    const out = new Set<string>();
+    const add = (name: any) => {
+      if (typeof name === 'string' && name) out.add(name);
+    };
+    for (const p of panelsOf(doc)) {
+      add(p?.source?.action);
+      add(p?.action);
+      add(p?.submit?.action);
+      for (const a of arr(p?.row_actions)) add(a?.action);
+    }
+    for (const k of EVENT_HOOKS) add(doc?.hooks?.[k]?.action);
+    for (const e of arr(doc?.hooks?.every)) add(e?.action);
+    for (const p of arr(doc?.deploy?.params)) add(p?.options_from);
+    return [...out];
+  }
+
+  /** The permissions in the words the install screen uses. */
+  function grantsOf(doc: Dict) {
+    const p = doc?.permissions ?? {};
+    const out: { title: string; detail: string; strong?: boolean }[] = [];
+    const add = (strong: boolean, title: string, detail: string) => out.push({ title, detail, strong });
+    const list = (v: any) => strs(v).join(', ');
+
+    if (strs(p.exec?.services).length) add(true, 'Run any command inside the container', list(p.exec.services));
+    if (strs(p.logs?.services).length) add(false, "Read the container's logs", list(p.logs.services));
+    if (strs(p.files?.paths).length) add(false, "Read and change files under the application's own folder", list(p.files.paths));
+    if (strs(p.env?.read).length) add(false, 'Read these environment values', list(p.env.read));
+    if (strs(p.env?.write).length) add(false, 'Change these environment values', list(p.env.write));
+    if (strs(p['net.internal']?.services).length)
+      add(false, 'Talk to its own containers, on this server only', `${list(p['net.internal'].services)} on ${list(p['net.internal'].ports)}`);
+    if (strs(p['net.external']?.allow).length)
+      add(true, 'Reach these addresses over the internet, and no others', list(p['net.external'].allow));
+    if (strs(p.lifecycle).length) add(false, 'Start, stop and redeploy this application', list(p.lifecycle));
+    if (p.notify) add(false, 'Send messages to your notification webhook', '');
+    return out;
+  }
+
+  function check(doc: Dict): string[] {
+    const errs: string[] = [];
+    const add = (text: string) => errs.push(text);
+
+    if (doc?.schema == null) add('This document does not say which schema it is written in; add `schema: 1` at the top.');
+    else if (Number(doc.schema) > SCHEMA) add(`Schema ${doc.schema} is from a later version of Quasar; this one reads schema ${SCHEMA}.`);
+    else if (Number(doc.schema) < SCHEMA) add(`Schema ${doc.schema} is older than anything Quasar has shipped.`);
+
+    if (!doc?.id) add('A station needs an id.');
+    else if (!idRe.test(String(doc.id))) add(`Id "${doc.id}" is not usable as a subdomain: lowercase letters, digits and hyphens only.`);
+    if (!doc?.name) add('A station needs a name.');
+    if (!doc?.description) add('A station needs a description; it is all the card says about it.');
+    if (!doc?.version) add('A station needs a version; it is what an update is compared against.');
+
+    const deploy = doc?.deploy;
+    if (!deploy || typeof deploy !== 'object') add('A station needs a deploy block: what it runs.');
+    else {
+      for (const key of ['id', 'name', 'description', 'category']) {
+        if (deploy[key]) add(`deploy: ${key} belongs at the top level of the document, not in the deploy block.`);
+      }
+      const type = deploy.deploy_type || 'image';
+      if (!['image', 'compose'].includes(type)) add(`deploy: deploy_type "${type}" is neither image nor compose.`);
+      if (type === 'image' && !deploy.image_ref) add('deploy: an image entry needs an image_ref.');
+      if (type === 'compose' && !deploy.compose) add('deploy: a compose entry needs a compose file.');
+      if (type === 'compose' && deploy.image_ref) add('deploy: a compose entry carries an image_ref; the images belong in the compose file.');
+      const port = Number(deploy.port);
+      if (!(port >= 1 && port <= 65535)) add(`deploy: port ${deploy.port ?? '(missing)'} is out of range.`);
+
+      const names = new Set<string>();
+      for (const q of arr(deploy.params)) {
+        if (!q?.name) add('deploy: a parameter has no name.');
+        else if (!paramRe.test(String(q.name))) add(`deploy: parameter "${q.name}": letters, digits and underscores only.`);
+        else if (names.has(String(q.name))) add(`deploy: two parameters are named "${q.name}".`);
+        if (q?.name) names.add(String(q.name));
+        if (q?.kind === 'select' && !arr(q.options).length && !q.options_from)
+          add(`deploy: parameter "${q?.name}" is a select with no options.`);
+      }
+      const used = [deploy.env, deploy.compose, deploy.image_ref, deploy.app_name, deploy.subdomain].filter(Boolean).join('\n');
+      for (const m of String(used).matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)) {
+        if (!names.has(m[1]) && !['RANDOM', 'HOST', 'URL'].includes(m[1])) {
+          add(`deploy: {{${m[1]}}} is used, but no parameter declares it.`);
+          names.add(m[1]);
+        }
+      }
+    }
+
+    const perms = doc?.permissions ?? {};
+    for (const key of ['exec', 'logs']) {
+      for (const s of strs(perms[key]?.services)) if (!serviceRe.test(s)) add(`${key}: "${s}" is not a valid service name.`);
+    }
+    for (const path of strs(perms.files?.paths)) {
+      if (path.startsWith('/') || path.split('/').includes('..')) add(`files: "${path}" must be relative to the application folder, without "..".`);
+    }
+    for (const host of strs(perms['net.external']?.allow)) if (!hostRe.test(host)) add(`net.external: "${host}" is not an exact host name.`);
+    for (const verb of strs(perms.lifecycle)) if (!LIFECYCLE.includes(verb)) add(`lifecycle: "${verb}" is not one of ${LIFECYCLE.join(', ')}.`);
+
+    const tabs = arr(doc?.ui?.tabs);
+    const hooks = doc?.hooks ?? {};
+    const hasHooks = EVENT_HOOKS.some((k) => hooks[k]?.action) || arr(hooks.every).some((e) => e?.action);
+    if (!tabs.length && !hasHooks) add('This station has neither tabs nor hooks, which makes it a catalogue entry with extra steps.');
+
+    const tabIds = new Set<string>();
+    const panelIds = new Set<string>();
+    for (const [i, tab] of tabs.entries()) {
+      const where = `tab ${tab?.id || i + 1}`;
+      if (!tab?.id) add(`${where}: a tab needs an id.`);
+      else if (!panelIdRe.test(String(tab.id))) add(`${where}: id "${tab.id}": lowercase letters, digits, hyphens and underscores only.`);
+      else if (tabIds.has(String(tab.id))) add(`Two tabs share the id "${tab.id}".`);
+      if (tab?.id) tabIds.add(String(tab.id));
+      if (!tab?.name) add(`${where}: a tab needs a name; it is what the strip says.`);
+      if (!arr(tab?.panels).length) add(`${where}: a tab with no panels draws an empty page.`);
+    }
+
+    const logServices = strs(perms.logs?.services);
+    const netServices = strs(perms['net.internal']?.services);
+    const netPorts = strs(perms['net.internal']?.ports);
+
+    for (const p of panelsOf(doc)) {
+      const where = `panel ${p?.id || `(${p?.type ?? 'unknown'})`}`;
+      if (!p?.id) add(`${where}: a panel needs an id; it is what a refresh names.`);
+      else if (!panelIdRe.test(String(p.id))) add(`${where}: id "${p.id}": lowercase letters, digits, hyphens and underscores only.`);
+      else if (panelIds.has(String(p.id))) add(`Two panels share the id "${p.id}".`);
+      if (p?.id) panelIds.add(String(p.id));
+
+      if (!PANEL_TYPES.includes(p?.type)) {
+        add(`${where}: type "${p?.type}" is not a component.`);
+        continue;
+      }
+      const hasSource = !!(p.source?.action || p.source?.static != null || arr(p.source?.series).length);
+      if (DATA_PANELS.includes(p.type) && !hasSource && p.type !== 'log') add(`${where}: a ${p.type} panel has nothing to draw: give it a source.`);
+      if (p.source?.action && p.source?.static != null) add(`${where}: the source is both an action and static content; it is one or the other.`);
+      if (p.type === 'table' && !arr(p.columns).length) add(`${where}: a table needs columns.`);
+      if (p.type === 'form') {
+        if (!arr(p.fields).length) add(`${where}: a form needs fields.`);
+        if (!p.submit?.action) add(`${where}: a form needs a submit action.`);
+        for (const f of arr(p.fields)) {
+          if (!f?.name) add(`${where}: a field needs a name.`);
+          if (f?.type && !FIELD_TYPES.includes(f.type)) add(`${where}: field "${f?.name}" has type "${f.type}", which is not ${FIELD_TYPES.join(', ')}.`);
+        }
+      }
+      if (['button', 'confirm', 'search'].includes(p.type) && !p.action) add(`${where}: a ${p.type} panel needs an action.`);
+      if (p.type === 'confirm' && !p.confirm) add(`${where}: a confirm panel needs the question to ask.`);
+      if (p.type === 'log') {
+        if (!p.service) add(`${where}: a log panel needs a service.`);
+        else if (!logServices.includes(String(p.service))) add(`${where}: reads the service "${p.service}", which the logs permission does not cover.`);
+      }
+      if (p.type === 'iframe') {
+        const ref = /^\{\{service:([A-Za-z0-9][A-Za-z0-9._-]*):([0-9]{1,5})\}\}/.exec(String(p.src ?? '').trim());
+        if (!p.src) add(`${where}: an iframe needs a src.`);
+        else if (String(p.src).trim().startsWith('{{')) {
+          if (!ref) add(`${where}: src "${p.src}" is not a service reference; write {{service:name:port}} followed by a path.`);
+          else if (!netServices.includes(ref[1]) || !netPorts.includes(ref[2]))
+            add(`${where}: points at ${ref[1]} on port ${ref[2]}, which the net.internal permission does not cover.`);
+        } else if (!String(p.src).startsWith('https://')) {
+          add(`${where}: src "${p.src}": an iframe reaches one of this application's own services, or an https address.`);
+        }
+      }
+      if (p.type === 'chart') {
+        for (const name of strs(p.source?.series)) if (!seriesRe.test(name)) add(`${where}: series "${name}" must start with a letter and use lowercase letters, digits and _.`);
+        if (p.range && !/^[1-9][0-9]*[hd]$/.test(String(p.range))) add(`${where}: range "${p.range}" is not a window like 24h or 30d.`);
+      }
+    }
+
+    for (const e of arr(hooks.every)) {
+      if (!e?.action) add('hooks: a scheduled entry names no action.');
+      else if (!(Number(e.minutes) >= 1)) add(`hooks: "${e.action}" is scheduled every ${e.minutes} minutes; the shortest interval is one minute.`);
+    }
+
+    const exported = new Set<string>();
+    for (const m of String(doc?.script ?? '').matchAll(exportRe)) exported.add(m[1]);
+    const wanted = actionsOf(doc);
+    if (wanted.length && !doc?.script) add(`This station reaches ${wanted.length} action(s) and carries no script.`);
+    else for (const name of wanted) if (!exported.has(name)) add(`The action "${name}" is not exported by the script; declare it as \`export function ${name}(...)\`.`);
+
+    return errs;
+  }
+
+  function summary(doc: Dict): string {
+    const deploy = doc?.deploy ?? {};
+    const type = deploy.deploy_type || 'image';
+    const tabs = arr(doc?.ui?.tabs);
+    const rows: [string, string][] = [
+      ['Station', `${doc?.name ?? '—'} ${doc?.version ? `<span class="sc-faint">${esc(doc.version)}</span>` : ''}`],
+      ['Id', `<span class="sc-mono">${esc(doc?.id ?? '—')}</span>`],
+      ['Author', doc?.author ? esc(doc.author) : '<span class="sc-faint">not named</span>'],
+      ['Deploys', type === 'compose' ? `a compose stack, routed to <span class="sc-mono">${esc(deploy.compose_service || 'the service Quasar works out')}</span>` : `the image <span class="sc-mono">${esc(deploy.image_ref ?? '—')}</span>`],
+      ['Port', `<span class="sc-mono">${esc(deploy.port ?? '—')}</span>${deploy.raw ? ' <span class="sc-faint">— not HTTP, reached at the server address</span>' : ''}`],
+      ['Asks first', arr(deploy.params).length ? arr(deploy.params).map((p: Dict) => `<span class="sc-mono">${esc(p?.name)}</span>`).join(', ') : '<span class="sc-faint">nothing</span>'],
+      ['Interface', tabs.length ? `${tabs.length} tab${tabs.length > 1 ? 's' : ''}, ${panelsOf(doc).length} panels` : '<span class="sc-faint">no tab</span>'],
+      ['Script', `${actionsOf(doc).length} action${actionsOf(doc).length === 1 ? '' : 's'}`],
+    ];
+    return `<div class="sc-card">
+      <p class="sc-head">What this document is</p>
+      <dl class="sc-dl">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>
+    </div>`;
+  }
+
+  function render() {
+    const text = state.doc.trim();
+    let body = '';
+
+    if (!text) {
+      body = '<p class="sc-note">Paste a station document above. Nothing is installed, and nothing leaves this page.</p>';
+    } else {
+      let doc: any;
+      try {
+        doc = parse(text);
+      } catch (error) {
+        body = `<div class="sc-card sc-bad"><p class="sc-head">This document is not valid YAML</p><p class="sc-mono sc-small">${esc((error as Error).message)}</p></div>`;
+      }
+
+      if (doc !== undefined) {
+        if (!doc || typeof doc !== 'object') {
+          body = '<div class="sc-card sc-bad"><p class="sc-head">This is not a station</p><p class="sc-small">A station document is a mapping, starting with <span class="sc-mono">schema: 1</span>.</p></div>';
+        } else {
+          const errors = check(doc);
+          const grants = grantsOf(doc);
+          const verdict = errors.length
+            ? `<div class="sc-card sc-bad">
+                 <p class="sc-head">Quasar would refuse this document</p>
+                 <ul class="sc-list">${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>
+                 <p class="sc-small">Quasar reports every problem at once, as this does, rather than the first one.</p>
+               </div>`
+            : '<div class="sc-card sc-good"><p class="sc-head">This document installs</p><p class="sc-small">Everything Quasar checks before storing a station passes. What the script does once installed is another matter — read it.</p></div>';
+
+          const permissions = grants.length
+            ? `<div class="sc-card">
+                 <p class="sc-head">What you would be accepting</p>
+                 <ul class="sc-grants">
+                   ${grants
+                     .map(
+                       (g) => `<li${g.strong ? ' class="sc-strong"' : ''}>
+                         <span class="sc-grant-title">${esc(g.title)}</span>
+                         ${g.detail ? `<span class="sc-mono sc-small">${esc(g.detail)}</span>` : ''}
+                       </li>`,
+                     )
+                     .join('')}
+                 </ul>
+                 <p class="sc-small">These are the words Quasar shows before installing. They are accepted as a whole: a station running with half of what it asked for fails in ways nobody can explain.</p>
+                 ${grants.some((g) => g.title.startsWith('Run any command')) ? '<p class="sc-warn">Running commands inside the container is root on it, by design. Install this only if you would give its author that.</p>' : ''}
+               </div>`
+            : '<div class="sc-card"><p class="sc-head">It asks for nothing</p><p class="sc-small">This station can compute and return values, and reach nothing else on the server.</p></div>';
+
+          body = `${verdict}${permissions}${summary(doc)}`;
+        }
+      }
+    }
+
+    app.innerHTML = `
+      <div class="sc-form">
+        <label class="sc-field">
+          <span class="sc-label">The document</span>
+          <textarea class="sc-input sc-mono" rows="14" spellcheck="false" data-bind="doc" placeholder="schema: 1&#10;id: my-station&#10;name: My station">${esc(state.doc)}</textarea>
+        </label>
+        <div class="sc-row">
+          <button type="button" class="sc-btn" data-act="clear">Clear</button>
+          <span class="sc-help">Reading a station you were sent? Paste it here before installing it.</span>
+        </div>
+      </div>
+      <div class="sc-out">${body}</div>`;
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      /* nothing to do */
+    }
+  }
+
+  app.addEventListener('input', (event) => {
+    const el = event.target as HTMLTextAreaElement;
+    if (el.dataset.bind !== 'doc') return;
+    state.doc = el.value;
+    const at = el.selectionStart;
+    render();
+    const again = app.querySelector<HTMLTextAreaElement>('[data-bind="doc"]');
+    again?.focus();
+    if (again && at != null) again.setSelectionRange(at, at);
+  });
+
+  app.addEventListener('click', (event) => {
+    if (!(event.target as HTMLElement).closest('[data-act="clear"]')) return;
+    state.doc = '';
+    render();
+  });
+
+  render();
+</script>
+
+<style is:global>
+  .sc {
+    margin-block: 1.5rem;
+    display: grid;
+    gap: 1rem;
+  }
+
+  .sc-form {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: var(--radius-main, 0.75rem);
+    background: var(--background-2);
+  }
+
+  .sc-field {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .sc-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .sc-label {
+    color: var(--text-2);
+    font-size: 0.8125rem;
+  }
+
+  .sc-input {
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: 0.375rem;
+    background: var(--background);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.875rem;
+    resize: vertical;
+  }
+
+  .sc-input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+
+  .sc-mono {
+    font-family: var(--mono-family, monospace);
+    font-size: 0.8125rem;
+  }
+
+  .sc-note,
+  .sc-help,
+  .sc-small,
+  .sc-faint {
+    color: var(--text-2);
+    font-size: 0.8125rem;
+  }
+
+  .sc-btn {
+    padding: 0.3125rem 0.75rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-radius: 999px;
+    background: var(--background);
+    color: var(--text);
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+
+  .sc-btn:hover {
+    border-color: var(--accent);
+  }
+
+  .sc-out {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .sc-card {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border: var(--border-width, 1px) solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--background-2);
+  }
+
+  .sc-good {
+    border-left-color: var(--accent);
+  }
+
+  .sc-bad {
+    border-left-color: oklch(62% 0.2 25);
+  }
+
+  .sc-head {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 500;
+  }
+
+  .sc-card p {
+    margin: 0;
+  }
+
+  .sc-list {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+    padding-left: 1.1rem;
+    font-size: 0.8125rem;
+  }
+
+  .sc-grants {
+    display: grid;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sc-grants li {
+    display: grid;
+    gap: 0.125rem;
+    padding: 0.5rem 0.625rem;
+    border-radius: 0.375rem;
+    background: var(--background);
+  }
+
+  .sc-grants .sc-strong {
+    box-shadow: inset 3px 0 0 oklch(75% 0.15 70);
+  }
+
+  .sc-grant-title {
+    font-size: 0.875rem;
+  }
+
+  .sc-warn {
+    color: oklch(75% 0.15 70);
+    font-size: 0.8125rem;
+  }
+
+  .sc-dl {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+  }
+
+  .sc-dl > div {
+    display: grid;
+    grid-template-columns: minmax(6rem, auto) 1fr;
+    gap: 0.75rem;
+    font-size: 0.8125rem;
+  }
+
+  .sc-dl dt {
+    color: var(--text-2);
+  }
+
+  .sc-dl dd {
+    margin: 0;
+  }
+</style>

@@ -1,0 +1,43 @@
+---
+title: Users and sessions
+description: Accounts, roles, two-factor authentication and sessions.
+sidebar:
+  label: Users & sessions
+---
+
+## Users
+
+Manage accounts in **Settings → Users**. There are two roles:
+
+| Role | Can |
+| --- | --- |
+| **admin** | Do everything. |
+| **viewer** | See every application, log, metric and audit entry, but change nothing. |
+
+Viewers also can't open container terminals, download backups or the master key, read environment variables, or browse stored files. These give far more access than "read-only" suggests.
+
+- Admins can change a user's role, reset their password, or delete them.
+- The last admin account can't be demoted or deleted.
+
+## Your account
+
+**Settings → Account** changes your password. It signs out all your other sessions.
+
+## Two-factor authentication
+
+**Settings → Two-factor authentication**:
+
+1. Click **Set up 2FA**.
+2. Scan the QR code with an authenticator app, or enter the secret by hand.
+3. Enter a code to confirm.
+
+From then on, signing in asks for a code. To turn it off, confirm with your password.
+
+## Sessions
+
+- A session lasts 7 days.
+- **Settings → Sessions → Sign out everywhere** ends every session, yours included.
+
+## Appearance
+
+**Settings → Appearance** picks the dashboard theme: Nebula (dark, default), Marathon, Nord, Synthwave, Terminal, Paper or Solarized (light).

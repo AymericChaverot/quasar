@@ -1,0 +1,35 @@
+---
+title: Monitoring
+description: Server health, metrics history, logs and the audit log.
+---
+
+## Dashboard
+
+The dashboard's home page shows:
+
+- **Server health**: live CPU, memory and disk usage.
+- **History**: CPU, memory and disk over the last 24 hours or 7 days.
+- **Applications**: every application with its status.
+- **System containers**: Traefik, the socket proxy and the dashboard itself.
+
+Metrics are sampled in the background and kept for 7 days.
+
+## System page
+
+**System** describes the server itself:
+
+- **Hardware**: processor, memory and disk capacity.
+- **Environment**: operating system, Docker and Traefik versions. See [updating Traefik](/getting-started/updating/#updating-traefik).
+- **TLS certificates**, **Docker storage**, **Volumes**, **Application storage** and **Backups**, covered in their own pages.
+
+## Logs
+
+**Logs** in the navigation searches the stored output of every application. See [searching past logs](/applications/logs-history/#searching-past-logs).
+
+## Audit log
+
+**Audit** lists who did what, when, and from where: deployments, setting changes, file edits, sign-ins, station actions…
+
+- Entries can't be edited or deleted.
+- Use the search box to filter them.
+- Actions triggered by a webhook or an API token are recorded under that name.

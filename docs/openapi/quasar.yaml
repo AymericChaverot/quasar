@@ -1,0 +1,348 @@
+openapi: 3.1.0
+info:
+  title: Quasar API
+  version: v1
+  description: Drive a Quasar server from a script or a CI pipeline.
+servers:
+  - url: https://admin.your-domain.com
+    description: Your Quasar dashboard
+security:
+  - bearerAuth: []
+tags:
+  - name: Applications
+    description: List, inspect, deploy and restart applications.
+  - name: Server
+    description: Server usage.
+  - name: Webhooks
+    description: Deploy without a token, from a secret URL.
+
+paths:
+  /api/v1/apps:
+    get:
+      operationId: listApps
+      summary: List applications
+      description: Returns every application on the server. Works with a viewer or an admin token.
+      tags: [Applications]
+      responses:
+        '200':
+          description: Every application.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apps]
+                properties:
+                  apps:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/App'
+              example:
+                apps:
+                  - id: 3f9c2a7e
+                    name: Blog
+                    subdomain: blog
+                    host: blog.your-domain.com
+                    deploy_type: git
+                    git_url: https://github.com/me/blog.git
+                    git_branch: main
+                    port: 3000
+                    state: running
+                    uptime: 3d 4h
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/apps/{id}:
+    get:
+      operationId: getApp
+      summary: Get an application
+      description: Returns one application. Works with a viewer or an admin token.
+      tags: [Applications]
+      parameters:
+        - $ref: '#/components/parameters/AppId'
+      responses:
+        '200':
+          description: The application.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/apps/{id}/deploy:
+    post:
+      operationId: deployApp
+      summary: Deploy an application
+      description: |
+        Fetches the latest version of the application and deploys it, like the Update button in the dashboard: it pulls the image, or pulls the branch and rebuilds.
+
+        The call returns as soon as the deployment has started. Poll GET /api/v1/apps/{id} to follow its state.
+
+        Requires an admin token.
+      tags: [Applications]
+      parameters:
+        - $ref: '#/components/parameters/AppId'
+      responses:
+        '202':
+          description: The deployment has started.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, app]
+                properties:
+                  status:
+                    type: string
+                    const: deploying
+                  app:
+                    type: string
+                    description: Identifier of the application.
+              example:
+                status: deploying
+                app: 3f9c2a7e
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: A deployment of this application is already running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: a deploy is already in progress
+
+  /api/v1/apps/{id}/restart:
+    post:
+      operationId: restartApp
+      summary: Restart an application
+      description: |
+        Restarts the application's containers, without fetching or rebuilding anything.
+
+        Requires an admin token.
+      tags: [Applications]
+      parameters:
+        - $ref: '#/components/parameters/AppId'
+      responses:
+        '200':
+          description: The application was restarted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, app]
+                properties:
+                  status:
+                    type: string
+                    const: restarted
+                  app:
+                    type: string
+                    description: Identifier of the application.
+              example:
+                status: restarted
+                app: 3f9c2a7e
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          description: Docker refused the restart.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/system:
+    get:
+      operationId: getSystem
+      summary: Get server usage
+      description: Returns the server's current CPU, memory and disk usage. Works with a viewer or an admin token.
+      tags: [Server]
+      responses:
+        '200':
+          description: Current usage.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/System'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: Usage could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /hooks/{id}/{secret}:
+    post:
+      operationId: deployWebhook
+      summary: Deploy webhook
+      description: |
+        Deploys the application like POST /api/v1/apps/{id}/deploy, but without a token: the secret in the URL authenticates the call. Add this URL as a push webhook in GitHub or GitLab.
+
+        Copy the full URL from the application's page, in Settings → Deploy webhook. Anyone with it can trigger a deployment, so keep it secret.
+
+        No request body is needed.
+      tags: [Webhooks]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AppId'
+        - name: secret
+          in: path
+          required: true
+          description: The application's webhook secret.
+          example: 9b1d4e7a2c6f
+          schema:
+            type: string
+      responses:
+        '202':
+          description: The deployment has started. The body is the plain text "deploy triggered".
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: deploy triggered
+        '404':
+          description: Unknown application, or wrong secret. Both answer the same, so the URL doesn't reveal whether an application exists.
+        '429':
+          description: A deployment of this application is already running.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: a deploy is already in progress
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: An API token created in Settings → API tokens. Tokens start with qsr_.
+
+  parameters:
+    AppId:
+      name: id
+      in: path
+      required: true
+      description: Identifier of the application, as returned by GET /api/v1/apps.
+      example: 3f9c2a7e
+      schema:
+        type: string
+
+  responses:
+    Unauthorized:
+      description: The token is missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: invalid token
+    Forbidden:
+      description: The token is a viewer token, and this call needs an admin one.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: this token is read-only
+    NotFound:
+      description: No application has this identifier.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: application not found
+
+  schemas:
+    App:
+      type: object
+      required: [id, name, subdomain, host, deploy_type, port, state]
+      properties:
+        id:
+          type: string
+          description: Identifier of the application.
+          example: 3f9c2a7e
+        name:
+          type: string
+          example: Blog
+        subdomain:
+          type: string
+          description: "@ for an application served on the root domain."
+          example: blog
+        host:
+          type: string
+          description: The host the application is served on.
+          example: blog.your-domain.com
+        deploy_type:
+          type: string
+          enum: [image, git, compose]
+          example: git
+        image_ref:
+          type: string
+          description: The image, for image applications.
+          example: nginx:latest
+        git_url:
+          type: string
+          description: The repository, for git applications.
+          example: https://github.com/me/blog.git
+        git_branch:
+          type: string
+          description: The branch, for git applications.
+          example: main
+        port:
+          type: integer
+          description: Port the application listens on inside its container.
+          example: 3000
+        state:
+          type: string
+          description: |
+            running, stopped, error (crashed, or only part of a stack is up), deploying or not deployed. Other Docker states, such as restarting, are passed through as they are.
+          example: running
+        uptime:
+          type: string
+          description: How long the application has been running, such as 12m, 5h 20m or 3d 4h. Only set while it is running.
+          example: 3d 4h
+
+    System:
+      type: object
+      required: [cpu_percent, mem_percent, mem_used_gb, mem_total_gb, disk_percent, disk_used_gb, disk_total_gb]
+      properties:
+        cpu_percent:
+          type: number
+          example: 12.5
+        mem_percent:
+          type: number
+          example: 41.2
+        mem_used_gb:
+          type: number
+          example: 1.6
+        mem_total_gb:
+          type: number
+          example: 3.8
+        disk_percent:
+          type: number
+          example: 57
+        disk_used_gb:
+          type: number
+          example: 22.1
+        disk_total_gb:
+          type: number
+          example: 38.7
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: What went wrong.

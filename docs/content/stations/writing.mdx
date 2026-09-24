@@ -1,0 +1,127 @@
+---
+title: Writing a station
+description: The structure of a station document, with a minimal example.
+sidebar:
+  label: Writing one
+---
+
+## A minimal station
+
+This station deploys nginx and adds a tab with a counter and a button. It needs no permissions.
+
+```yaml title="counter.yaml"
+schema: 1
+id: counter
+name: Counter
+description: A counter, to learn the format
+version: "1.0.0"
+
+deploy:
+  image_ref: nginx:alpine
+  port: 80
+
+ui:
+  tabs:
+    - id: main
+      name: Counter
+      panels:
+        - id: count
+          type: stat
+          title: Clicks
+          source: {action: read_count}
+        - id: click
+          type: button
+          label: Click me
+          action: click
+
+script: |
+  export function read_count() {
+    return { data: { value: quasar.store.get('count') || 0 } }
+  }
+
+  export function click() {
+    quasar.store.set('count', (quasar.store.get('count') || 0) + 1)
+    return { toast: 'Clicked', refresh: ['count'] }
+  }
+```
+
+How it works:
+
+1. The `count` panel calls the `read_count` action and shows the number it returns.
+2. The button calls `click`, which saves a new count.
+3. `click` returns a message, and asks Quasar to refresh the `count` panel.
+
+## Top-level fields
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `schema` | yes | Format version. Always `1` for now. |
+| `id` | yes | Unique identifier: lowercase letters, digits and hyphens. Also the default subdomain. Installing a station whose `id` is already used is refused. |
+| `name` | yes | Display name. |
+| `description` | yes | One line describing the station. |
+| `version` | yes | Your version number, shown when updating. |
+| `author` | | Your name. |
+| `deploy` | yes | What to run. See below. |
+| `permissions` | | What the script may reach. See [permissions](/stations/permissions/). |
+| `ui` | | Tabs and panels. See [interface](/stations/interface/). |
+| `hooks` | | Actions run on events or on a schedule. See [hooks and series](/stations/hooks-series/). |
+| `script` | | The actions, in JavaScript. See [script](/stations/script/). |
+
+A station must have at least one tab or one hook.
+
+## The `deploy` block
+
+`deploy` is a [catalogue entry](/catalogue/format/#entry), with the same fields and placeholders. Parameters, generated secrets and compose adaptation all work the same way.
+
+Don't write `id`, `name`, `description` or `category` in `deploy`: they belong at the top level of the document.
+
+### Options computed by the script
+
+A `select` parameter can get its options from an action, with `options_from`. Useful for lists that keep growing, such as game versions:
+
+```yaml
+params:
+  - name: VERSION
+    label: Minecraft version
+    kind: select
+    default: "1.21.4"
+    options: ["1.21.4", "1.21.1"]     # fallback
+    options_from: official_versions
+```
+
+```js
+export function official_versions() {
+  const m = quasar.http.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json').json()
+  return {
+    options: m.versions.filter(v => v.type === 'release').map(v => v.id),
+    default: m.latest.release,   // optional
+  }
+}
+```
+
+The action can also return a plain list instead of `{options, default}`.
+
+Good to know:
+
+- The returned options are **added before** the written `options`, which stay as a fallback if the call fails.
+- The answer is cached for one hour.
+- The action runs before the application exists, so it can only use `quasar.http`, on hosts allowed by `net.external`.
+
+## Placeholders
+
+The [same rules](/catalogue/format/#placeholders) as catalogues apply:
+
+- `{{NAME}}` is replaced by Quasar when deploying.
+- `${NAME}` is read by Docker Compose from the `.env` file.
+
+For a value the script needs to read, write it in `env` and declare it in the [`env` permission](/stations/permissions/#env).
+
+## Checking a document
+
+When you install a station, Quasar checks it and lists every problem:
+
+- the document's structure and values,
+- that every action the interface uses is exported by the script,
+- that services named in the interface exist and are covered by permissions.
+
+Start from `components.yaml` in the [examples](/stations/overview/#examples) to see every panel working.

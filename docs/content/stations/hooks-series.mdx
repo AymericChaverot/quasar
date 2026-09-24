@@ -1,0 +1,85 @@
+---
+title: Hooks and series
+description: Run actions on events or on a schedule, and chart values over time.
+sidebar:
+  label: Hooks & series
+---
+
+## Hooks
+
+Hooks call actions without anyone clicking.
+
+```yaml
+hooks:
+  after_deploy:   {action: sync_config}
+  on_start:       {action: announce}
+  on_stop:        {action: save_world}
+  on_health_fail: {action: collect_diagnostics}
+  every:
+    - {minutes: 60, action: check_updates}
+```
+
+| Hook | Runs |
+| --- | --- |
+| `after_deploy` | After each deployment of the application. |
+| `on_start` | When the application starts. |
+| `on_stop` | When the application stops. |
+| `on_health_fail` | When the application's [health check](/applications/resources-health/#health-checks) fails. |
+| `every` | On a schedule, every N minutes (1 minute minimum). |
+
+Good to know:
+
+- **Hooks never block anything.** A failing `after_deploy` is reported in the deploy panel and the audit log, but the deployment still succeeds.
+- **Scheduled hooks only run while the application is running.**
+
+## Series
+
+A series is a number recorded over time, such as players online or queue length. Quasar stores it, and a `chart` panel draws it.
+
+Record values from a scheduled hook:
+
+```yaml
+hooks:
+  every:
+    - {minutes: 5, action: sample}
+```
+
+```js
+export function sample() {
+  quasar.series.record('players', countPlayers())
+}
+```
+
+- Names: lowercase letters, digits and `_`, starting with a letter. Up to 32 characters.
+- Up to 8 series per application.
+- **Retention**: every sample is kept for 7 days. Older data is kept for a year, as one point per hour (average, minimum and maximum).
+
+Use a series rather than the store for history: the store is limited to 256 KB and rewritten on each change.
+
+## Charts
+
+```yaml
+- id: activity
+  type: chart
+  title: Players online
+  kind: area          # line | area | bar | stacked
+  range: 7d           # 24h by default
+  unit: " online"     # appended to values
+  max: 20             # top of the scale; fits the data if omitted
+  source: {series: [players]}
+  refresh: {seconds: 60}
+```
+
+| Field | Description |
+| --- | --- |
+| `kind` | `line`, `area`, `bar` or `stacked`. |
+| `range` | How far back to draw, in hours or days: `24h`, `7d`, `30d`… |
+| `unit` | Text appended to every value. |
+| `max` | Fixed top of the scale. |
+| `source` | `{series: [...]}`: one or more series, drawn together with a legend. |
+
+Charts are drawn by Quasar, with **no script running**. That makes them cheap to refresh often.
+
+A series with no data yet shows an empty chart, not an error.
+
+Colours come from the theme's `chart` list. See [theme](/stations/theme/).

@@ -1,0 +1,34 @@
+---
+title: Logs and history
+description: Read an application's logs, and roll back a deployment.
+sidebar:
+  label: Logs & history
+---
+
+## Live logs
+
+The **Logs** tab of an application streams its container output as it is written.
+
+For a compose stack, each container also has its own log view, reached from **Stack containers** in the Overview tab.
+
+## Searching past logs
+
+Quasar keeps a copy of every application's output. To search it, click **Search history** in the Logs tab, or open **Logs** in the navigation.
+
+- Filter by application, or search all of them.
+- Search for any text, such as `error` or `exception`.
+
+The copy keeps the last 7 days, and at most 50,000 lines per application.
+
+## Deployment history
+
+The **History** tab lists every deployment: date, source (manual, webhook, API…), image, duration and result. Hover a failed deployment to see why it failed.
+
+### Rolling back
+
+Click **Rollback** on a successful deployment to go back to it:
+
+- for a single container, Quasar runs the image that deployment built or pulled;
+- for a compose stack, Quasar runs the compose file that deployment used. The environment is left as it is.
+
+For Git builds, the last 4 built images are kept for rollbacks.

@@ -1,0 +1,9 @@
+/* Quasar's accent. The site's chartreuse as is on dark backgrounds; darkened on light
+   ones, where #d4e815 would not be readable as link text. */
+:root,
+:root[data-accent] {
+  --zd-accent-dark: #d4e815;
+  --zd-accent-contrast-dark: #08080a;
+  --zd-accent-light: oklch(52% 0.13 115);
+  --zd-accent-contrast-light: #ffffff;
+}

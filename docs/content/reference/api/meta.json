@@ -1,0 +1,16 @@
+{
+  "title": "API",
+  "icon": "braces",
+  "pages": [
+    "overview",
+    "---Applications---",
+    "list-apps",
+    "get-app",
+    "deploy-app",
+    "restart-app",
+    "---Server---",
+    "get-system",
+    "---Webhooks---",
+    "deploy-webhook"
+  ]
+}

@@ -1,0 +1,85 @@
+---
+title: Overview
+description: Drive Quasar from a script or a CI pipeline.
+---
+
+The API is served by the dashboard, at `https://admin.your-domain.com/api/v1/`. It sends and returns JSON.
+
+## Tokens
+
+Create a token in **Settings → API tokens**. Give it a name (such as `github-actions`) and a role:
+
+| Role | Can |
+| --- | --- |
+| **viewer** | List and inspect applications, read server usage. |
+| **admin** | Also deploy and restart applications. |
+
+- The token is shown **once**. Only its hash is stored, so a lost token can't be recovered: revoke it and create another.
+- No token can read environment variables or compose files.
+- Every call that changes something is recorded in the [audit log](/server/monitoring/#audit-log), under the token's name.
+
+## Authentication
+
+Send the token in the `Authorization` header:
+
+```bash
+curl -H "Authorization: Bearer qsr_…" https://admin.your-domain.com/api/v1/apps
+```
+
+## Errors
+
+Errors return a JSON body with a message:
+
+```json
+{ "error": "invalid token" }
+```
+
+| Status | Meaning |
+| --- | --- |
+| `401` | The token is missing or invalid. |
+| `403` | The call needs an admin token, and this one is a viewer token. |
+| `404` | No application has this identifier. |
+| `409` | A deployment of this application is already running. |
+
+## Endpoints
+
+| Method | Path | Role | |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/apps` | viewer | [List applications](/reference/api/list-apps/) |
+| `GET` | `/api/v1/apps/{id}` | viewer | [Get an application](/reference/api/get-app/) |
+| `POST` | `/api/v1/apps/{id}/deploy` | admin | [Deploy an application](/reference/api/deploy-app/) |
+| `POST` | `/api/v1/apps/{id}/restart` | admin | [Restart an application](/reference/api/restart-app/) |
+| `GET` | `/api/v1/system` | viewer | [Get server usage](/reference/api/get-system/) |
+| `POST` | `/hooks/{id}/{secret}` | none | [Deploy webhook](/reference/api/deploy-webhook/) |
+
+## Token or webhook?
+
+Both can deploy an application on push.
+
+| | Deploy webhook | API token |
+| --- | --- | --- |
+| **Setup** | Paste one URL in GitHub or GitLab. | Store a token as a CI secret. |
+| **Scope** | One application. | Every application. |
+| **Can also** | Nothing else. | List apps, restart, read usage. |
+| **Best for** | Deploying on every push. | Deploying at the end of a CI pipeline, after tests. |
+
+## Example: deploy from GitHub Actions
+
+Deploy after the tests pass, with an admin token stored as the `QUASAR_TOKEN` secret, and the application's identifier as the `QUASAR_APP_ID` variable:
+
+```yaml title=".github/workflows/deploy.yml"
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${{ secrets.QUASAR_TOKEN }}" \
+            https://admin.your-domain.com/api/v1/apps/${{ vars.QUASAR_APP_ID }}/deploy
+```
+
+Find the application's identifier with [List applications](/reference/api/list-apps/), or in the address of its page in the dashboard.

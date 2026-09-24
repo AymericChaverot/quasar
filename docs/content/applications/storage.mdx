@@ -1,0 +1,70 @@
+---
+title: Storage
+description: Keep an application's data, browse it, and back up databases safely.
+---
+
+A container's files are lost when it is replaced, which happens on every deployment. Anything worth keeping must be on a mount.
+
+## Persistent data
+
+For an image or a Dockerfile build, set **Persistent data mount** to a path inside the container, such as `/data`. It is stored on the host in `/opt/quasar/apps/<id>/data/`, and included in [backups](/server/backups/).
+
+In a compose stack, declare mounts in the compose file as usual. A relative bind such as `./data:/data` also ends up under the application's folder.
+
+## Seeing what is mounted
+
+On the application's page, the **Storage** tab lists every mount of its containers:
+
+- the path in the container,
+- where it lives (a named volume or a folder on the host),
+- whether it is read-write or read-only.
+
+This list comes from the running containers, so it also shows the volumes an image creates on its own, which no file mentions.
+
+Click **Browse** to open a mount in the storage explorer.
+
+## The storage explorer
+
+The explorer lets you look inside persisted data without SSH:
+
+- browse folders (every folder has its own URL, so you can share or bookmark it),
+- preview text files up to 256 KB, and images,
+- download any file.
+
+Every named volume on the server is also listed in **System → Volumes**, with its size and the application it belongs to.
+
+Only admins can use the explorer: these files hold whatever the app wrote, secrets included.
+
+### Editing files
+
+Where writing is allowed, you can also upload files, edit a text file, and delete files. Every change is recorded in the [audit log](/server/monitoring/#audit-log).
+
+- **Application folders** (`/opt/quasar/apps`) can be edited, with nothing to set up.
+- **Named volumes** are read-only by default. To make them editable, uncomment the `/var/lib/docker/volumes` line in `/opt/quasar/docker-compose.yml`, then run `docker compose up -d` in `/opt/quasar`.
+- A mount the container itself declares read-only (`:ro`) always stays read-only.
+
+A page shows a **read-only** chip when writing is not possible.
+
+Limits:
+
+- Files larger than 256 KB can't be edited, only downloaded.
+- Volumes on a network driver (NFS, EBS…) can't be opened: their data isn't on this server's disk.
+
+## Growth
+
+The **Growth** chart in the Storage tab shows how the application's folder grew over time. Use it to spot an app that will fill the disk.
+
+## Backing up a database
+
+Copying the files of a running database can produce a backup that won't load. For any app holding a database, set a **Backup dump command** in the Storage tab:
+
+```bash
+pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"
+```
+
+- It runs inside the container before each backup.
+- Its output is saved in the archive as `dump.sql`.
+- It has the container's environment, so use variables rather than writing credentials.
+- If the command fails, the backup fails.
+
+Leave it empty to copy the data folder as-is.

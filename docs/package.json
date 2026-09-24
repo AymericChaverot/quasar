@@ -1,0 +1,20 @@
+{
+  "name": "quasar-docs",
+  "private": true,
+  "type": "module",
+  "description": "Quasar's documentation, served under /docs on the site.",
+  "scripts": {
+    "dev": "zenith dev --port 4322",
+    "build": "zenith build",
+    "preview": "zenith preview --port 4322",
+    "gen:icons": "node scripts/gen-icons.mjs"
+  },
+  "dependencies": {
+    "astro": "^7.3.2",
+    "yaml": "^2.9.1",
+    "zenith-docs": "github:AymericChaverot/zenith-docs#v0.2.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

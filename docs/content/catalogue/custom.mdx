@@ -1,0 +1,52 @@
+---
+title: Custom catalogues
+description: Add your own software and categories to the catalogue.
+sidebar:
+  label: Your own
+---
+
+A custom catalogue is a YAML document that adds entries and categories to the ones Quasar ships. Use it for your own software, or to offer a service configured the way you like it.
+
+Manage them in **Settings → Catalogues**.
+
+## Adding a catalogue
+
+There are three ways:
+
+- **Write one** directly on the page.
+- **Paste** a YAML document.
+- **Import from a URL**. Quasar keeps the URL and gives you a re-fetch button.
+
+:::note
+Nothing is refreshed automatically. A catalogue decides what your server will run, so bringing in a new version is always a button you press.
+:::
+
+A document with errors is not saved. The page lists every problem found, not only the first.
+
+## Editing entries
+
+Entries can also be edited one at a time in a form, without writing YAML. The form and the YAML are two views of the same document, so you can switch between them freely.
+
+## How entries appear
+
+- Each custom catalogue gets its own button on the new-application page, so your entries aren't lost among the built-in ones.
+- New categories appear as filter buttons in the catalogue.
+- An entry that reuses the `id` of a built-in entry **replaces** that entry.
+
+## Examples
+
+The Quasar repository has ready-made catalogues in [`catalogs/`](https://github.com/AymericChaverot/quasar/tree/main/catalogs):
+
+| File | What it shows |
+| --- | --- |
+| `game-servers.yaml` | Parameters used in the app name and subdomain, so several servers don't collide. Replacing a built-in entry. |
+| `dev-stacks.yaml` | A parameter in the image tag: one entry for every version. |
+| `homelab.yaml` | A new category, and the `{{HOST}}`, `{{URL}}` and `{{RANDOM}}` placeholders. |
+
+To try one, import it by URL:
+
+```
+https://raw.githubusercontent.com/AymericChaverot/quasar/main/catalogs/game-servers.yaml
+```
+
+For the full format, see [catalogue format](/catalogue/format/).
