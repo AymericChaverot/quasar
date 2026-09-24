@@ -355,3 +355,88 @@ func (s *Server) handleAppEnvSave(w http.ResponseWriter, r *http.Request) {
 	s.audit(r, "app.env-change", a.Name, "")
 	s.renderPartial(w, "env_saved", nil)
 }
+
+// handleAppSource moves a git app to another repository or branch and deploys
+// it from there, keeping everything else about it: its name, subdomain,
+// environment, domains, protection and data.
+//
+// The new source is checked before anything is stored, so a typo is refused
+// beside the field instead of breaking an app that was working. What is stored
+// is all the deploy needs: it sees the checkout no longer matches and clones
+// again.
+func (s *Server) handleAppSource(w http.ResponseWriter, r *http.Request) {
+	a := s.getApp(w, r)
+	if a == nil {
+		return
+	}
+	if a.DeployType != "git" {
+		http.Error(w, "only git applications are deployed from a repository", http.StatusBadRequest)
+		return
+	}
+	gitURL := strings.TrimSpace(r.FormValue("git_url"))
+	// The form shows a stored token as ***; sent back unchanged, it means
+	// the repository the app already uses, token and all.
+	if gitURL == docker.RedactURL(a.GitURL) {
+		gitURL = a.GitURL
+	}
+	branch := strings.TrimSpace(r.FormValue("git_branch"))
+	if branch == "" {
+		branch = "main" // what a new app defaults to
+	}
+	refuse := func(problem string) {
+		s.renderPartial(w, "git_source_panel", map[string]any{
+			"App": s.appView(r, a), "URL": gitURL, "Branch": branch, "Error": problem,
+		})
+	}
+	if problem := gitSourceProblem(a, gitURL, branch); problem != "" {
+		refuse(problem)
+		return
+	}
+	if d := s.dock.Deploying(a.ID); d != nil && d.Running {
+		refuse("A deploy is under way. Wait for it to finish, then move the application.")
+		return
+	}
+	if err := s.dock.CheckGitSource(r.Context(), gitURL, branch); err != nil {
+		refuse(string(formErrorf("Quasar could not use this: %s.", err)))
+		return
+	}
+	if err := db.UpdateAppSource(s.db, a.ID, gitURL, branch); err != nil {
+		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if gitURL != a.GitURL {
+		a.GitBuild, a.ComposeService = db.GitBuildAuto, ""
+	}
+	a.GitURL, a.GitBranch = gitURL, branch
+	s.dock.UpdateAsync(a, "source")
+	s.audit(r, "app.source", a.Name, sourceLabel(gitURL)+" ("+branch+")")
+	// The header, the build panel and the deploy progress all change with
+	// the source, so the page is reloaded rather than this panel redrawn.
+	w.Header().Set("HX-Refresh", "true")
+}
+
+// gitSourceProblem rejects a move the form should not have sent, and returns
+// "" for one worth checking against the repository.
+func gitSourceProblem(a *db.App, gitURL, branch string) string {
+	switch {
+	case gitURL == "":
+		return "A Git repository URL is required."
+	case strings.HasPrefix(gitURL, "-"):
+		// git would read it as an option rather than as a repository.
+		return "This is not a repository URL."
+	case gitURL == a.GitURL && branch == a.GitBranch:
+		return "The application is already deployed from this repository and branch. Use Update to deploy its latest commit."
+	case strings.HasPrefix(branch, "-") || strings.ContainsAny(branch, " \t~^:?*[\\"):
+		return "This is not a name git allows for a branch or tag."
+	}
+	return ""
+}
+
+// sourceLabel names a repository for the audit log without whatever
+// credentials its URL carries.
+func sourceLabel(gitURL string) string {
+	if link, ok := repoLinkOf(gitURL); ok {
+		return link.URL
+	}
+	return gitURL
+}

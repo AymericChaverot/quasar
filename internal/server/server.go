@@ -134,6 +134,8 @@ var templateFuncs = template.FuncMap{
 		return many
 	},
 	"hasPrefix": strings.HasPrefix,
+	// redactURL keeps a token pasted into a clone URL out of the page.
+	"redactURL": docker.RedactURL,
 	// The event a station's panel is re-fetched by. Kept as a function so the
 	// name the template listens for and the name the action's response sends
 	// cannot drift apart.
@@ -391,6 +393,7 @@ func (s *Server) routes() {
 	s.admin("POST /apps/{id}/env", s.handleAppEnvSave)
 	s.admin("POST /apps/{id}/domains", s.handleAppDomains)
 	s.admin("POST /apps/{id}/git-build", s.handleAppGitBuild)
+	s.admin("POST /apps/{id}/source", s.handleAppSource)
 	s.admin("POST /apps/{id}/compose-service", s.handleAppComposeService)
 	s.admin("POST /apps/{id}/health", s.handleAppHealth)
 	// Applied to the running container, not merely stored for the next deploy.

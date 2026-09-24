@@ -124,6 +124,13 @@
 {{end}}
 
 <div class="page-pane{{if $.Station}} hidden{{end}}" data-pane="overview">
+{{if and (eq .DeployType "git") $.IsAdmin}}
+<section class="mt-8">
+  <h2 class="h-label mb-3">Source</h2>
+  {{template "git_source_panel" (dict "App" . "URL" (redactURL .GitURL) "Branch" .GitBranch)}}
+</section>
+{{end}}
+
 {{if eq .DeployType "git"}}
 <section class="mt-8">
   <h2 class="h-label mb-3">Build</h2>

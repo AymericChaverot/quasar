@@ -238,3 +238,7 @@ func firstLine(s string) string {
 	}
 	return s
 }
+
+// RedactURL is a clone URL as it may be shown in the browser: with any
+// credential it carries replaced by ***.
+func RedactURL(s string) string { return redactURLs(s) }

@@ -1,0 +1,46 @@
+{{/* Where a git app is deployed from, and the form that moves it somewhere
+     else: another repository — a v2 living beside the v1 — or another branch
+     of the same one. Rendered with a dict: App (an AppView), URL and Branch
+     (what the fields hold) and Error. Replaces itself when a move is refused;
+     a move that goes through reloads the page instead, since the header, the
+     build panel and the deploy all change with it. */}}
+{{define "git_source_panel"}}
+<div id="git-source" class="card space-y-3 p-4">
+  {{with .App.Repo}}
+  <a href="{{.URL}}" target="_blank" rel="noopener" title="{{.URL}}"
+     class="link mono flex w-fit items-center gap-1.5 text-sm">
+    {{template "forge_icon" .Forge}}<span>{{.Label}}</span>{{with $.App.GitBranch}}<span class="muted">· {{.}}</span>{{end}}
+  </a>
+  {{end}}
+
+  <form hx-post="/apps/{{.App.ID}}/source" hx-target="#git-source" hx-swap="outerHTML"
+        hx-confirm="Deploy {{.App.Name}} from this repository and branch? The code is cloned again and rebuilt; the application keeps its address, its environment and its data."
+        class="space-y-3">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_12rem]">
+      <div>
+        <label for="git-source-url" class="label">Repository</label>
+        <input id="git-source-url" name="git_url" type="text" value="{{.URL}}" required
+               class="input mono" placeholder="https://github.com/me/portfolio-v2.git">
+      </div>
+      <div>
+        <label for="git-source-branch" class="label">Branch or tag</label>
+        <input id="git-source-branch" name="git_branch" type="text" value="{{.Branch}}"
+               class="input mono" placeholder="main">
+      </div>
+    </div>
+    {{with .Error}}<p class="alert-err text-sm">{{.}}</p>{{end}}
+    <div>
+      <button type="submit" class="btn" hx-indicator="this" hx-disabled-elt="this">
+        {{template "icon_deploy"}}<span class="spinner" aria-hidden="true"></span>Deploy from here
+      </button>
+      <p class="help">
+        The repository is checked before anything changes, then cloned again and deployed the way
+        it asks to be: from its compose file or its Dockerfile. The application keeps its name, its
+        address, its environment, its domains, its protection and its data. Moving to another
+        repository resets the build choice to automatic. Point the new repository's push
+        webhook at the URL under Settings.
+      </p>
+    </div>
+  </form>
+</div>
+{{end}}
