@@ -75,20 +75,24 @@ const auditPageSize = 50
 
 func (s *Server) handleAuditPage(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
-	page := pageOf(r)
-	// One entry past the page, which says whether there is an older one.
-	entries, err := db.ListAuditPage(s.db, query, auditPageSize+1, (page-1)*auditPageSize)
+	total, err := db.CountAudit(s.db, query)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	hasOlder := len(entries) > auditPageSize
-	entries = entries[:min(len(entries), auditPageSize)]
+	// A page past the end, typed in or not, is the last one.
+	pages := pageCount(total, auditPageSize)
+	page := min(pageOf(r), pages)
+	entries, err := db.ListAuditPage(s.db, query, auditPageSize, (page-1)*auditPageSize)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	s.render(w, r, "audit", map[string]any{
 		"Title":   "Audit",
 		"Entries": entries,
 		"Query":   query,
 		"Page":    page,
-		"Pager":   pagerFor("/audit", url.Values{"q": {query}}, page, hasOlder),
+		"Pager":   pagerFor("/audit", url.Values{"q": {query}}, page, pages),
 	})
 }

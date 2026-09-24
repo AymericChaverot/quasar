@@ -1,19 +1,29 @@
 {{/* The links under a paged list. Nothing at all while the list fits on one
-     page: "Page 1" with both ways greyed out says nothing worth the room. */}}
+     page: "Page 1 of 1" with every way greyed out says nothing worth the room. */}}
 {{define "pager"}}
-{{if or .Newer .Older}}
+{{if gt .Pages 1}}
 <nav class="pager" aria-label="Pages">
-  {{if .Newer}}
-  <a href="{{.Newer}}" class="btn"{{if .Target}} hx-get="{{.NewerPartial}}" hx-target="{{.Target}}" hx-swap="innerHTML"{{end}}>← Newer</a>
+  {{$p := .}}
+  {{range .Links}}
+  {{if .Gap}}
+  <span class="pager-gap" aria-hidden="true">…</span>
+  {{else if .Current}}
+  <span class="btn pager-num is-current" aria-current="page">{{.Label}}</span>
+  {{else if .URL}}
+  <a href="{{.URL}}" class="btn pager-num"{{if $p.Target}} hx-get="{{.Partial}}" hx-target="{{$p.Target}}" hx-swap="innerHTML"{{end}}>{{.Label}}</a>
   {{else}}
-  <span class="btn" aria-disabled="true">← Newer</span>
+  <span class="btn pager-num" aria-disabled="true">{{.Label}}</span>
   {{end}}
-  <span class="mono muted text-xs">Page {{.Page}}</span>
-  {{if .Older}}
-  <a href="{{.Older}}" class="btn"{{if .Target}} hx-get="{{.OlderPartial}}" hx-target="{{.Target}}" hx-swap="innerHTML"{{end}}>Older →</a>
-  {{else}}
-  <span class="btn" aria-disabled="true">Older →</span>
   {{end}}
+  {{/* Any page by number, for the ones too far away to have a link. The
+       server takes a number past the end as the last page. */}}
+  <form method="get" action="{{.Path}}" class="pager-jump"
+        {{if .Target}}hx-get="{{.Partial}}" hx-target="{{.Target}}" hx-swap="innerHTML"{{end}}>
+    {{range .Filters}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
+    <label class="muted text-xs" for="pager-page">Page</label>
+    <input id="pager-page" name="page" type="number" min="1" max="{{.Pages}}" value="{{.Page}}" class="input mono">
+    <span class="muted text-xs">of {{.Pages}}</span>
+  </form>
 </nav>
 {{end}}
 {{end}}

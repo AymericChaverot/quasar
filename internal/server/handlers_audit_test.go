@@ -100,7 +100,8 @@ func TestAuditPages(t *testing.T) {
 		t.Error("the second page does not hold exactly the three oldest entries")
 	}
 
-	if empty := get("/audit?page=9"); !strings.Contains(empty, "No older entries.") {
-		t.Error("a page past the end does not say there is nothing older")
+	// A page past the end, typed into the page field, is the last one.
+	if past := get("/audit?q=deploy&page=9"); !strings.Contains(past, "app-003") || !strings.Contains(past, "of 2") {
+		t.Error("a page past the end is not the last page")
 	}
 }

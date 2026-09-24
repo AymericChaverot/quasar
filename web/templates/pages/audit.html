@@ -42,7 +42,7 @@
 {{else}}
 <div class="empty p-6 text-center">
   <p class="muted text-sm">
-    {{if gt .Page 1}}No older entries.{{else if .Query}}Nothing matches “{{.Query}}”.{{else}}No recorded actions yet.{{end}}
+    {{if .Query}}Nothing matches “{{.Query}}”.{{else}}No recorded actions yet.{{end}}
   </p>
 </div>
 {{end}}

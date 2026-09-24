@@ -38,15 +38,20 @@ type LogLineView struct {
 // time.
 func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
-	page := pageOf(r)
-	// One line past the page, which says whether there is an older one.
-	lines, err := db.SearchLogs(s.db, query.Get("app"), query.Get("q"), logPageSize+1, (page-1)*logPageSize)
+	total, err := db.CountLogs(s.db, query.Get("app"), query.Get("q"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	hasOlder := len(lines) > logPageSize
-	lines = lines[:min(len(lines), logPageSize)]
+	// A page past the end — typed in, or left behind by lines that aged out —
+	// is the last one.
+	pages := pageCount(total, logPageSize)
+	page := min(pageOf(r), pages)
+	lines, err := db.SearchLogs(s.db, query.Get("app"), query.Get("q"), logPageSize, (page-1)*logPageSize)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	views := make([]LogLineView, 0, len(lines))
 	for _, l := range lines {
 		views = append(views, LogLineView{LogLine: l, HTML: renderLogLine(l.Line)})
@@ -60,7 +65,7 @@ func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request)
 	s.renderPartial(w, "logs_results", map[string]any{
 		"Lines": views,
 		"Page":  page,
-		"Pager": pagerFor("/logs", query, page, hasOlder).withPartial("/partials/logs", query, "#log-results"),
+		"Pager": pagerFor("/logs", query, page, pages).withPartial("/partials/logs", query, "#log-results"),
 	})
 }
 
