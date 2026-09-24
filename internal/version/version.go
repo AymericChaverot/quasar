@@ -16,4 +16,4 @@ var Version = "dev"
 //
 // Kept in step with docker-compose.yml by TestTraefikImageMatchesCompose, which
 // fails if the two are ever bumped apart.
-const TraefikImage = "traefik:v3.7.10"
+const TraefikImage = "traefik:v3.7.13"

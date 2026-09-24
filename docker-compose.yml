@@ -50,7 +50,7 @@ services:
     # version.TraefikImage with it — a test fails if the two drift apart. The
     # dashboard applies the update through docker-compose.override.yml, which
     # takes precedence over this line until that file is removed.
-    image: traefik:v3.7.10
+    image: traefik:v3.7.13
     container_name: quasar-traefik
     restart: unless-stopped
     depends_on:
