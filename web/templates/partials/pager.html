@@ -1,5 +1,5 @@
 {{/* The links under a paged list. Nothing at all while the list fits on one
-     page: "Page 1 of 1" with every way greyed out says nothing worth the room. */}}
+     page: "1" with every way greyed out says nothing worth the room. */}}
 {{define "pager"}}
 {{if gt .Pages 1}}
 <nav class="pager" aria-label="Pages">
@@ -8,22 +8,24 @@
   {{if .Gap}}
   <span class="pager-gap" aria-hidden="true">…</span>
   {{else if .Current}}
-  <span class="btn pager-num is-current" aria-current="page">{{.Label}}</span>
+  {{/* The page on screen is also where another one is typed in: one box that
+       says where you are and takes you anywhere else, rather than a number in
+       the row and a field repeating it at the end. The last number in the row
+       is how many pages there are. */}}
+  <form method="get" action="{{$p.Path}}" class="pager-jump"
+        {{if $p.Target}}hx-get="{{$p.Partial}}" hx-target="{{$p.Target}}" hx-swap="innerHTML"{{end}}>
+    {{range $p.Filters}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
+    <input name="page" type="number" min="1" max="{{$p.Pages}}" value="{{.Page}}"
+           class="btn pager-num is-current" aria-current="page"
+           aria-label="Page {{.Page}} of {{$p.Pages}} — type another and press Enter"
+           title="Type a page number and press Enter">
+  </form>
   {{else if .URL}}
   <a href="{{.URL}}" class="btn pager-num"{{if $p.Target}} hx-get="{{.Partial}}" hx-target="{{$p.Target}}" hx-swap="innerHTML"{{end}}>{{.Label}}</a>
   {{else}}
   <span class="btn pager-num" aria-disabled="true">{{.Label}}</span>
   {{end}}
   {{end}}
-  {{/* Any page by number, for the ones too far away to have a link. The
-       server takes a number past the end as the last page. */}}
-  <form method="get" action="{{.Path}}" class="pager-jump"
-        {{if .Target}}hx-get="{{.Partial}}" hx-target="{{.Target}}" hx-swap="innerHTML"{{end}}>
-    {{range .Filters}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
-    <label class="muted text-xs" for="pager-page">Page</label>
-    <input id="pager-page" name="page" type="number" min="1" max="{{.Pages}}" value="{{.Page}}" class="input mono">
-    <span class="muted text-xs">of {{.Pages}}</span>
-  </form>
 </nav>
 {{end}}
 {{end}}

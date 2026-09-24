@@ -60,10 +60,16 @@
   color: var(--accent);
 }
 .pager-gap { padding: 0 0.25rem; color: var(--text-faint); }
-.pager-jump {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  margin-left: 0.75rem;
+/* The current page is a field. It keeps the look of the numbers around it
+   and shows a caret only once it is clicked into. */
+.pager-jump { display: contents; }
+.pager-jump input {
+  width: 3.25rem; /* four digits, which no list here outgrows */
+  text-align: center;
+  font: inherit;
+  cursor: text;
+  -moz-appearance: textfield;
 }
-.pager-jump .input { width: 4.5rem; }
+.pager-jump input::-webkit-inner-spin-button,
+.pager-jump input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.pager-jump input:focus { outline: none; background: var(--surface-2); }
