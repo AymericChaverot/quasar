@@ -2,7 +2,7 @@
 {{if .Lines}}
 <div class="table-wrap">
   <table>
-    <thead><tr><th>Time</th><th>Application</th><th>Line</th></tr></thead>
+    <thead><tr><th>Time</th><th>Application</th><th><div class="log-head">Line {{template "log_toggles"}}</div></th></tr></thead>
     <tbody>
       {{range .Lines}}
       <tr>

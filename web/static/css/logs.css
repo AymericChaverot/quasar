@@ -154,6 +154,20 @@
   background: color-mix(in srgb, var(--surface) 90%, transparent);
   z-index: 1;
 }
+/* On the Logs page they sit in the table's header, at the right end of the
+   Line column, in the interface's own type rather than the header's. */
+.log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.log-head .log-toggle {
+  font-family: var(--font-body);
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
 
 /* Log output is laid out with spaces — columns, indentation, pictures — and
    collapsing them undoes it. Long lines still wrap. */
