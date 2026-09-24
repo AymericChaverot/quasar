@@ -5,11 +5,20 @@
      soon as the reader scrolls up, because being yanked back to the tail
      mid-read is worse than falling behind, and offers a way back. */}}
 {{define "log_pane"}}
-<div class="relative" hx-ext="sse" sse-connect="{{.}}">
+<div class="log-pane-wrap relative" hx-ext="sse" sse-connect="{{.}}">
+  {{template "log_bg_toggle"}}
   <div id="log-pane" sse-swap="message" hx-swap="beforeend" class="log-pane"></div>
   <button type="button" id="log-tail" class="btn absolute bottom-3 right-3 py-1! text-xs" hidden>
     Jump to latest
   </button>
 </div>
 <script src="/static/js/log-pane.js" defer></script>
+{{end}}
+
+{{/* Turns off the backgrounds programs paint in their output, on every log
+     view at once; log-bg.js keeps it and remembers it. */}}
+{{define "log_bg_toggle"}}
+<label class="log-bg-toggle" title="Colours a program paints behind its text. Turn them off if they make a log hard to read.">
+  <input type="checkbox" data-log-bg-toggle checked> Backgrounds
+</label>
 {{end}}

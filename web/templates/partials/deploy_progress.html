@@ -18,7 +18,8 @@
     </div>
     <div id="deploy-meter" class="meter is-waiting"><div class="fill-info" style="width: 0"></div></div>
     <div id="deploy-error" class="alert-err mono text-xs" hidden></div>
-    <div id="deploy-output" class="relative">
+    <div id="deploy-output" class="log-pane-wrap relative">
+      {{template "log_bg_toggle"}}
       <div id="deploy-log" class="log-pane log-pane-short"></div>
       <button type="button" id="deploy-tail" class="btn absolute bottom-3 right-3 py-1! text-xs" hidden>
         Jump to latest

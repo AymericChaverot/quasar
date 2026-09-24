@@ -148,16 +148,22 @@ func detectLevel(line string) string {
 type sgrStyle struct {
 	fgClass string // one of the 16 basic colours, as a CSS class
 	fgHex   string // a 256-colour or truecolor value, as #rrggbb
-	bold    bool
-	dim     bool
-	italic  bool
-	under   bool
+	// bg is the background as a CSS colour: a theme variable for the basic
+	// colours, #rrggbb otherwise.
+	bg     string
+	bold   bool
+	dim    bool
+	italic bool
+	under  bool
 }
 
-// basicColours maps the ANSI foreground codes to class names. Backgrounds
-// (40-47, 100-107) are parsed and dropped: the pane has one deliberate
-// background, and a program painting its own over it tends to produce
-// something unreadable against a theme it never saw.
+// basicColours maps the ANSI foreground codes to class names. The background
+// codes (40-47, 100-107) are the same colours ten and sixty higher.
+//
+// Backgrounds are drawn: block art — this dashboard's own banner among it —
+// is nothing without them, since half its pixels are the background of a ▀.
+// They can still be unreadable against a theme the program never saw, so the
+// reader can turn them off; the CSS keys that off a data-log-bg on <html>.
 var basicColours = map[int]string{
 	30: "black", 31: "red", 32: "green", 33: "yellow",
 	34: "blue", 35: "magenta", 36: "cyan", 37: "white",
@@ -205,13 +211,18 @@ func (s *sgrStyle) apply(params string) {
 			}
 			i += consumed
 		case 48:
-			// A background this drops, but whose arguments must still be
-			// stepped over or they would be read as further attributes.
-			consumed, _ := extendedColour(fields[i+1:])
+			consumed, hex := extendedColour(fields[i+1:])
+			if hex != "" {
+				s.bg = hex
+			}
 			i += consumed
+		case 49:
+			s.bg = ""
 		default:
 			if name, ok := basicColours[n]; ok {
 				s.fgClass, s.fgHex = "ansi-"+name, ""
+			} else if name, ok := basicColours[n-10]; ok {
+				s.bg = "var(--ansi-" + name + ")"
 			}
 		}
 	}
@@ -293,13 +304,23 @@ func (s sgrStyle) attr() string {
 	if s.under {
 		classes = append(classes, "ansi-underline")
 	}
+	if s.bg != "" {
+		classes = append(classes, "ansi-bg")
+	}
 
 	var parts []string
 	if len(classes) > 0 {
 		parts = append(parts, `class="`+strings.Join(classes, " ")+`"`)
 	}
+	var style []string
 	if s.fgHex != "" {
-		parts = append(parts, `style="color:`+s.fgHex+`"`)
+		style = append(style, "color:"+s.fgHex)
+	}
+	if s.bg != "" {
+		style = append(style, "--ansi-bg:"+s.bg)
+	}
+	if len(style) > 0 {
+		parts = append(parts, `style="`+strings.Join(style, ";")+`"`)
 	}
 	return strings.Join(parts, " ")
 }

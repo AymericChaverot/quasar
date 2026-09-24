@@ -138,11 +138,26 @@ func TestRenderExtendedColours(t *testing.T) {
 		t.Errorf("truecolor not resolved: %s", got)
 	}
 
-	// A background is dropped, but stepping over its arguments matters: read as
-	// attributes, the trailing "1" would turn the text bold.
+	// A background's arguments are its own: read as attributes, the trailing
+	// "1" would turn the text bold.
 	got = string(renderLogLine(esc + "[48;5;1mplain" + esc + "[0m"))
 	if strings.Contains(got, "ansi-bold") || strings.Contains(got, "ansi-red") {
 		t.Errorf("background arguments were read as attributes: %s", got)
+	}
+}
+
+// Backgrounds are drawn — block art is half background — as a variable the
+// reader's toggle can switch off, and end where the program ends them.
+func TestRenderBackgrounds(t *testing.T) {
+	got := string(renderLogLine(esc + "[97;47m▓" + esc + "[48;2;18;52;86m▀" + esc + "[49mplain"))
+	for _, want := range []string{
+		`class="ansi-bright-white ansi-bg" style="--ansi-bg:var(--ansi-white)">▓`,
+		`class="ansi-bright-white ansi-bg" style="--ansi-bg:#123456">▀`,
+		`<span class="ansi-bright-white">plain`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in %s", want, got)
+		}
 	}
 }
 
