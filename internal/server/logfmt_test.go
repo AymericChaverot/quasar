@@ -23,9 +23,9 @@ func TestRenderHonoursTraefikColour(t *testing.T) {
 		t.Errorf("escape sequences leaked into the output:\n%s", got)
 	}
 	for _, want := range []string{
-		`class="ansi-bright-black"`, // the dimmed timestamp
-		`class="ansi-yellow"`,       // WRN
-		`class="ansi-bold"`,         // the message
+		`style="--ansi-fg:var(--ansi-bright-black)"`, // the dimmed timestamp
+		`style="--ansi-fg:var(--ansi-yellow)"`,       // WRN
+		`class="ansi-bold"`,                          // the message
 		"A new release of Traefik has been found: 3.7.9.",
 	} {
 		if !strings.Contains(got, want) {
@@ -124,24 +124,24 @@ func TestRenderKeepsTheLastCarriageReturnDraw(t *testing.T) {
 	}
 }
 
-// 256-colour and truecolor cannot be themed through a class, so they arrive as
-// an inline colour — and their arguments must be consumed, or they would be
-// read as further attributes.
+// 256-colour and truecolor arrive as the colour itself rather than a theme
+// variable — and their arguments must be consumed, or they would be read as
+// further attributes.
 func TestRenderExtendedColours(t *testing.T) {
 	got := string(renderLogLine(esc + "[38;5;208morange" + esc + "[0m"))
-	if !strings.Contains(got, "color:#ff8700") {
+	if !strings.Contains(got, "--ansi-fg:#ff8700") {
 		t.Errorf("256-colour not resolved: %s", got)
 	}
 
 	got = string(renderLogLine(esc + "[38;2;18;52;86mrgb" + esc + "[0m"))
-	if !strings.Contains(got, "color:#123456") {
+	if !strings.Contains(got, "--ansi-fg:#123456") {
 		t.Errorf("truecolor not resolved: %s", got)
 	}
 
 	// A background's arguments are its own: read as attributes, the trailing
 	// "1" would turn the text bold.
 	got = string(renderLogLine(esc + "[48;5;1mplain" + esc + "[0m"))
-	if strings.Contains(got, "ansi-bold") || strings.Contains(got, "ansi-red") {
+	if strings.Contains(got, "ansi-bold") || strings.Contains(got, "ansi-fg") {
 		t.Errorf("background arguments were read as attributes: %s", got)
 	}
 }
@@ -151,9 +151,9 @@ func TestRenderExtendedColours(t *testing.T) {
 func TestRenderBackgrounds(t *testing.T) {
 	got := string(renderLogLine(esc + "[97;47m▓" + esc + "[48;2;18;52;86m▀" + esc + "[49mplain"))
 	for _, want := range []string{
-		`class="ansi-bright-white ansi-bg" style="--ansi-bg:var(--ansi-white)">▓`,
-		`class="ansi-bright-white ansi-bg" style="--ansi-bg:#123456">▀`,
-		`<span class="ansi-bright-white">plain`,
+		`class="ansi-fg ansi-bg" style="--ansi-fg:var(--ansi-bright-white);--ansi-bg:var(--ansi-white)">▓`,
+		`class="ansi-fg ansi-bg" style="--ansi-fg:var(--ansi-bright-white);--ansi-bg:#123456">▀`,
+		`<span class="ansi-fg" style="--ansi-fg:var(--ansi-bright-white)">plain`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s in %s", want, got)

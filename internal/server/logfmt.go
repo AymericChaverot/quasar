@@ -146,10 +146,9 @@ func detectLevel(line string) string {
 // stay in force until something changes them, so this persists across segments
 // of one line.
 type sgrStyle struct {
-	fgClass string // one of the 16 basic colours, as a CSS class
-	fgHex   string // a 256-colour or truecolor value, as #rrggbb
-	// bg is the background as a CSS colour: a theme variable for the basic
+	// fg and bg are the colours as CSS: a theme variable for the basic
 	// colours, #rrggbb otherwise.
+	fg     string
 	bg     string
 	bold   bool
 	dim    bool
@@ -157,13 +156,15 @@ type sgrStyle struct {
 	under  bool
 }
 
-// basicColours maps the ANSI foreground codes to class names. The background
-// codes (40-47, 100-107) are the same colours ten and sixty higher.
+// basicColours maps the ANSI foreground codes to the palette in logs.css. The
+// background codes (40-47, 100-107) are the same colours ten and sixty higher.
 //
 // Backgrounds are drawn: block art — this dashboard's own banner among it —
 // is nothing without them, since half its pixels are the background of a ▀.
-// They can still be unreadable against a theme the program never saw, so the
-// reader can turn them off; the CSS keys that off a data-log-bg on <html>.
+// Colours and backgrounds can both be unreadable against a theme the program
+// never saw, so the reader can turn either off: they are drawn through
+// --ansi-fg and --ansi-bg, which the CSS stops using when <html> carries
+// data-log-colors or data-log-bg set to "off".
 var basicColours = map[int]string{
 	30: "black", 31: "red", 32: "green", 33: "yellow",
 	34: "blue", 35: "magenta", 36: "cyan", 37: "white",
@@ -202,12 +203,12 @@ func (s *sgrStyle) apply(params string) {
 		case 24:
 			s.under = false
 		case 39:
-			s.fgClass, s.fgHex = "", ""
+			s.fg = ""
 		case 38:
 			// Extended colour, whose arguments follow in the same list.
 			consumed, hex := extendedColour(fields[i+1:])
 			if hex != "" {
-				s.fgClass, s.fgHex = "", hex
+				s.fg = hex
 			}
 			i += consumed
 		case 48:
@@ -220,7 +221,7 @@ func (s *sgrStyle) apply(params string) {
 			s.bg = ""
 		default:
 			if name, ok := basicColours[n]; ok {
-				s.fgClass, s.fgHex = "ansi-"+name, ""
+				s.fg = "var(--ansi-" + name + ")"
 			} else if name, ok := basicColours[n-10]; ok {
 				s.bg = "var(--ansi-" + name + ")"
 			}
@@ -289,8 +290,8 @@ func xterm256(n int) string {
 // the text needs no wrapping at all.
 func (s sgrStyle) attr() string {
 	var classes []string
-	if s.fgClass != "" {
-		classes = append(classes, s.fgClass)
+	if s.fg != "" {
+		classes = append(classes, "ansi-fg")
 	}
 	if s.bold {
 		classes = append(classes, "ansi-bold")
@@ -313,8 +314,8 @@ func (s sgrStyle) attr() string {
 		parts = append(parts, `class="`+strings.Join(classes, " ")+`"`)
 	}
 	var style []string
-	if s.fgHex != "" {
-		style = append(style, "color:"+s.fgHex)
+	if s.fg != "" {
+		style = append(style, "--ansi-fg:"+s.fg)
 	}
 	if s.bg != "" {
 		style = append(style, "--ansi-bg:"+s.bg)
