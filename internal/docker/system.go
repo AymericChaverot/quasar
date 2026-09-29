@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -98,6 +99,10 @@ type EngineInfo struct {
 	APIVersion    string
 	OSType        string
 	TraefikImage  string
+	// Rootless is a daemon running as an ordinary user, where a privileged
+	// container is only privileged inside that user's namespace and the host
+	// cannot be reached from one.
+	Rootless bool
 }
 
 func (c *Client) EngineInfo(ctx context.Context) EngineInfo {
@@ -106,6 +111,9 @@ func (c *Client) EngineInfo(ctx context.Context) EngineInfo {
 		out.DockerVersion = v.Version
 		out.APIVersion = v.APIVersion
 		out.OSType = v.Os + "/" + v.Arch
+	}
+	if info, err := c.api.Info(ctx); err == nil {
+		out.Rootless = slices.Contains(info.SecurityOptions, "name=rootless")
 	}
 	if info, err := c.api.ContainerInspect(ctx, "quasar-traefik"); err == nil {
 		out.TraefikImage = info.Config.Image
