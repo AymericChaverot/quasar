@@ -16,10 +16,17 @@ type HostInfo struct {
 	Kernel string
 	Arch   string
 	Uptime string
+	// Icon names the logo drawn beside OS: a distribution's Simple Icons slug,
+	// "linux" for one without a logo here, or empty when the host is not
+	// known to be Linux at all.
+	Icon string
 }
 
 func CollectHost() HostInfo {
 	out := HostInfo{OS: "unknown", Kernel: "unknown", Arch: "unknown"}
+	if id, ok := distroID(); ok {
+		out.Icon = distroIcon(id)
+	}
 	info, err := host.Info()
 	if err != nil {
 		return out
