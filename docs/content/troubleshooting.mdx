@@ -115,6 +115,22 @@ Quasar checks GitHub every 30 minutes. Press **Check for updates** in **System â
 
 Deleting a certificate is refused, or a volume stays read-only, on a server that is up to date. The dashboard updates itself, but its mounts and permissions come from `/opt/quasar/docker-compose.yml`, which only changes when you pull it. **System** says so at the top of the page. See [updating the system stack](/getting-started/updating/#updating-the-system-stack).
 
+## A server update fails
+
+Open the log under **System â†’ Environment**: it is what the package manager printed. Common causes:
+
+| Symptom | Cause |
+| --- | --- |
+| *it never reached the server* | The dashboard couldn't start its job container. The log gives Docker's answer. |
+| The package manager waits for a lock | Another update is running on the server, often an automatic one. Try again once it has finished. |
+| *it was cut short before it could finish* | The server restarted, or the job ran for more than three hours. Run it again: package managers pick up where they stopped. |
+
+After a failed Docker update, if the dashboard doesn't come back, run on the server:
+
+```bash
+sudo sh -c 'systemctl restart docker && cd /opt/quasar && docker compose up -d'
+```
+
 ## Sign-in says "Too many failed attempts"
 
 Your address failed too many sign-ins and is refused for a while. See [sign-in protection](/server/users/#sign-in-protection).

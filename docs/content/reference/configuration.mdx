@@ -39,6 +39,7 @@ The dashboard reads these variables at startup. Defaults suit the standard insta
 | `ADMIN_USER` | — | First admin account, created only if no user exists. |
 | `ADMIN_PASSWORD` | — | Its password. |
 | `HOST_ROOT` | `/` | Where the host file system is mounted, for disk metrics and the storage explorer. |
+| `HOST_MANAGEMENT` | `on` | Set to `off` to stop the dashboard from [updating the server](/server/updates/) and restarting it. |
 | `COOKIE_SECURE` | `true` | Set to `false` only for local development over plain HTTP. |
 | `GITHUB_REPO` | `AymericChaverot/quasar` | Repository checked for new releases. |
 | `EDGE_AUTH_URL` | `http://quasar-dashboard:8080` | Where Traefik reaches the dashboard for [password protection](/applications/protection/#password-protection). Only change it when the dashboard runs outside the standard stack. |

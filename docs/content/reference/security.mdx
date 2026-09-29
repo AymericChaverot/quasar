@@ -45,6 +45,16 @@ When writing files:
 
 Named volumes are only writable if you mount `/var/lib/docker/volumes` read-write yourself. See [editing files](/applications/storage/#editing-files).
 
+## Server updates
+
+To [update the server](/server/updates/) and restart it, the dashboard starts a short-lived **privileged** container that runs the job as root on the server, through systemd.
+
+This gives the dashboard no power it didn't have: anything allowed to create containers through the socket proxy can do the same. It makes that power visible instead:
+
+- only admins can start a job, and every job is recorded in the audit log;
+- the jobs are fixed — a check, an upgrade, a Docker upgrade, a restart — and nothing typed in the browser reaches the server's shell;
+- `HOST_MANAGEMENT=off` turns the feature off. See [turning it off](/server/updates/#turning-it-off).
+
 ## Ports published by compose stacks
 
 Quasar removes host bindings on ports 80 and 443 from compose files, but **keeps other published ports**: a stack may need to expose a database or a game server.
