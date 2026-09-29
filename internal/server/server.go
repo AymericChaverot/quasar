@@ -65,6 +65,10 @@ type Server struct {
 	// the same way — by the Environment card, which polls while one is running.
 	traefik traefikRun
 
+	// host serialises starting jobs on the server itself. What is running is
+	// read from disk, see hostJobs.
+	host hostJobs
+
 	// jobs are the long station actions running now, and the ones somebody may
 	// still come back to read.
 	jobs stationJobRegistry
@@ -363,6 +367,10 @@ func (s *Server) routes() {
 	// Recreating the edge router stops every site for a few seconds, this page
 	// included.
 	s.admin("POST /system/traefik/update", s.handleTraefikUpdate)
+	// Jobs on the server itself: a check, an upgrade of its packages, an upgrade
+	// of Docker — which stops every application and this dashboard — and a
+	// reboot.
+	s.admin("POST /system/host/{kind}", s.handleHostJob)
 	// The page that waits out an update, and what it polls. Admin-only like the
 	// update itself: nobody else can start one, so nobody else is waiting.
 	s.admin("GET /system/updating", s.handleUpdating)

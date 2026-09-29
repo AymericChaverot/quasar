@@ -78,11 +78,13 @@ func (s *Server) systemData() map[string]any {
 // with the page.
 func (s *Server) handleSystemEnvPartial(w http.ResponseWriter, r *http.Request) {
 	engine := s.dock.EngineInfo(r.Context())
+	host := vps.CollectHost()
 	s.renderPartial(w, "system_env", map[string]any{
-		"Host":      vps.CollectHost(),
-		"Engine":    engine,
-		"GoRuntime": runtime.Version(),
-		"Traefik":   s.traefikView(engine.TraefikImage, s.isAdmin(r)),
+		"Host":       host,
+		"Engine":     engine,
+		"GoRuntime":  runtime.Version(),
+		"Traefik":    s.traefikView(engine.TraefikImage, s.isAdmin(r)),
+		"HostUpdate": s.hostUpdateView(engine, host, s.isAdmin(r)),
 	})
 }
 
