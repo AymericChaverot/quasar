@@ -56,8 +56,8 @@ func TestDistroIDFallsBackToUsrLib(t *testing.T) {
 	}
 	t.Setenv("HOST_ETC", filepath.Join(root, "etc"))
 	t.Setenv("HOST_ROOT", root)
-	if id, ok := distroID(); !ok || id != "debian" {
-		t.Fatalf("distroID() = %q, %v; want debian, true", id, ok)
+	if id, ok := DistroID(); !ok || id != "debian" {
+		t.Fatalf("DistroID() = %q, %v; want debian, true", id, ok)
 	}
 }
 
@@ -65,7 +65,7 @@ func TestDistroIDWithoutOSRelease(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOST_ETC", filepath.Join(root, "etc"))
 	t.Setenv("HOST_ROOT", root)
-	if id, ok := distroID(); ok {
-		t.Fatalf("distroID() = %q, true; want not ok on a host without os-release", id)
+	if id, ok := DistroID(); ok {
+		t.Fatalf("DistroID() = %q, true; want not ok on a host without os-release", id)
 	}
 }

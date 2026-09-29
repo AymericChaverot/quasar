@@ -16,6 +16,8 @@ type HostInfo struct {
 	Kernel string
 	Arch   string
 	Uptime string
+	// Booted is when the host last started, zero when it cannot be read.
+	Booted time.Time
 	// Icon names the logo drawn beside OS: a distribution's Simple Icons slug,
 	// "linux" for one without a logo here, or empty when the host is not
 	// known to be Linux at all.
@@ -24,7 +26,7 @@ type HostInfo struct {
 
 func CollectHost() HostInfo {
 	out := HostInfo{OS: "unknown", Kernel: "unknown", Arch: "unknown"}
-	if id, ok := distroID(); ok {
+	if id, ok := DistroID(); ok {
 		out.Icon = distroIcon(id)
 	}
 	info, err := host.Info()
@@ -40,6 +42,9 @@ func CollectHost() HostInfo {
 	}
 	if info.KernelArch != "" {
 		out.Arch = info.KernelArch
+	}
+	if info.BootTime > 0 {
+		out.Booted = time.Unix(int64(info.BootTime), 0)
 	}
 	if info.Uptime > 0 {
 		d := time.Duration(info.Uptime) * time.Second

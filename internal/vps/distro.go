@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// distroID reads which distribution the host runs: the ID line of its
+// DistroID reads which distribution the host runs: the ID line of its
 // os-release(5). Inside the dashboard container HOST_ETC points at the host's
 // /etc (the same variable gopsutil reads), so the answer is the server's
 // distribution rather than Alpine's.
@@ -22,7 +22,7 @@ import (
 //
 // ok is false when neither can be read — the host is not Linux, or the mounts
 // are missing — which is different from a Linux nobody here has an icon for.
-func distroID() (id string, ok bool) {
+func DistroID() (id string, ok bool) {
 	paths := []string{
 		filepath.Join(envOr("HOST_ETC", "/etc"), "os-release"),
 		filepath.Join(envOr("HOST_ROOT", "/"), "usr", "lib", "os-release"),
