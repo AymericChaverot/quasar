@@ -64,7 +64,7 @@ mkdir -p "$D"
 rm -f "$D/job.exit"
 exec >"$D/job.log" 2>&1
 
-docker_pkgs() { %s 2>/dev/null | grep -E '%s'; }
+docker_pkgs() { { %s; } 2>/dev/null | grep -E '%s'; }
 release_holds() {
 	[ -s "$D/held" ] && %s
 	rm -f "$D/held"
