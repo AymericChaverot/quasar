@@ -1,0 +1,75 @@
+---
+title: Server updates
+description: Update the server's packages and Docker, and restart it, from the dashboard.
+---
+
+**System → Environment** keeps the server itself up to date: its packages, Docker Engine, and a restart when one is due. Only admins see the buttons.
+
+## What is shown
+
+The **Operating system** row shows:
+
+- how many updates are waiting, and when the server was last checked;
+- whether a **restart is needed** to run a kernel that was installed since the last boot.
+
+Under it, **N packages to update** lists them, and the last job's log is kept below that. The log opens by itself while a job runs and after one fails.
+
+Quasar checks once a day and [notifies you](/server/notifications/) when new updates appear, once per list. Press **Check for updates** to check right away. **Nothing is installed without someone pressing the button.**
+
+## Updating the packages
+
+Click **Update N packages** and confirm.
+
+- The Docker packages (Docker Engine, its CLI and plugins, containerd, runc) are **left out**, so your applications keep running.
+- A new kernel only takes effect after a [restart](#restarting-the-server).
+- When it is done, Quasar checks again, so the count shows what is left.
+
+## Updating Docker
+
+When Docker has an update, the **Docker Engine** row offers it on its own.
+
+:::caution
+Updating Docker restarts it, which **stops every application and the dashboard** for a minute or two. Sites are unreachable until it is back. You are asked to type `docker` to confirm.
+:::
+
+After the upgrade, Quasar restarts Docker, waits for it, then runs `docker compose up -d` in `/opt/quasar` to make sure the system stack is back. Applications come back on their own. The page reconnects by itself.
+
+Docker must have been installed through the package manager, which is what `get.docker.com` and the installer do. On Arch, Docker can only be updated with the rest of the system.
+
+## Restarting the server
+
+**Restart server** reboots the machine. Everything is down until it is back, usually a minute or two. You are asked to type `reboot` to confirm.
+
+## Supported systems
+
+Quasar drives whichever package manager the server has, so a derivative distribution works like its parent:
+
+| Package manager | Distributions |
+| --- | --- |
+| `apt` | Debian, Ubuntu, Linux Mint, Raspberry Pi OS… |
+| `dnf`, `yum` | Fedora, RHEL, Rocky Linux, AlmaLinux, CentOS, Oracle Linux, Amazon Linux… |
+| `zypper` | openSUSE Leap and Tumbleweed, SLES |
+| `pacman` | Arch Linux, Manjaro |
+| `apk` | Alpine Linux |
+
+The server must also run **systemd**, and Docker must run as root, not [rootless](https://docs.docker.com/engine/security/rootless/). When something is missing, the row says what instead of offering buttons.
+
+## How it works
+
+The dashboard has no access to the server of its own. To run a job, it starts a short-lived privileged container that hands the job to the server's systemd, as a unit named `quasar-host-job`. The job then belongs to the server: it keeps running while Docker restarts, and one job at a time can run.
+
+Each job writes its log and result to `/opt/quasar/storage/host/`, and every job started from the dashboard is recorded in the [audit log](/server/monitoring/#audit-log).
+
+## Turning it off
+
+To keep the dashboard away from the server's packages entirely, add this line to `/opt/quasar/.env`:
+
+```bash
+HOST_MANAGEMENT=off
+```
+
+Then recreate the dashboard:
+
+```bash
+sudo sh -c 'cd /opt/quasar && docker compose up -d --force-recreate dashboard'
+```

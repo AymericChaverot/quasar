@@ -4,6 +4,7 @@
   "collapsible": false,
   "pages": [
     "monitoring",
+    "updates",
     "dashboard-log",
     "notifications",
     "backups",
