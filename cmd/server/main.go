@@ -139,7 +139,8 @@ func main() {
 	// A station's hooks run without anybody having pressed anything, so the
 	// loop that fires them belongs here rather than inside a request.
 	srv.StartStationHooks()
-	seq.OK("background", "metrics and health checks", "backup schedule", "update checks", "station hooks")
+	srv.StartHostChecks()
+	seq.OK("background", "metrics and health checks", "backup schedule", "update checks", "station hooks", "server update checks")
 
 	// Bound before "ready" is said, so the line is only ever written by a
 	// dashboard that is actually listening.
