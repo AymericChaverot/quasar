@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"io"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -304,7 +305,7 @@ func TestExecuteTemplates(t *testing.T) {
 		// An edge router already on the tested version: the row reports, and
 		// offers nothing.
 		{"system_env", map[string]any{
-			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64", Uptime: "3d 4h"},
+			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64", Uptime: "3d 4h", Icon: "ubuntu"},
 			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44", OSType: "linux/amd64", TraefikImage: "traefik:v3.7.10"},
 			"GoRuntime": "go1.26.5",
 			"Traefik":   TraefikView{Image: "traefik:v3.7.10", Tested: "traefik:v3.7.10", IsAdmin: true},
@@ -524,6 +525,28 @@ func TestExecuteTemplates(t *testing.T) {
 	for _, p := range partials {
 		if err := host.ExecuteTemplate(io.Discard, p.name, p.data); err != nil {
 			t.Errorf("execute partial %s: %v", p.name, err)
+		}
+	}
+}
+
+// Every distribution the host can be recognised as has its logo drawn, and a
+// host that is not known to be Linux keeps the generic server.
+func TestEveryDistroIconIsDrawn(t *testing.T) {
+	host := testServer(t).pages["system"]
+	render := func(icon string) string {
+		var b strings.Builder
+		if err := host.ExecuteTemplate(&b, "os_icon", icon); err != nil {
+			t.Fatalf("os_icon %q: %v", icon, err)
+		}
+		return b.String()
+	}
+	server := render("")
+	if !strings.Contains(server, "<rect") {
+		t.Fatalf("os_icon with no icon should draw the generic server, got %s", server)
+	}
+	for _, icon := range vps.DistroIconNames() {
+		if got := render(icon); got == server || !strings.Contains(got, `fill="currentColor"`) {
+			t.Errorf("os_icon %q is not drawn: %s", icon, got)
 		}
 	}
 }
