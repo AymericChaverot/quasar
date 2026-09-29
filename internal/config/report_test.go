@@ -41,3 +41,14 @@ func TestSettingsSources(t *testing.T) {
 		}
 	}
 }
+
+// Host management is on unless it is switched off, however the "off" is spelt.
+func TestHostManagementSwitch(t *testing.T) {
+	t.Setenv("ENV_FILE", "does-not-exist")
+	for value, want := range map[string]bool{"": true, "on": true, "yes": true, "off": false, "OFF": false, "false": false, "no": false, "0": false} {
+		t.Setenv("HOST_MANAGEMENT", value)
+		if got := Load().HostManagement; got != want {
+			t.Errorf("HOST_MANAGEMENT=%q gives %v, want %v", value, got, want)
+		}
+	}
+}

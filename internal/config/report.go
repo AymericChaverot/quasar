@@ -21,7 +21,8 @@ type Setting struct {
 // Settings is what the start-up sequence lists under its config line: the
 // settings worth checking after a restart that no other line of it already
 // shows — the domain, the database, the address and the mode each have one —
-// where the data goes and how Docker is reached.
+// where the data goes, how Docker is reached, and whether the dashboard may
+// manage the host.
 //
 // The admin account is left out: it is only read the first time, to create
 // the account, and what it says after that is not what anyone signs in with.
@@ -30,6 +31,7 @@ func (c Config) Settings() []Setting {
 		setting("APPS_DIR", c.AppsDir),
 		setting("BACKUPS_DIR", c.BackupsDir),
 		setting("DOCKER_HOST", os.Getenv("DOCKER_HOST")),
+		setting("HOST_MANAGEMENT", onOff(c.HostManagement)),
 		setting("ACME_EMAIL", os.Getenv("ACME_EMAIL")),
 	}
 }
@@ -48,4 +50,11 @@ func source(name string) string {
 	default:
 		return "environment"
 	}
+}
+
+func onOff(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
 }

@@ -24,6 +24,10 @@ type Config struct {
 	GitHubRepo     string // "owner/name", used for release checks and update images
 	SocketNetwork  string // Docker network where the socket proxy lives
 	KeyPath        string // at-rest encryption master key, next to the database
+	// HostManagement lets the dashboard update the server's packages, Docker
+	// Engine included, and reboot it. HOST_MANAGEMENT=off takes all of that
+	// away for an operator who wants the host left to themselves.
+	HostManagement bool
 	// EdgeAuthURL is where Traefik reaches this dashboard to have a request to
 	// a password-protected application authorised. It is an address on the
 	// internal network, never one a visitor resolves.
@@ -49,6 +53,7 @@ func Load() Config {
 		CookieSecure:   getenv("COOKIE_SECURE", "true") != "false",
 		GitHubRepo:     getenv("GITHUB_REPO", "AymericChaverot/quasar"),
 		SocketNetwork:  getenv("SOCKET_NETWORK", "quasar-socket-net"),
+		HostManagement: !isOff(getenv("HOST_MANAGEMENT", "on")),
 		// The dashboard's container name on the Traefik network, which is
 		// fixed by the system stack. Set it only when the dashboard runs
 		// somewhere else — local development against a containerised Traefik.
@@ -101,4 +106,15 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// isOff reads a switch the way someone turning it off might write it. Only
+// used for switches that are on by default, where missing an "off" would leave
+// on something the operator meant to take away.
+func isOff(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "off", "false", "no", "0":
+		return true
+	}
+	return false
 }
