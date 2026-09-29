@@ -398,6 +398,13 @@ few seconds; applications are untouched.
   written to `docker-compose.override.yml`, so it survives a `docker compose up
   -d` run by hand and leaves the git repository clean. If the new version does
   not stay up, the old one is put back automatically.
+- **Server updates**: the System page checks the server's own packages once a
+  day and installs them on request, through whichever package manager it has
+  (apt, dnf, yum, zypper, pacman, apk). Docker is left out of that upgrade —
+  it restarts every container — and offered on its own, behind a warning and a
+  word to type; so is a reboot, suggested when a new kernel is waiting. Jobs run
+  as transient systemd units on the host, so a Docker restart cannot kill a
+  package manager half-way. `HOST_MANAGEMENT=off` turns it all off.
 
 ## Layout on the VPS
 
@@ -480,6 +487,12 @@ Internal design notes, which are not documentation, are in [`notes/`](notes/).
   tasks — drop it if you do not use those. `SESSION=1` / `GRPC=1` give access
   to the daemon's BuildKit: without them, `docker compose build` starts a
   **privileged** BuildKit container per build instead.
+- Server updates start a short-lived **privileged** container (host PID
+  namespace, no network) that hands a fixed script to the host's systemd with
+  `chroot /proc/1/root systemd-run`. That is no new power — creating containers
+  through the socket proxy already allows it — but it is the one place Quasar
+  uses it: admin-only, audited, never with anything typed in the browser, and
+  off with `HOST_MANAGEMENT=off`.
 - Sessions are HTTP-only, Secure, SameSite=Lax; passwords are bcrypt.
 - The host's `/` is mounted **read-only** in the dashboard (`HOST_ROOT`): disk
   metrics, the ACME store, and Docker volume contents for the storage explorer.
