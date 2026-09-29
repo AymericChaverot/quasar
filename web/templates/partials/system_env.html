@@ -3,31 +3,122 @@
      Its own partial because the two Docker rows are two round trips over the
      socket proxy, and the System page must not wait on them to draw.
 
-     It re-fetches itself only while a Traefik update is running. That update
-     takes the edge router down for a few seconds, so some of those polls fail —
-     which is why the poll lives on the wrapper that survives them rather than
-     on anything the response replaces. */}}
+     It re-fetches itself only while a Traefik update or a job on the server is
+     running. Both can take this dashboard down with them — the router for a
+     few seconds, a Docker update or a restart for a minute or more — so some
+     of those polls fail, which is why the poll lives on the wrapper that
+     survives them rather than on anything the response replaces. */}}
 {{define "system_env"}}
-<div id="system-env"{{if .Traefik.Busy}} hx-get="/partials/system/environment" hx-trigger="every 2s" hx-swap="outerHTML"{{end}}>
+<div id="system-env"{{if or .Traefik.Busy .HostUpdate.Busy}} hx-get="/partials/system/environment" hx-trigger="every 2s" hx-swap="outerHTML"{{end}}>
 <div class="card">
 
   <div class="env-row">
     <span class="env-icon" aria-hidden="true">{{template "os_icon" .Host.Icon}}</span>
-    <div>
+    <div class="min-w-0 flex-1">
       <p class="muted text-xs">Operating system</p>
       <p class="mono text-sm">{{.Host.OS}} · kernel {{.Host.Kernel}} ({{.Host.Arch}}){{if .Host.Uptime}} · up {{.Host.Uptime}}{{end}}</p>
+      {{with .HostUpdate}}
+      {{if .Reason}}
+      <p class="help mt-1!">{{.Reason}}</p>
+      {{else if and .Busy (ne .Job.Kind "docker")}}
+      {{/* The one moving line for the job. A Docker update says so on the
+           Docker row instead, beside the version it is changing. */}}
+      <p class="help shimmer mt-1!">
+        {{if eq .Job.Kind "check"}}Looking for updates with {{.Manager}}…
+        {{else if eq .Job.Kind "upgrade"}}Updating the server's packages with {{.Manager}}. Docker is left alone, so applications keep running.
+        {{else}}Restarting the server. Every application and this dashboard are down until it is back; this page reconnects by itself.{{end}}
+      </p>
+      {{else}}
+      {{if and .Job.Failed (ne .Job.Kind "docker")}}
+      <p class="mt-1 text-xs" style="color: var(--err)">{{.JobName}} failed: {{.Failure}}. The log is below.</p>
+      {{end}}
+      {{if .Checked}}
+      <p class="help mt-1!">{{if .System}}{{len .System}} {{plural (len .System) "update" "updates"}} waiting{{else if .Docker}}Only the Docker update is waiting{{else}}Up to date{{end}} · checked {{.Ago}} with {{.Manager}}</p>
+      {{else}}
+      <p class="help mt-1!">Not checked for updates yet.</p>
+      {{end}}
+      {{if .Reboot}}
+      <p class="mt-1 text-xs" style="color: var(--warn)">A restart is needed to run the kernel that was installed.</p>
+      {{end}}
+      {{end}}
+      {{end}}
     </div>
+    {{with .HostUpdate}}
+    {{if and .IsAdmin (not .Reason) (not .Busy)}}
+    <div class="env-actions flex shrink-0 flex-wrap items-center gap-2">
+      <form method="post" action="/system/host/check">
+        <button type="submit" class="btn py-1! text-xs">{{template "icon_restart"}}Check for updates</button>
+      </form>
+      {{if .System}}
+      <form method="post" action="/system/host/upgrade"
+            data-confirm="Install {{len .System}} {{plural (len .System) "update" "updates"}} on the server with {{.Manager}}? Docker is left out, so applications keep running.{{if .Docker}} The Docker update is offered on its own, below.{{end}} A new kernel only takes effect after a restart.">
+        <button type="submit" class="btn py-1! text-xs">{{template "icon_deploy"}}Update {{len .System}} {{plural (len .System) "package" "packages"}}</button>
+      </form>
+      {{end}}
+      <form method="post" action="/system/host/reboot"
+            data-confirm="Restart the server? Every application and this dashboard go down until it is back, usually a minute or two. The page reconnects by itself.">
+        <button type="submit" class="btn-danger py-1! text-xs" data-confirm-type="reboot">{{template "icon_restart"}}Restart server</button>
+      </form>
+    </div>
+    {{end}}
+    {{end}}
   </div>
+
+  {{/* What is waiting and what the last job printed, folded away: the lines
+       above already say how many and how it went. The log opens by itself
+       while a job runs and after one fails, which is when it is worth reading. */}}
+  {{with .HostUpdate}}
+  {{if and (not .Reason) (or .System .Docker .Job.Kind)}}
+  <div class="env-more">
+    {{if or .System .Docker}}
+    <details>
+      <summary>{{template "icon_chevron_down"}}{{.Pending}} {{plural .Pending "package" "packages"}} to update</summary>
+      <table class="env-packages">
+        <tbody>
+          {{range .System}}<tr><td class="mono">{{.Name}}</td><td class="mono faint">{{.Version}}</td></tr>{{end}}
+          {{range .Docker}}<tr><td class="mono">{{.Name}}</td><td class="mono faint">{{.Version}} · with the Docker update</td></tr>{{end}}
+        </tbody>
+      </table>
+    </details>
+    {{end}}
+    {{if .Job.Kind}}
+    <details{{if or .Busy .Job.Failed}} open{{end}}>
+      <summary>{{template "icon_chevron_down"}}{{.JobName}} · {{.Ran}}{{if .Job.By}} · by {{.Job.By}}{{end}}</summary>
+      <pre class="env-log mono">{{if .Log}}{{.Log}}{{else}}Nothing written yet.{{end}}</pre>
+    </details>
+    {{end}}
+  </div>
+  {{end}}
+  {{end}}
 
   <div class="env-row">
     <span class="env-icon" aria-hidden="true">
       <!-- Docker (Simple Icons) -->
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.185.185 0 00-.185.185v1.888c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.887c0 .102.082.185.185.186m-2.93 0h2.12a.186.186 0 00.184-.186V6.29a.185.185 0 00-.185-.185H8.1a.185.185 0 00-.185.185v1.887c0 .102.083.185.185.186m-2.964 0h2.119a.186.186 0 00.185-.186V6.29a.185.185 0 00-.185-.185H5.136a.186.186 0 00-.186.185v1.887c0 .102.084.185.186.186m5.893 2.715h2.118a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.083.185.185.185m-2.964 0h2.119a.185.185 0 00.185-.185V9.006a.185.185 0 00-.184-.186h-2.12a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185m-2.92 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.082.185.185.185M23.763 9.89c-.065-.051-.672-.51-1.954-.51-.338.001-.676.03-1.01.087-.248-1.7-1.653-2.53-1.716-2.566l-.344-.199-.226.327c-.284.438-.49.922-.612 1.43-.23.97-.09 1.882.403 2.661-.595.332-1.55.413-1.744.42H.751a.751.751 0 00-.75.748 11.376 11.376 0 00.692 4.062c.545 1.428 1.355 2.48 2.41 3.124 1.18.723 3.1 1.137 5.275 1.137.983.003 1.963-.086 2.93-.266a12.248 12.248 0 003.823-1.389c.98-.567 1.86-1.288 2.61-2.136 1.252-1.418 1.998-2.997 2.553-4.4h.221c1.372 0 2.215-.549 2.68-1.009.309-.293.55-.65.707-1.046l.098-.288Z"/></svg>
     </span>
-    <div>
+    <div class="min-w-0 flex-1">
       <p class="muted text-xs">Docker Engine</p>
       <p class="mono text-sm">{{.Engine.DockerVersion}} · API {{.Engine.APIVersion}}{{if .Engine.OSType}} · {{.Engine.OSType}}{{end}}</p>
+      {{with .HostUpdate}}
+      {{if and .Busy (eq .Job.Kind "docker")}}
+      <p class="help shimmer mt-1!">Updating Docker with {{.Manager}}. Every application and this dashboard stop for a minute or two; this page reconnects by itself.</p>
+      {{else if and .Job.Failed (eq .Job.Kind "docker")}}
+      <p class="mt-1 text-xs" style="color: var(--err)">Docker update failed: {{.Failure}}. The log is above.</p>
+      {{else if .Docker}}
+      <p class="help mt-1!">{{.DockerOffer}} is available{{if eq .Manager "pacman"}} — on Arch it comes with a full system upgrade{{end}}.</p>
+      {{end}}
+      {{end}}
     </div>
+    {{with .HostUpdate}}
+    {{if and .IsAdmin .Docker (not .Reason) (not .Busy)}}
+    {{/* Drawn as dangerous, and asking for a word to be typed: this is the one
+         update that stops everything on the server, the dashboard included. */}}
+    <form method="post" action="/system/host/docker" class="env-actions shrink-0"
+          data-confirm="Update to {{.DockerOffer}}? Docker restarts, which stops every application on the server and this dashboard for a minute or two — sites are unreachable until it is back. Everything set to restart comes back by itself, and the page reconnects once it has.">
+      <button type="submit" class="btn-danger py-1! text-xs" data-confirm-type="docker">{{template "icon_deploy"}}Update to {{.DockerOffer}}</button>
+    </form>
+    {{end}}
+    {{end}}
   </div>
 
   {{if .Engine.TraefikImage}}

@@ -14,6 +14,7 @@ import (
 	"quasar/internal/certs"
 	"quasar/internal/db"
 	"quasar/internal/docker"
+	"quasar/internal/hostupdate"
 	"quasar/internal/vps"
 )
 
@@ -66,13 +67,37 @@ func fullScan() docker.CleanupScan {
 }
 
 // traefikRowCase is the Environment card built around one state of its Traefik
-// row, which is the only part of it that has more than one.
+// row, with the server's own rows at rest.
 func traefikRowCase(t TraefikView) map[string]any {
 	return map[string]any{
-		"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64"},
-		"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44", TraefikImage: t.Image},
-		"GoRuntime": "go1.26.5",
-		"Traefik":   t,
+		"Host":       vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64"},
+		"Engine":     docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44", TraefikImage: t.Image},
+		"GoRuntime":  "go1.26.5",
+		"Traefik":    t,
+		"HostUpdate": HostUpdateView{IsAdmin: t.IsAdmin, Manager: "apt", Checked: true, Ago: "3h ago"},
+	}
+}
+
+// hostRowCase is the Environment card built around one state of the server's
+// own rows: the operating system's, the Docker one's, and what is folded under
+// them.
+func hostRowCase(v HostUpdateView) map[string]any {
+	return map[string]any{
+		"Host":       vps.HostInfo{OS: "Fedora Linux 41", Kernel: "6.11.3-300.fc41", Arch: "x86_64", Icon: "fedora"},
+		"Engine":     docker.EngineInfo{DockerVersion: "28.5.0", APIVersion: "1.51"},
+		"GoRuntime":  "go1.26.5",
+		"Traefik":    TraefikView{Tested: "traefik:v3.7.10"},
+		"HostUpdate": v,
+	}
+}
+
+// hostJobCase is a server that can be managed, with a job in one state and
+// the log it wrote.
+func hostJobCase(st hostupdate.Status) HostUpdateView {
+	st.Started = time.Now().Add(-2 * time.Minute)
+	return HostUpdateView{
+		IsAdmin: true, Manager: "dnf", Checked: true, Ago: "5 min ago", Job: st,
+		Log: "=== 2026-09-29T10:00:00Z upgrade with dnf ===\nComplete!\n=== exit 0 ===",
 	}
 }
 
@@ -305,18 +330,20 @@ func TestExecuteTemplates(t *testing.T) {
 		// An edge router already on the tested version: the row reports, and
 		// offers nothing.
 		{"system_env", map[string]any{
-			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64", Uptime: "3d 4h", Icon: "ubuntu"},
-			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44", OSType: "linux/amd64", TraefikImage: "traefik:v3.7.10"},
-			"GoRuntime": "go1.26.5",
-			"Traefik":   TraefikView{Image: "traefik:v3.7.10", Tested: "traefik:v3.7.10", IsAdmin: true},
+			"Host":       vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64", Uptime: "3d 4h", Icon: "ubuntu"},
+			"Engine":     docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44", OSType: "linux/amd64", TraefikImage: "traefik:v3.7.10"},
+			"GoRuntime":  "go1.26.5",
+			"Traefik":    TraefikView{Image: "traefik:v3.7.10", Tested: "traefik:v3.7.10", IsAdmin: true},
+			"HostUpdate": HostUpdateView{IsAdmin: true, Manager: "apt", Checked: true, Ago: "3h ago"},
 		}},
 		// A daemon that answered the version but not the inspect: the branch
 		// with no Traefik row at all.
 		{"system_env", map[string]any{
-			"Host":      vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64"},
-			"Engine":    docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44"},
-			"GoRuntime": "go1.26.5",
-			"Traefik":   TraefikView{Tested: "traefik:v3.7.10", IsAdmin: true},
+			"Host":       vps.HostInfo{OS: "Ubuntu 24.04", Kernel: "6.8.0", Arch: "x86_64"},
+			"Engine":     docker.EngineInfo{DockerVersion: "29.0.1", APIVersion: "1.44"},
+			"GoRuntime":  "go1.26.5",
+			"Traefik":    TraefikView{Tested: "traefik:v3.7.10", IsAdmin: true},
+			"HostUpdate": HostUpdateView{Reason: "The server does not run systemd, which the dashboard hands its updates to."},
 		}},
 		// Every state the Traefik row can be in: an update on offer, a viewer
 		// who is not offered it, the two phases of a run, and the two outcomes.
@@ -344,6 +371,35 @@ func TestExecuteTemplates(t *testing.T) {
 			Image: "traefik:v3.7.6", Tested: "traefik:v3.7.10", Available: true, IsAdmin: true,
 			Phase: traefikFailed, Err: "the update was rolled back and Traefik is running on its previous version",
 		})},
+		// Every state the server's own rows can be in: not manageable, never
+		// checked, up to date, updates waiting with Docker among them and a
+		// restart needed, each kind of job running, and the ways one ends.
+		{"system_env", hostRowCase(HostUpdateView{Reason: "Host management is turned off (HOST_MANAGEMENT=off)."})},
+		{"system_env", hostRowCase(HostUpdateView{IsAdmin: true, Manager: "dnf"})},
+		{"system_env", hostRowCase(HostUpdateView{IsAdmin: true, Manager: "apt", Checked: true, Ago: "3h ago"})},
+		{"system_env", hostRowCase(HostUpdateView{
+			IsAdmin: true, Manager: "dnf", Checked: true, Ago: "just now", Reboot: true,
+			System: []hostupdate.Package{{Name: "kernel", Version: "6.11.4-301.fc41"}},
+			Docker: []hostupdate.Package{{Name: "docker-ce", Version: "3:28.5.1-1.fc41"}},
+			Engine: "28.5.1",
+		})},
+		// Only a part of Docker out of date, not the engine: still offered.
+		{"system_env", hostRowCase(HostUpdateView{
+			IsAdmin: true, Manager: "apt", Checked: true, Ago: "1h ago",
+			Docker: []hostupdate.Package{{Name: "containerd.io", Version: "1.7.28-1"}},
+		})},
+		// A viewer is told what is waiting, and offered nothing.
+		{"system_env", hostRowCase(HostUpdateView{
+			Manager: "pacman", Checked: true, Ago: "1h ago",
+			Docker: []hostupdate.Package{{Name: "docker", Version: "1:28.5.1-1"}}, Engine: "28.5.1",
+		})},
+		{"system_env", hostRowCase(hostJobCase(hostupdate.Status{Running: true, Job: hostupdate.Job{Kind: hostupdate.Check}}))},
+		{"system_env", hostRowCase(hostJobCase(hostupdate.Status{Running: true, Job: hostupdate.Job{Kind: hostupdate.Upgrade, By: "admin"}}))},
+		{"system_env", hostRowCase(hostJobCase(hostupdate.Status{Running: true, Job: hostupdate.Job{Kind: hostupdate.Docker}}))},
+		{"system_env", hostRowCase(hostJobCase(hostupdate.Status{Running: true, Job: hostupdate.Job{Kind: hostupdate.Reboot}}))},
+		{"system_env", hostRowCase(hostJobCase(hostupdate.Status{Exit: 100, Job: hostupdate.Job{Kind: hostupdate.Upgrade}}))},
+		{"system_env", hostRowCase(hostJobCase(hostupdate.Status{Interrupted: true, Job: hostupdate.Job{Kind: hostupdate.Docker}}))},
+		{"system_env", hostRowCase(hostJobCase(hostupdate.Status{Job: hostupdate.Job{Kind: hostupdate.Check}}))},
 		{"system_certs", map[string]any{
 			"IsAdmin": true, "CertsWritable": true,
 			"Certs": []CertView{

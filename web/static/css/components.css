@@ -673,11 +673,20 @@ input[type="checkbox"]:focus-visible {
 
 .env-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.875rem;
   padding: 0.75rem 1rem;
 }
-.env-row + .env-row { border-top: var(--border-w) solid var(--border); }
+/* A row's buttons, which on a phone take a line of their own under its text
+   rather than squeezing it into a column a word wide. Indented past the icon
+   to where the text starts. */
+.env-actions { justify-content: flex-end; }
+@media (width < 40rem) {
+  .env-actions { flex-basis: 100%; justify-content: flex-start; padding-left: 2.375rem; }
+}
+.env-row + .env-row,
+.env-more + .env-row { border-top: var(--border-w) solid var(--border); }
 .env-icon {
   display: flex;
   width: 1.5rem;
@@ -686,6 +695,49 @@ input[type="checkbox"]:focus-visible {
   color: var(--text-faint);
 }
 .env-icon svg { width: 100%; height: 100%; }
+
+/* What the server has waiting and what its last job printed, folded under the
+   operating system's row. Indented to the text of the rows, past their icons,
+   so it reads as belonging to the row above rather than as a row of its own. */
+.env-more {
+  border-top: var(--border-w) solid var(--border);
+  padding: 0.25rem 1rem 0.5rem 3.375rem;
+}
+.env-more > details > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+  width: fit-content;
+}
+.env-more > details > summary::-webkit-details-marker { display: none; }
+.env-more > details > summary:hover { color: var(--text); }
+.env-more > details > summary .ico { transition: transform 150ms ease; }
+.env-more > details:not([open]) > summary .ico { transform: rotate(-90deg); }
+.env-packages {
+  display: block;
+  max-height: 16rem;
+  overflow: auto;
+  margin-bottom: 0.5rem;
+  font-size: 0.75rem;
+}
+.env-packages td { padding: 0.125rem 1.5rem 0.125rem 0; white-space: nowrap; }
+.env-log {
+  max-height: 20rem;
+  overflow: auto;
+  margin-bottom: 0.5rem;
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /* --- Charts ---------------------------------------------------------------- */
 

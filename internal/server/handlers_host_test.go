@@ -139,3 +139,17 @@ func TestHostJobRejectsUnknownKind(t *testing.T) {
 		t.Fatalf("status %d, want 404", w.Code)
 	}
 }
+
+func TestDockerOffer(t *testing.T) {
+	engine := HostUpdateView{Engine: "28.5.1", Docker: []hostupdate.Package{{Name: "containerd.io", Version: "1.7.28-1"}, {Name: "docker-ce", Version: "3:28.5.1-1.fc41"}}}
+	if got := engine.DockerOffer(); got != "Docker 28.5.1" {
+		t.Errorf("with the engine: %q", got)
+	}
+	parts := HostUpdateView{Docker: []hostupdate.Package{{Name: "containerd.io", Version: "1.7.28-1"}}}
+	if got := parts.DockerOffer(); got != "containerd.io 1.7.28" {
+		t.Errorf("without the engine: %q", got)
+	}
+	if got := (HostUpdateView{}).DockerOffer(); got != "" {
+		t.Errorf("with nothing: %q", got)
+	}
+}

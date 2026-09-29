@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -139,7 +140,7 @@ type HostUpdateView struct {
 	Ago     string               // when the last check worked
 	System  []hostupdate.Package // updates an OS upgrade installs
 	Docker  []hostupdate.Package // the Docker packages, upgraded on their own
-	Engine  string               // the Docker Engine version on offer, when one is
+	Engine  string               // the Docker Engine version on offer, when the engine itself is among them
 	Reboot  bool                 // something installed only a restart applies
 }
 
@@ -170,12 +171,6 @@ func (s *Server) hostUpdateView(engine docker.EngineInfo, host vps.HostInfo, isA
 		} else {
 			v.System = append(v.System, p)
 		}
-	}
-	// Some Docker package is out of date but not the engine itself — the
-	// compose plugin, containerd: still worth the upgrade, named by the
-	// first of them.
-	if v.Engine == "" && len(v.Docker) > 0 {
-		v.Engine = v.Docker[0].Name + " " + upstreamVersion(v.Docker[0].Version)
 	}
 	kernel := host.Kernel
 	if kernel == "unknown" {
@@ -240,4 +235,50 @@ var hostStartedMessage = map[hostupdate.Kind]string{
 	hostupdate.Docker: "Updating Docker. Every application and this dashboard stop for a minute or two; " +
 		"the page reconnects by itself.",
 	hostupdate.Reboot: "The server is restarting. Every application and this dashboard are down until it is back.",
+}
+
+// JobName is what the card calls the last job.
+func (v HostUpdateView) JobName() string {
+	switch v.Job.Kind {
+	case hostupdate.Check:
+		return "Update check"
+	case hostupdate.Upgrade:
+		return "Package update"
+	case hostupdate.Docker:
+		return "Docker update"
+	case hostupdate.Reboot:
+		return "Restart"
+	}
+	return ""
+}
+
+// Ran is how long ago the last job started.
+func (v HostUpdateView) Ran() string { return humanSince(v.Job.Started) }
+
+// Pending counts every package waiting, Docker's included.
+func (v HostUpdateView) Pending() int { return len(v.System) + len(v.Docker) }
+
+// Failure says how the last job went wrong, to follow "… failed:".
+func (v HostUpdateView) Failure() string {
+	switch {
+	case v.Job.Refused:
+		return "it never reached the server"
+	case v.Job.Interrupted:
+		return "it was cut short before it could finish"
+	}
+	return "it exited with code " + strconv.Itoa(v.Job.Exit)
+}
+
+// DockerOffer names the Docker update on offer: the engine's new version, or,
+// when only some other part of it is out of date — the compose plugin,
+// containerd — the first of those. Still worth the upgrade, and still a
+// restart of Docker.
+func (v HostUpdateView) DockerOffer() string {
+	if v.Engine != "" {
+		return "Docker " + v.Engine
+	}
+	if len(v.Docker) > 0 {
+		return v.Docker[0].Name + " " + upstreamVersion(v.Docker[0].Version)
+	}
+	return ""
 }
