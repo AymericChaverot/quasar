@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"quasar/internal/config"
+	"quasar/internal/db"
 	"quasar/internal/docker"
 	"quasar/internal/hostupdate"
+	"quasar/internal/updater"
 	"quasar/internal/vps"
 )
 
@@ -151,5 +153,32 @@ func TestDockerOffer(t *testing.T) {
 	}
 	if got := (HostUpdateView{}).DockerOffer(); got != "" {
 		t.Errorf("with nothing: %q", got)
+	}
+}
+
+// Updating Quasar or Traefik waits for a job on the server to finish: a Docker
+// upgrade restarts the daemon both of them are driven through.
+func TestUpdatesWaitForAHostJob(t *testing.T) {
+	s := fakeHost(t, managedHost...)
+	database, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { database.Close() })
+	s.db = database
+	if err := db.SetSetting(database, updater.SettingLatestTag, "v99.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.hostStore().Begin(hostupdate.Job{Kind: hostupdate.Docker, Started: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	s.handleUpdateApply(w, httptest.NewRequest(http.MethodPost, "/system/update/apply", nil))
+	if loc := w.Header().Get("Location"); !strings.Contains(loc, "job+is+running") {
+		t.Fatalf("self-update went ahead under a host job: %d %s", w.Code, loc)
+	}
+	if s.update.state().phase != updateIdle {
+		t.Fatal("the self-update was claimed")
 	}
 }

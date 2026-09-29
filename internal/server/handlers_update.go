@@ -213,6 +213,10 @@ func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 		redirectSystem(w, r, "No release known yet — run a check first.")
 		return
 	}
+	if s.hostJobRunning() {
+		redirectSystem(w, r, "A job is running on the server; update Quasar once it has finished.")
+		return
+	}
 	imageRef := "ghcr.io/" + strings.ToLower(s.cfg.GitHubRepo) + ":" + latest
 	if !s.update.begin(latest) {
 		// Already running: join the run in progress instead of starting a

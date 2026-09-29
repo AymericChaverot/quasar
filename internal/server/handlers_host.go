@@ -282,3 +282,10 @@ func (v HostUpdateView) DockerOffer() string {
 	}
 	return ""
 }
+
+// hostJobRunning reports whether a job is running on the server, for the
+// updates of Quasar and Traefik, which must not start under one: a Docker
+// upgrade restarts the daemon they are talking to.
+func (s *Server) hostJobRunning() bool {
+	return s.hostStore().Status(hostupdate.BootID()).Running
+}

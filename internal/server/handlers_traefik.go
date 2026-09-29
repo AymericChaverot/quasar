@@ -163,6 +163,10 @@ func (s *Server) handleTraefikUpdate(w http.ResponseWriter, r *http.Request) {
 		redirectSystem(w, r, "Traefik is already on "+version.TraefikImage+".")
 		return
 	}
+	if s.hostJobRunning() {
+		redirectSystem(w, r, "A job is running on the server; update Traefik once it has finished.")
+		return
+	}
 	if !s.traefik.begin(version.TraefikImage) {
 		redirectSystem(w, r, "A Traefik update is already running.")
 		return
