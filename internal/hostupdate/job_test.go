@@ -86,7 +86,7 @@ func TestAbort(t *testing.T) {
 		t.Fatal(err)
 	}
 	store.Abort("could not reach the Docker daemon")
-	if st := store.Status(""); !st.Failed() {
+	if st := store.Status(""); !st.Failed() || !st.Refused || st.Exit != 0 {
 		t.Fatalf("an aborted job reads as %+v", st)
 	}
 	if got := store.Log(5); got != "could not reach the Docker daemon" {

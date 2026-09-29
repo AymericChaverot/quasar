@@ -33,13 +33,16 @@ type Status struct {
 	Running     bool
 	Exit        int  // the job's exit code, once it has one
 	Interrupted bool // it ended without saying how
+	Refused     bool // it never reached the host
 }
 
 // Done reports whether the job finished and worked.
-func (s Status) Done() bool { return s.Kind != "" && !s.Running && !s.Interrupted && s.Exit == 0 }
+func (s Status) Done() bool { return s.Kind != "" && !s.Running && !s.Failed() }
 
 // Failed reports whether the job finished and did not work.
-func (s Status) Failed() bool { return s.Kind != "" && !s.Running && (s.Interrupted || s.Exit != 0) }
+func (s Status) Failed() bool {
+	return s.Kind != "" && !s.Running && (s.Interrupted || s.Refused || s.Exit != 0)
+}
 
 // Store is the directory a job's files live in: the record the dashboard
 // writes, and the log, exit code and list of updates the job writes.
@@ -66,11 +69,15 @@ func (s Store) Begin(job Job) error {
 	return writeAtomic(s.path("job.json"), data)
 }
 
+// refused is what Abort writes in place of an exit code: no script writes it,
+// so a job that never ran is not mistaken for one that ran and failed.
+const refused = "refused"
+
 // Abort ends a job that never got as far as the host, with the reason in its
 // log where the operator will look for it.
 func (s Store) Abort(reason string) {
 	_ = os.WriteFile(s.path("job.log"), []byte(reason+"\n"), 0o600)
-	_ = os.WriteFile(s.path("job.exit"), []byte("1\n"), 0o600)
+	_ = os.WriteFile(s.path("job.exit"), []byte(refused+"\n"), 0o600)
 }
 
 // Status reads what the last job has got to. bootID is the host's boot now.
@@ -81,7 +88,12 @@ func (s Store) Status(bootID string) Status {
 		return Status{}
 	}
 	if raw, err := os.ReadFile(s.path("job.exit")); err == nil {
-		if code, err := strconv.Atoi(strings.TrimSpace(string(raw))); err == nil {
+		word := strings.TrimSpace(string(raw))
+		if word == refused {
+			st.Refused = true
+			return st
+		}
+		if code, err := strconv.Atoi(word); err == nil {
 			st.Exit = code
 			return st
 		}
