@@ -3,15 +3,15 @@
 /* Every page's notices float in the top-right corner, just under the header,
    rather than sitting in the page: the button that caused one is often three
    screens down, and a message that scrolls away with the page is a message
-   nobody reads. The newest is on top, and the older ones make way for it. */
+   nobody reads. They read top to bottom in the order they arrived, each new
+   one under the last. */
 .toasts {
   position: fixed;
   top: 4.5rem;
   right: 1.25rem;
   z-index: 60;
   display: flex;
-  /* Appended in the order they arrive, drawn newest first. */
-  flex-direction: column-reverse;
+  flex-direction: column;
   gap: 0.625rem;
   width: min(24rem, calc(100vw - 2.5rem));
   /* The column is as tall as its toasts, but the gaps between them are still
