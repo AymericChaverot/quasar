@@ -194,6 +194,7 @@ func (s *Server) createApp(w http.ResponseWriter, r *http.Request, a *db.App) st
 	// A first deploy has nothing local to reuse: it has to pull the image or
 	// clone the repository.
 	s.dock.UpdateAsync(a, "create")
+	s.followDeploy(r, a)
 	s.audit(r, "app.create", a.Name, a.Subdomain+" ("+a.DeployType+")")
 	http.Redirect(w, r, "/apps/"+a.ID, http.StatusSeeOther)
 	return ""
@@ -402,6 +403,7 @@ func (s *Server) handleAppRedeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.dock.DeployAsync(a, "manual")
+	s.followDeploy(r, a)
 	s.audit(r, "app.deploy", a.Name, "")
 	s.renderPartial(w, "app_status_panel", s.appView(r, a))
 }
@@ -414,6 +416,7 @@ func (s *Server) handleAppUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.dock.UpdateAsync(a, "update")
+	s.followDeploy(r, a)
 	s.audit(r, "app.update", a.Name, a.DeployType)
 	s.renderPartial(w, "app_status_panel", s.appView(r, a))
 }
@@ -446,6 +449,7 @@ func (s *Server) handleAppRollback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.dock.RollbackComposeAsync(a, depID)
+		s.followDeploy(r, a)
 		s.audit(r, "app.rollback", a.Name, "to the compose file of deployment "+id)
 		s.renderPartial(w, "app_status_panel", s.appView(r, a))
 		return
@@ -460,6 +464,7 @@ func (s *Server) handleAppRollback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.dock.RollbackAsync(a, tag)
+	s.followDeploy(r, a)
 	s.audit(r, "app.rollback", a.Name, "to "+tag)
 	s.renderPartial(w, "app_status_panel", s.appView(r, a))
 }

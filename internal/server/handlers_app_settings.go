@@ -428,6 +428,7 @@ func (s *Server) handleAppSource(w http.ResponseWriter, r *http.Request) {
 	}
 	a.GitURL, a.GitBranch = gitURL, branch
 	s.dock.UpdateAsync(a, "source")
+	s.followDeploy(r, a)
 	s.audit(r, "app.source", a.Name, sourceLabel(gitURL)+" ("+branch+")")
 	// The header, the build panel and the deploy progress all change with
 	// the source, so the page is reloaded rather than this panel redrawn.
