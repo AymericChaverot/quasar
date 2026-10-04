@@ -98,8 +98,8 @@
    a toast you have read, not the first thing it offers. */
 .toast-close {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: 0.25rem;
+  right: 0.3125rem;
   display: flex;
   padding: 0.25rem;
   border-radius: var(--radius);
