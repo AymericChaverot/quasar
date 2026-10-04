@@ -3,7 +3,6 @@ package server
 import (
 	"errors"
 	"net/http"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -125,18 +124,11 @@ func (s *Server) gitData(r *http.Request) map[string]any {
 }
 
 func (s *Server) handleGitCredentials(w http.ResponseWriter, r *http.Request) {
-	data := s.gitData(r)
-	if msg := r.URL.Query().Get("msg"); msg != "" {
-		data["Saved"] = msg
-	}
-	if e := r.URL.Query().Get("err"); e != "" {
-		data["Error"] = e
-	}
-	s.render(w, r, "git_credentials", data)
+	s.render(w, r, "git_credentials", s.gitData(r))
 }
 
-func redirectGit(w http.ResponseWriter, r *http.Request, key, msg string) {
-	http.Redirect(w, r, "/settings/git?"+key+"="+url.QueryEscape(msg), http.StatusSeeOther)
+func (s *Server) redirectGit(w http.ResponseWriter, r *http.Request, n Notice) {
+	s.redirectWith(w, r, "/settings/git", n)
 }
 
 // handleGitCredentialSave adds a credential or updates the one already held
@@ -144,7 +136,7 @@ func redirectGit(w http.ResponseWriter, r *http.Request, key, msg string) {
 func (s *Server) handleGitCredentialSave(w http.ResponseWriter, r *http.Request) {
 	scope := db.NormalizeGitScope(r.FormValue("scope"))
 	if scope == "" {
-		redirectGit(w, r, "err", "A scope is required — a host, a host and owner, or * for everything.")
+		s.redirectGit(w, r, warnNotice("Credential not saved", "A scope is required — a host, a host and owner, or * for everything."))
 		return
 	}
 	cred := &db.GitCredential{
@@ -154,12 +146,12 @@ func (s *Server) handleGitCredentialSave(w http.ResponseWriter, r *http.Request)
 		Secret:   strings.TrimSpace(r.FormValue("secret")),
 	}
 	if err := db.SaveGitCredential(s.db, s.keyring, cred); err != nil {
-		redirectGit(w, r, "err", "Nothing is stored for "+scopeLabel(scope)+" yet, so a token is required.")
+		s.redirectGit(w, r, warnNotice("Credential not saved", "Nothing is stored for "+scopeLabel(scope)+" yet, so a token is required."))
 		return
 	}
 	// The token itself never reaches the audit log; which scope gained one does.
 	s.audit(r, "git-credential.save", scope, cred.Name)
-	redirectGit(w, r, "msg", "Credential saved for "+scopeLabel(scope)+".")
+	s.redirectGit(w, r, okNotice("Credential saved", "It covers "+scopeLabel(scope)+"."))
 }
 
 // handleGitCredentialUpdate edits the parts of a credential that are labels:
@@ -173,22 +165,22 @@ func (s *Server) handleGitCredentialUpdate(w http.ResponseWriter, r *http.Reques
 	}
 	scope := db.NormalizeGitScope(r.FormValue("scope"))
 	if scope == "" {
-		redirectGit(w, r, "err", "A scope is required — a host, a host and owner, or * for everything.")
+		s.redirectGit(w, r, warnNotice("Credential not saved", "A scope is required — a host, a host and owner, or * for everything."))
 		return
 	}
 	name := strings.TrimSpace(r.FormValue("name"))
 	err = db.UpdateGitCredentialMeta(s.db, id, name, scope, strings.TrimSpace(r.FormValue("username")))
 	switch {
 	case errors.Is(err, db.ErrGitScopeTaken):
-		redirectGit(w, r, "err", "Another credential already covers "+scopeLabel(scope)+
-			". Delete that one first, or give this one a narrower scope.")
+		s.redirectGit(w, r, warnNotice("Credential not updated", "Another credential already covers "+scopeLabel(scope)+
+			". Delete that one first, or give this one a narrower scope."))
 		return
 	case err != nil:
-		redirectGit(w, r, "err", "That credential no longer exists.")
+		s.redirectGit(w, r, errNotice("Credential not found", "That credential no longer exists.", nil))
 		return
 	}
 	s.audit(r, "git-credential.update", scope, name)
-	redirectGit(w, r, "msg", "Credential updated. It now covers "+scopeLabel(scope)+".")
+	s.redirectGit(w, r, okNotice("Credential updated", "It now covers "+scopeLabel(scope)+"."))
 }
 
 func (s *Server) handleGitCredentialDelete(w http.ResponseWriter, r *http.Request) {
@@ -198,11 +190,11 @@ func (s *Server) handleGitCredentialDelete(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := db.DeleteGitCredential(s.db, id); err != nil {
-		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+		s.redirectGit(w, r, errNotice("Credential not deleted", "", err))
 		return
 	}
 	s.audit(r, "git-credential.delete", r.PathValue("id"), "")
-	redirectGit(w, r, "msg", "Credential deleted. Repositories it covered fall back to the next widest credential, or to anonymous access.")
+	s.redirectGit(w, r, okNotice("Credential deleted", "Repositories it covered fall back to the next widest credential, or to anonymous access."))
 }
 
 // handleGitCredentialTest clones nothing but authenticates exactly as a deploy
@@ -210,19 +202,19 @@ func (s *Server) handleGitCredentialDelete(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleGitCredentialTest(w http.ResponseWriter, r *http.Request) {
 	repo := strings.TrimSpace(r.FormValue("repo_url"))
 	if repo == "" {
-		redirectGit(w, r, "err", "Enter a repository URL to test against — any private repository this credential should be able to reach.")
+		s.redirectGit(w, r, warnNotice("Nothing tested", "Enter a repository URL to test against — any private repository this credential should be able to reach."))
 		return
 	}
 	if !strings.HasPrefix(repo, "https://") {
-		redirectGit(w, r, "err", "Test with an https:// URL: that is the only kind Quasar attaches a credential to.")
+		s.redirectGit(w, r, warnNotice("Nothing tested", "Test with an https:// URL: that is the only kind Quasar attaches a credential to."))
 		return
 	}
 	msg, err := s.dock.CheckGitAccess(r.Context(), repo)
 	if err != nil {
-		redirectGit(w, r, "err", "Could not reach "+repo+" — "+err.Error())
+		s.redirectGit(w, r, errNotice("Repository unreachable", "Could not reach "+repo+".", err))
 		return
 	}
-	redirectGit(w, r, "msg", msg)
+	s.redirectGit(w, r, okNotice("Repository reachable", msg))
 }
 
 // scopeLabel names a scope the way the page talks about it, so the catch-all
