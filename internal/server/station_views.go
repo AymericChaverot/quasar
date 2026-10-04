@@ -155,6 +155,5 @@ func (s *Server) stationsData(r *http.Request) map[string]any {
 	return map[string]any{
 		"Title":    "Stations",
 		"Stations": s.stationViews(),
-		"Saved":    r.URL.Query().Get("msg"),
 	}
 }

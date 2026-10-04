@@ -3,7 +3,6 @@ package server
 import (
 	"database/sql"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -72,8 +71,8 @@ func (s *Server) handleStations(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "stations_settings", s.stationsData(r))
 }
 
-func redirectStations(w http.ResponseWriter, r *http.Request, msg string) {
-	http.Redirect(w, r, "/settings/stations?msg="+url.QueryEscape(msg), http.StatusSeeOther)
+func (s *Server) redirectStations(w http.ResponseWriter, r *http.Request, n Notice) {
+	s.redirectWith(w, r, "/settings/stations", n)
 }
 
 // renderStationsError re-renders the page with what went wrong and what was

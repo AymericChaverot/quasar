@@ -63,7 +63,7 @@ func (s *Server) handleStationInstall(w http.ResponseWriter, r *http.Request) {
 	s.audit(r, "station.import", st.ID, versionAndSource(st.Version, f.SourceURL))
 	event.Info("station", st.ID+" "+st.Version+" installed", "by "+s.actor(r))
 	s.audit(r, "station.permissions.grant", st.ID, grantDetail(st))
-	redirectStations(w, r, "Station “"+st.Name+"” installed.")
+	s.redirectStations(w, r, okNotice("Station installed", st.Name))
 }
 
 // handleStationRefetch reads the address a station was imported from again.
@@ -76,11 +76,11 @@ func (s *Server) handleStationRefetch(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	row := db.GetStation(s.db, id)
 	if row == nil {
-		redirectStations(w, r, "That station is gone.")
+		s.redirectStations(w, r, errNotice("Station not found", "That station is gone.", nil))
 		return
 	}
 	if row.SourceURL == "" {
-		redirectStations(w, r, "“"+row.Name+"” was pasted in rather than fetched, so there is nowhere to re-fetch it from.")
+		s.redirectStations(w, r, warnNotice("Nothing to re-fetch", row.Name+" was pasted in rather than fetched, so there is nowhere to re-fetch it from."))
 		return
 	}
 
@@ -102,7 +102,7 @@ func (s *Server) handleStationRefetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if doc == row.YAML {
-		redirectStations(w, r, "“"+row.Name+"” is already the revision at that address.")
+		s.redirectStations(w, r, infoNotice("Already up to date", row.Name+" is already the revision at that address."))
 		return
 	}
 
@@ -114,8 +114,8 @@ func (s *Server) handleStationRefetch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.audit(r, "station.hold", row.StationID, "version "+st.Version+" asks for more than was accepted")
-		redirectStations(w, r, "Revision "+st.Version+" of “"+row.Name+"” asks for more than you accepted. "+
-			"It is waiting below; the running revision is unchanged.")
+		s.redirectStations(w, r, warnNotice("Revision waiting", "Revision "+st.Version+" of "+row.Name+" asks for more than you accepted. "+
+			"It is waiting below; the running revision is unchanged."))
 		return
 	}
 
@@ -126,7 +126,7 @@ func (s *Server) handleStationRefetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "station.update", row.StationID, "version "+st.Version+" from "+row.SourceURL)
-	redirectStations(w, r, "“"+row.Name+"” updated to "+st.Version+". It asks for nothing you had not already accepted.")
+	s.redirectStations(w, r, okNotice("Station updated", row.Name+" is on "+st.Version+". It asks for nothing you had not already accepted."))
 }
 
 // handleStationAccept promotes the waiting revision, permissions and all.
@@ -134,7 +134,7 @@ func (s *Server) handleStationAccept(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	row := db.GetStation(s.db, id)
 	if row == nil || row.PendingYAML == "" {
-		redirectStations(w, r, "There is no revision waiting.")
+		s.redirectStations(w, r, warnNotice("Nothing waiting", "There is no revision waiting."))
 		return
 	}
 	st, errs := checkStation(row.PendingYAML)
@@ -151,7 +151,7 @@ func (s *Server) handleStationAccept(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "station.update", row.StationID, "version "+st.Version)
 	s.audit(r, "station.permissions.grant", row.StationID, grantDetail(st))
-	redirectStations(w, r, "Station “"+row.Name+"” updated to "+st.Version+".")
+	s.redirectStations(w, r, okNotice("Station updated", row.Name+" is on "+st.Version+"."))
 }
 
 // handleStationDiscard throws the waiting revision away. The next re-fetch
@@ -160,7 +160,7 @@ func (s *Server) handleStationDiscard(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	row := db.GetStation(s.db, id)
 	if row == nil || row.PendingYAML == "" {
-		redirectStations(w, r, "There is no revision waiting.")
+		s.redirectStations(w, r, warnNotice("Nothing waiting", "There is no revision waiting."))
 		return
 	}
 	row.PendingYAML, row.PendingHash = "", ""
@@ -169,7 +169,7 @@ func (s *Server) handleStationDiscard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "station.discard", row.StationID, "")
-	redirectStations(w, r, "Discarded the revision waiting for “"+row.Name+"”.")
+	s.redirectStations(w, r, okNotice("Revision discarded", "The revision waiting for "+row.Name+" is gone."))
 }
 
 // handleStationRevert puts the previous revision back, and keeps the one it
@@ -181,7 +181,7 @@ func (s *Server) handleStationRevert(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	row := db.GetStation(s.db, id)
 	if row == nil || row.PrevYAML == "" {
-		redirectStations(w, r, "There is no earlier revision to go back to.")
+		s.redirectStations(w, r, warnNotice("Nothing to go back to", "There is no earlier revision."))
 		return
 	}
 	st, errs := checkStation(row.PrevYAML)
@@ -197,7 +197,7 @@ func (s *Server) handleStationRevert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "station.revert", row.StationID, "back to version "+st.Version)
-	redirectStations(w, r, "Station “"+row.Name+"” is back on "+st.Version+".")
+	s.redirectStations(w, r, okNotice("Station reverted", row.Name+" is back on "+st.Version+"."))
 }
 
 // versionAndSource is what the audit entry says an import brought in.
@@ -230,12 +230,12 @@ func (s *Server) handleStationToggle(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	row := db.GetStation(s.db, id)
 	if row == nil {
-		redirectStations(w, r, "That station is gone.")
+		s.redirectStations(w, r, errNotice("Station not found", "That station is gone.", nil))
 		return
 	}
 	on := !row.Enabled
 	if err := db.SetStationEnabled(s.db, id, on); err != nil {
-		redirectStations(w, r, "Could not change that: "+err.Error())
+		s.redirectStations(w, r, errNotice("Station not changed", "", err))
 		return
 	}
 	state := "disabled"
@@ -243,18 +243,18 @@ func (s *Server) handleStationToggle(w http.ResponseWriter, r *http.Request) {
 		state = "enabled"
 	}
 	s.audit(r, "station.toggle", row.StationID, state)
-	redirectStations(w, r, "Station “"+row.Name+"” "+state+".")
+	s.redirectStations(w, r, okNotice("Station "+state, row.Name))
 }
 
 func (s *Server) handleStationDelete(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	row := db.GetStation(s.db, id)
 	if row == nil {
-		redirectStations(w, r, "That station is gone.")
+		s.redirectStations(w, r, errNotice("Station not found", "That station is gone.", nil))
 		return
 	}
 	if err := db.DeleteStation(s.db, id); err != nil {
-		redirectStations(w, r, "Could not delete that: "+err.Error())
+		s.redirectStations(w, r, errNotice("Station not removed", "", err))
 		return
 	}
 	s.audit(r, "station.delete", row.StationID, row.Name)
@@ -262,7 +262,7 @@ func (s *Server) handleStationDelete(w http.ResponseWriter, r *http.Request) {
 	// A station that is removed leaves a perfectly normal application behind:
 	// the same containers, storage, logs and backups, minus the tabs somebody
 	// wrote for it.
-	redirectStations(w, r, "Station “"+row.Name+"” removed. Applications deployed from it keep running.")
+	s.redirectStations(w, r, okNotice("Station removed", row.Name+" is gone. Applications deployed from it keep running."))
 }
 
 // maxStationBytes caps what a fetch will read. A station is a page or two of
