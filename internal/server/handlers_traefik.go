@@ -174,6 +174,14 @@ func (s *Server) handleTraefikUpdate(w http.ResponseWriter, r *http.Request) {
 	s.audit(r, "traefik.update", version.TraefikImage, "from "+running)
 	event.Info("traefik", running+" → "+version.TraefikImage, "started", "by "+s.actor(r))
 
+	// How it ends goes to whoever started it, in place of the toast saying it
+	// started; the router coming back is also this page's stream coming back.
+	user, _, _, _ := s.currentUser(r)
+	since := time.Now()
+	started := infoNotice("Traefik update started", "Moving to "+version.TraefikImage+
+		". Every site is briefly unavailable while the router restarts, including this page.")
+	started.ID = noticeID("traefik")
+
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), traefikTimeout)
 		defer cancel()
@@ -184,16 +192,19 @@ func (s *Server) handleTraefikUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 			s.traefik.progress(p.Pull.Percent, p.Pull.Phase)
 		})
+		end := okNotice("Traefik updated", "Running on "+version.TraefikImage+".")
 		if err != nil {
 			event.Error("traefik", version.TraefikImage, err.Error())
+			end = errNotice("Traefik update failed", "", err)
 		} else {
 			event.Info("traefik", "running on "+version.TraefikImage)
 		}
 		s.traefik.finish(err)
+		end.ID = started.ID
+		s.notices.deliver(user, end, since)
 	}()
 
 	// Worded as the action taken rather than as progress: the Environment card
 	// is what follows the update.
-	s.redirectSystem(w, r, infoNotice("Traefik update started", "Moving to "+version.TraefikImage+
-		". Every site is briefly unavailable while the router restarts, including this page."))
+	s.redirectSystem(w, r, started)
 }

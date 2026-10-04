@@ -234,7 +234,7 @@ func (s *Server) handleHostJob(w http.ResponseWriter, r *http.Request) {
 	user, _, _, _ := s.currentUser(r)
 	since := time.Now()
 	started := hostStartedMessage[kind]
-	started.ID = "host-" + strconv.FormatInt(since.UnixNano(), 36)
+	started.ID = noticeID("host")
 	tell := func(n Notice) {
 		n.ID = started.ID
 		s.notices.deliver(user, n, since)

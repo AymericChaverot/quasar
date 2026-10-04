@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -262,4 +263,9 @@ func (s *Server) pendingNotices(r *http.Request) []Notice {
 		return nil
 	}
 	return s.notices.take(token, user)
+}
+
+// noticeID names a notice a later one will take the place of.
+func noticeID(prefix string) string {
+	return prefix + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 }
