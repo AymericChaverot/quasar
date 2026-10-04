@@ -23,7 +23,35 @@
     if (t.classList.contains("is-going")) return;
     if (t.clock) t.clock.stop();
     t.classList.add("is-going");
-    setTimeout(() => t.remove(), 300);
+    // Gone once it has slid out, or straight away where there is no motion
+    // to wait for. The timer is the backstop for an animation that never
+    // reports its end, as in a tab the browser has stopped painting.
+    let gone = false;
+    const go = () => { if (!gone) { gone = true; t.remove(); } };
+    t.addEventListener("animationend", (e) => { if (e.target === t) go(); });
+    setTimeout(go, 400);
+  }
+
+  // Where each toast stood the last time the stack settled. When one arrives
+  // or leaves, the others are drawn where they were and slid to where they
+  // now are, rather than jumping a toast's height in one frame.
+  let places = new Map();
+  function measure() {
+    const next = new Map();
+    for (const t of box.children) next.set(t, t.getBoundingClientRect().top);
+    return next;
+  }
+  function glide() {
+    const now = measure();
+    for (const [t, top] of now) {
+      const was = places.get(t);
+      if (was === undefined || was === top || t.classList.contains("is-going")) continue;
+      t.animate(
+        [{ translate: `0 ${was - top}px` }, { translate: "0 0" }],
+        { duration: 320, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
+      );
+    }
+    places = now;
   }
 
   function arm(t) {
@@ -74,11 +102,21 @@
     // A run of failures should not become a column of cards up the whole
     // screen. The oldest go, since the newest is what was just pressed.
     for (let i = 0; i < all.length - MAX; i++) all[i].remove();
-    for (const t of box.querySelectorAll(".toast:not([data-armed])")) arm(t);
+    // Several landing together come in one after the other, the first to
+    // arrive first.
+    let order = 0;
+    for (const t of box.querySelectorAll(".toast:not([data-armed])")) {
+      t.style.setProperty("--enter-delay", order++ * 90 + "ms");
+      arm(t);
+    }
+    glide();
   }
 
   new MutationObserver(settle).observe(box, { childList: true });
   settle();
+  // A window resized reflows the stack without anything arriving or leaving;
+  // the next change should slide from where things are, not from before.
+  window.addEventListener("resize", () => { places = measure(); });
 
   document.addEventListener("visibilitychange", () => {
     for (const t of box.querySelectorAll(".toast")) {
