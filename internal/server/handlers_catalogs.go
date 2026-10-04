@@ -94,7 +94,6 @@ func (s *Server) catalogsData(r *http.Request) map[string]any {
 		"Title":     "Catalogues",
 		"Catalogs":  s.catalogViews(),
 		"Example":   catalog.Example,
-		"Saved":     r.URL.Query().Get("msg"),
 		"BuiltinN":  len(catalog.Builtin().Templates),
 		"CatalogsN": len(s.catalog().Templates),
 	}
@@ -104,8 +103,8 @@ func (s *Server) handleCatalogs(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "catalogs", s.catalogsData(r))
 }
 
-func redirectCatalogs(w http.ResponseWriter, r *http.Request, msg string) {
-	http.Redirect(w, r, "/settings/catalogs?msg="+url.QueryEscape(msg), http.StatusSeeOther)
+func (s *Server) redirectCatalogs(w http.ResponseWriter, r *http.Request, n Notice) {
+	s.redirectWith(w, r, "/settings/catalogs", n)
 }
 
 // renderCatalogsError re-renders the page with what went wrong and what was
@@ -179,14 +178,14 @@ func (s *Server) handleCatalogCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "catalog.create", c.Name, fmt.Sprintf("%d entries", len(c.Templates)))
-	redirectCatalogs(w, r, "Catalogue “"+c.Name+"” added.")
+	s.redirectCatalogs(w, r, okNotice("Catalogue added", c.Name))
 }
 
 func (s *Server) handleCatalogUpdate(w http.ResponseWriter, r *http.Request) {
 	f := readCatalogForm(r)
 	row := db.GetCatalog(s.db, f.ID)
 	if row == nil {
-		redirectCatalogs(w, r, "That catalogue is gone.")
+		s.redirectCatalogs(w, r, errNotice("Catalogue not found", "That catalogue is gone.", nil))
 		return
 	}
 	c, errs := checkCatalog(f)
@@ -200,19 +199,19 @@ func (s *Server) handleCatalogUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "catalog.update", c.Name, fmt.Sprintf("%d entries", len(c.Templates)))
-	redirectCatalogs(w, r, "Catalogue “"+c.Name+"” saved.")
+	s.redirectCatalogs(w, r, okNotice("Catalogue saved", c.Name))
 }
 
 func (s *Server) handleCatalogToggle(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	row := db.GetCatalog(s.db, id)
 	if row == nil {
-		redirectCatalogs(w, r, "That catalogue is gone.")
+		s.redirectCatalogs(w, r, errNotice("Catalogue not found", "That catalogue is gone.", nil))
 		return
 	}
 	on := !row.Enabled
 	if err := db.SetCatalogEnabled(s.db, id, on); err != nil {
-		redirectCatalogs(w, r, "Could not change that: "+err.Error())
+		s.redirectCatalogs(w, r, errNotice("Catalogue not changed", "", err))
 		return
 	}
 	state := "disabled"
@@ -220,25 +219,25 @@ func (s *Server) handleCatalogToggle(w http.ResponseWriter, r *http.Request) {
 		state = "enabled"
 	}
 	s.audit(r, "catalog.toggle", row.Name, state)
-	redirectCatalogs(w, r, "Catalogue “"+row.Name+"” "+state+".")
+	s.redirectCatalogs(w, r, okNotice("Catalogue "+state, row.Name))
 }
 
 func (s *Server) handleCatalogDelete(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	row := db.GetCatalog(s.db, id)
 	if row == nil {
-		redirectCatalogs(w, r, "That catalogue is gone.")
+		s.redirectCatalogs(w, r, errNotice("Catalogue not found", "That catalogue is gone.", nil))
 		return
 	}
 	if err := db.DeleteCatalog(s.db, id); err != nil {
-		redirectCatalogs(w, r, "Could not delete that: "+err.Error())
+		s.redirectCatalogs(w, r, errNotice("Catalogue not deleted", "", err))
 		return
 	}
 	s.audit(r, "catalog.delete", row.Name, "")
 	// Deleting a catalogue takes its entries off the page and leaves every
 	// application deployed from one exactly where it is: an entry is a form
 	// prefill, and nothing reads it again after the app is created.
-	redirectCatalogs(w, r, "Catalogue “"+row.Name+"” deleted. Applications deployed from it are unaffected.")
+	s.redirectCatalogs(w, r, okNotice("Catalogue deleted", row.Name+" is gone. Applications deployed from it are unaffected."))
 }
 
 // handleCatalogFetch imports a catalogue from a URL, or re-fetches one already
@@ -250,7 +249,7 @@ func (s *Server) handleCatalogFetch(w http.ResponseWriter, r *http.Request) {
 	var row *db.Catalog
 	if f.ID != 0 {
 		if row = db.GetCatalog(s.db, f.ID); row == nil {
-			redirectCatalogs(w, r, "That catalogue is gone.")
+			s.redirectCatalogs(w, r, errNotice("Catalogue not found", "That catalogue is gone.", nil))
 			return
 		}
 		f.SourceURL, f.Name = row.SourceURL, row.Name
@@ -278,7 +277,7 @@ func (s *Server) handleCatalogFetch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.audit(r, "catalog.import", c.Name, f.SourceURL)
-		redirectCatalogs(w, r, "Imported “"+c.Name+"” from "+f.SourceURL+".")
+		s.redirectCatalogs(w, r, okNotice("Catalogue imported", c.Name+", from "+f.SourceURL+"."))
 		return
 	}
 	row.Name, row.YAML = c.Name, f.YAML
@@ -287,7 +286,7 @@ func (s *Server) handleCatalogFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "catalog.refresh", c.Name, f.SourceURL)
-	redirectCatalogs(w, r, "Refreshed “"+c.Name+"” from "+f.SourceURL+".")
+	s.redirectCatalogs(w, r, okNotice("Catalogue refreshed", c.Name+", from "+f.SourceURL+"."))
 }
 
 // maxCatalogBytes caps what a fetch will read. A catalogue is a page or two of

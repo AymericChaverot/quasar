@@ -26,19 +26,19 @@ import (
 func (s *Server) handleCatalogStart(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
-		redirectCatalogs(w, r, "A catalogue needs a name.")
+		s.redirectCatalogs(w, r, warnNotice("Catalogue not started", "A catalogue needs a name."))
 		return
 	}
 	empty := catalog.Catalog{Name: name}
 	doc, err := empty.YAML()
 	if err != nil {
-		redirectCatalogs(w, r, "Could not start that: "+err.Error())
+		s.redirectCatalogs(w, r, errNotice("Catalogue not started", "", err))
 		return
 	}
 	row := &db.Catalog{Name: name, YAML: doc, Enabled: true}
 	id, err := db.InsertCatalog(s.db, row)
 	if err != nil {
-		redirectCatalogs(w, r, "Could not start that: "+err.Error())
+		s.redirectCatalogs(w, r, errNotice("Catalogue not started", "", err))
 		return
 	}
 	s.audit(r, "catalog.create", name, "empty")
@@ -64,11 +64,11 @@ func (s *Server) entryContext(r *http.Request) (*db.Catalog, catalog.Catalog, *c
 func (s *Server) handleCatalogEntryForm(w http.ResponseWriter, r *http.Request) {
 	row, c, entry := s.entryContext(r)
 	if row == nil {
-		redirectCatalogs(w, r, "That catalogue is gone.")
+		s.redirectCatalogs(w, r, errNotice("Catalogue not found", "That catalogue is gone.", nil))
 		return
 	}
 	if c.Name == "" && row.YAML != "" && entry == nil && r.PathValue("entry") != "new" {
-		redirectCatalogs(w, r, "That catalogue cannot be read, so its entries cannot be edited in the form. Fix the document first.")
+		s.redirectCatalogs(w, r, errNotice("Catalogue unreadable", "Its entries cannot be edited in the form. Fix the document first.", nil))
 		return
 	}
 	s.renderEntryForm(w, r, row, entry, nil)
@@ -161,7 +161,7 @@ func at(list []string, i int) string {
 func (s *Server) handleCatalogEntrySave(w http.ResponseWriter, r *http.Request) {
 	row, c, existing := s.entryContext(r)
 	if row == nil {
-		redirectCatalogs(w, r, "That catalogue is gone.")
+		s.redirectCatalogs(w, r, errNotice("Catalogue not found", "That catalogue is gone.", nil))
 		return
 	}
 	entry := readEntryForm(r)
@@ -208,13 +208,13 @@ func (s *Server) handleCatalogEntrySave(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	s.audit(r, "catalog.entry-save", row.Name, entry.ID)
-	redirectCatalogs(w, r, "Entry “"+entry.Name+"” saved in “"+row.Name+"”.")
+	s.redirectCatalogs(w, r, okNotice("Entry saved", entry.Name+", in "+row.Name+"."))
 }
 
 func (s *Server) handleCatalogEntryDelete(w http.ResponseWriter, r *http.Request) {
 	row, c, entry := s.entryContext(r)
 	if row == nil || entry == nil {
-		redirectCatalogs(w, r, "That entry is gone.")
+		s.redirectCatalogs(w, r, errNotice("Entry not found", "That entry is gone.", nil))
 		return
 	}
 	next := c
@@ -223,14 +223,14 @@ func (s *Server) handleCatalogEntryDelete(w http.ResponseWriter, r *http.Request
 
 	doc, err := next.YAML()
 	if err != nil {
-		redirectCatalogs(w, r, "Could not remove that: "+err.Error())
+		s.redirectCatalogs(w, r, errNotice("Entry not removed", "", err))
 		return
 	}
 	row.YAML = doc
 	if err := db.UpdateCatalog(s.db, row); err != nil {
-		redirectCatalogs(w, r, "Could not remove that: "+err.Error())
+		s.redirectCatalogs(w, r, errNotice("Entry not removed", "", err))
 		return
 	}
 	s.audit(r, "catalog.entry-delete", row.Name, entry.ID)
-	redirectCatalogs(w, r, "Entry “"+entry.Name+"” removed from “"+row.Name+"”.")
+	s.redirectCatalogs(w, r, okNotice("Entry removed", entry.Name+", from "+row.Name+"."))
 }
