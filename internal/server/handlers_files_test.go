@@ -393,8 +393,8 @@ func TestExplorerTemplates(t *testing.T) {
 		{"file_list", listing},
 		{"file_list", roListing},
 		// What a write reports when it comes back.
-		{"file_list", withFlash(listing, flashOK("Uploaded site.conf."))},
-		{"file_list", withFlash(listing, flashErr("1 uploaded, 1 refused (big.iso)."))},
+		{"file_list", withNotice(listing, okNotice("Uploaded", "site.conf"))},
+		{"file_list", withNotice(listing, warnNotice("Some files were refused", "1 uploaded, 1 refused (big.iso)."))},
 		// A folder below the root, which is the only case with a trail and an
 		// "up one level" row in it.
 		{"file_list", sub},
@@ -676,13 +676,13 @@ func TestWriteActionURLs(t *testing.T) {
 	}
 }
 
-// withFlash copies a listing with a note attached, so one built listing can be
-// rendered in each of the states a write leaves it in.
-func withFlash(listing map[string]any, flash map[string]string) map[string]any {
+// withNotice copies a listing with a toast attached, so one built listing can
+// be rendered in each of the states a write leaves it in.
+func withNotice(listing map[string]any, n Notice) map[string]any {
 	out := make(map[string]any, len(listing)+1)
 	for k, v := range listing {
 		out[k] = v
 	}
-	out["Flash"] = flash
+	out["Notice"] = n
 	return out
 }

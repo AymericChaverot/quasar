@@ -45,8 +45,10 @@
   {{end}}
 </div>
 
-{{with .Flash}}
-<div class="file-flash {{if eq .Kind "err"}}is-err{{end}}">{{.Text}}</div>
+{{/* What a write did, as one of the page's toasts: out of band, since the
+     listing is what this response swaps in. */}}
+{{with .Notice}}
+<div hx-swap-oob="beforeend:#toasts">{{template "toast" .}}</div>
 {{end}}
 
 {{if .Error}}

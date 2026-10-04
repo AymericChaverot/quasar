@@ -521,7 +521,7 @@ func (s *Server) handleFilesUpload(w http.ResponseWriter, r *http.Request) {
 	dir := files.Clean(r.URL.Query().Get("path"))
 	reader, err := r.MultipartReader()
 	if err != nil {
-		s.listingAfter(w, t, dir, flashErr("That upload could not be read."))
+		s.listingAfter(w, t, dir, errNotice("Upload failed", "That upload could not be read.", err))
 		return
 	}
 	saved, failed := storeUploads(t.Root, dir, reader)
@@ -531,13 +531,17 @@ func (s *Server) handleFilesUpload(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case len(saved) == 0 && len(failed) == 0:
-		s.listingAfter(w, t, dir, flashErr("No file was chosen."))
+		s.listingAfter(w, t, dir, warnNotice("Nothing uploaded", "No file was chosen."))
+	case len(saved) == 0:
+		s.listingAfter(w, t, dir, errNotice("Upload refused", fmt.Sprintf(
+			"%s. A file over %s, or a name that cannot be used, is refused.",
+			strings.Join(failed, ", "), docker.HumanSize(files.MaxUpload)), nil))
 	case len(failed) > 0:
-		s.listingAfter(w, t, dir, flashErr(fmt.Sprintf(
+		s.listingAfter(w, t, dir, warnNotice("Some files were refused", fmt.Sprintf(
 			"%d uploaded, %d refused (%s). A file over %s, or a name that cannot be used, is refused.",
 			len(saved), len(failed), strings.Join(failed, ", "), docker.HumanSize(files.MaxUpload))))
 	default:
-		s.listingAfter(w, t, dir, flashOK(fmt.Sprintf("Uploaded %s.", strings.Join(saved, ", "))))
+		s.listingAfter(w, t, dir, okNotice("Uploaded", strings.Join(saved, ", ")))
 	}
 }
 
@@ -665,17 +669,17 @@ func (t browseTarget) auditTarget() string {
 	return "volume " + t.Ref
 }
 
-// listingAfter re-renders the directory a write happened in, carrying a note
-// about what happened.
-func (s *Server) listingAfter(w http.ResponseWriter, t browseTarget, dir string, flash map[string]string) {
+// listingAfter re-renders the directory a write happened in, and says what
+// happened in a toast that travels with it.
+func (s *Server) listingAfter(w http.ResponseWriter, t browseTarget, dir string, n Notice) {
 	listing, err := s.listing(t, dir)
 	if err != nil {
 		s.renderPartial(w, "file_list", map[string]any{
-			"Target": t, "Path": dir, "Error": listingError(err),
+			"Target": t, "Path": dir, "Error": listingError(err), "Notice": n,
 		})
 		return
 	}
-	listing["Flash"] = flash
+	listing["Notice"] = n
 	s.renderPartial(w, "file_list", listing)
 }
 
@@ -698,9 +702,6 @@ func (s *Server) previewAfter(w http.ResponseWriter, t browseTarget, rel, proble
 		"Problem":  problem,
 	})
 }
-
-func flashOK(text string) map[string]string  { return map[string]string{"Kind": "ok", "Text": text} }
-func flashErr(text string) map[string]string { return map[string]string{"Kind": "err", "Text": text} }
 
 // writeError turns a refused write into a sentence about what was refused.
 func writeError(err error) string {
