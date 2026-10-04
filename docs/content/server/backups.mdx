@@ -17,7 +17,7 @@ Archives are stored in `/opt/quasar/backups/`, and can be downloaded from the pa
 
 ## Creating backups
 
-- **Back up now** creates one immediately.
+- **Back up now** creates one immediately, in the background. A notification says when the archive is ready.
 - Enable the **daily backup** to create one every day.
 - **Keep last** sets how many archives to keep (7 by default). Older ones are deleted.
 
@@ -49,7 +49,7 @@ Without the key, a backup can't be restored onto a new server. Click **Download 
 
 1. In the backup list, click **Restore** on an archive.
 2. If the archive comes from **another server**, first click **Key…** and select that server's `master.key` file.
-3. Confirm.
+3. Confirm. The restore runs in the background, and a notification says when it is done.
 4. **Redeploy your applications** afterwards.
 
 :::warning

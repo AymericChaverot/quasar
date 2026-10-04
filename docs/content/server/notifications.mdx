@@ -33,3 +33,9 @@ After any change, click **Send test**. A broken webhook looks exactly like a qui
 Under **Server usage alerts**, set thresholds for **disk**, **memory** and **CPU**, in percent.
 
 You are notified once when a threshold is crossed, and once when usage goes back under it. Set a threshold to `0` to turn it off.
+
+## In the dashboard
+
+The outcome of what you do in the dashboard shows as a notification in the top-right corner of the page: green when it worked, in the accent colour when something has started, orange for a warning, red when it failed. Successes close after a few seconds, warnings a little later, and errors stay until you close them. A notification stays on screen when you move to another page, and its timer pauses while the pointer is on it.
+
+Long actions run in the background: a [cleanup](/server/disk/#cleaning-up), a [backup or a restore](/server/backups/), a deployment, a [server update](/server/updates/). You can leave the page; when it ends, a notification says how it went on whichever page you are on. Only the person who started it sees it.
