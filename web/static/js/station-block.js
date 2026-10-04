@@ -49,40 +49,4 @@
     link.click();
     link.remove();
   });
-
-  // Each message that lands is given its lifetime once. Arming happens here
-  // rather than in a script travelling with the message, because a fragment
-  // that is appended rather than swapped would leave one dead script tag in
-  // the container per button anybody ever pressed.
-  const toasts = document.getElementById("station-message");
-  const MAX = 5;
-  function arm() {
-    const all = toasts.querySelectorAll(".station-toast");
-    // A run of failures should not end up a column of cards down the whole
-    // screen; the oldest go, since the newest is what was just pressed.
-    for (let i = 0; i < all.length - MAX; i++) all[i].remove();
-
-    for (const toast of toasts.querySelectorAll(".station-toast:not([data-armed])")) {
-      toast.dataset.armed = "1";
-      // An error has no lifetime: why something failed is what somebody came
-      // to read, and it stays until they dismiss it.
-      const life = Number(toast.dataset.toastLife || 0);
-      if (!life) continue;
-      setTimeout(() => {
-        toast.classList.add("is-going");
-        setTimeout(() => toast.remove(), 400);
-      }, life);
-    }
-  }
-  document.body.addEventListener("htmx:afterSwap", (e) => {
-    if (e.target === toasts) arm();
-  });
-
-  // Dismissing one. Delegated, because every toast in here arrived from the
-  // server after this ran, and a listener per button would have to be hung on
-  // each of them as it landed.
-  toasts.addEventListener("click", (e) => {
-    const close = e.target.closest(".station-toast-close");
-    if (close) close.closest(".station-toast").remove();
-  });
 })();

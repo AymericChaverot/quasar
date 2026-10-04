@@ -354,7 +354,7 @@ func (s *Server) handleStationAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseForm(); err != nil {
-		s.renderPartial(w, "station_message", ui.Result{Error: "that form could not be read"})
+		s.renderStationMessage(w, a, ui.Result{Error: "that form could not be read"})
 		return
 	}
 	input := map[string]any{}
@@ -387,7 +387,7 @@ func (s *Server) handleStationAction(w http.ResponseWriter, r *http.Request) {
 
 	out, err := s.runStation(r.Context(), r, a, doc, CallAction, name, input)
 	if err != nil {
-		s.renderPartial(w, "station_message", ui.Result{Error: stationProblem(name, err)})
+		s.renderStationMessage(w, a, ui.Result{Error: stationProblem(name, err)})
 		return
 	}
 	result := ui.ParseResult(out.Value)
@@ -399,7 +399,7 @@ func (s *Server) handleStationAction(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("HX-Trigger", events)
 		}
 	}
-	s.renderPartial(w, "station_message", result)
+	s.renderStationMessage(w, a, result)
 }
 
 // allowDownload holds a file an action offered to the permission that would
@@ -588,6 +588,32 @@ func stationRefreshAllEvent() string { return "quasar:station-refresh" }
 // author's bug and keeps its own words. A budget that ran out is a fact about
 // this call. Anything else is Quasar's own failure and should not be dressed
 // up as the station's.
+// stationNotice is what an action had to say, as a toast titled with the
+// application it was pressed on. An action that had nothing to say is no toast
+// at all.
+func stationNotice(app string, res ui.Result) (Notice, bool) {
+	switch {
+	case res.Error != "":
+		return Notice{Kind: noticeErr, Title: "That did not work", Text: app, Detail: res.Error}, true
+	case res.Warn != "":
+		return Notice{Kind: noticeWarn, Title: app, Text: res.Warn}, true
+	case res.Toast != "":
+		return Notice{Kind: noticeOK, Title: app, Text: res.Toast}, true
+	}
+	return Notice{}, false
+}
+
+// renderStationMessage answers an action's button, which appends whatever it
+// is given to the page's toasts.
+func (s *Server) renderStationMessage(w http.ResponseWriter, a *db.App, res ui.Result) {
+	n, ok := stationNotice(a.Name, res)
+	if !ok {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		return
+	}
+	s.renderPartial(w, "toast", n)
+}
+
 func stationProblem(action string, err error) string {
 	var script *worker.ScriptError
 	if errors.As(err, &script) {

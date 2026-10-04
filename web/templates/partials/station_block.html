@@ -84,15 +84,8 @@
   {{with .Doc.Author}}<p class="station-foot">Station Author: {{.}}</p>{{end}}
 </section>
 
-{{/* Where a toast or a refused action lands, wherever on the page it came
-     from. It floats rather than sitting at the top of the block, because the
-     button that caused it is often three screens down from there — a message
-     nobody scrolls back up to read is a message nobody reads.
-
-     Messages stack here rather than replacing one another: pressing three
-     buttons is three things worth knowing, and the third crushing the first two
-     would make all three pointless. */}}
-<div id="station-message" class="station-toasts" aria-live="polite"></div>
-
+{{/* What an action has to say lands in the page's own toasts (#toasts, in the
+     layout), appended rather than swapped: pressing three buttons is three
+     things worth knowing. */}}
 <script src="/static/js/station-block.js" defer></script>
 {{end}}
