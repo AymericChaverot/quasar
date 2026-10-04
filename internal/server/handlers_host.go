@@ -214,27 +214,27 @@ func (s *Server) handleHostJob(w http.ResponseWriter, r *http.Request) {
 	}
 	m, reason := s.hostManager(s.dock.EngineInfo(r.Context()))
 	if m == nil {
-		redirectSystem(w, r, reason)
+		s.redirectSystem(w, r, warnNotice("Nothing was started", reason))
 		return
 	}
 	if err := s.startHostJob(m, kind, s.actor(r)); err != nil {
-		redirectSystem(w, r, "Nothing was started: "+err.Error()+".")
+		s.redirectSystem(w, r, errNotice("Nothing was started", "", err))
 		return
 	}
 	s.audit(r, "host."+string(kind), m.Name, "")
 	event.Info("host", string(kind)+" started", "with "+m.Name, "by "+s.actor(r))
-	redirectSystem(w, r, hostStartedMessage[kind])
+	s.redirectSystem(w, r, hostStartedMessage[kind])
 }
 
-// hostStartedMessage is what the System page says once a job is under way. It
-// stays in the URL until the page is left, so it names the action rather than
-// its progress.
-var hostStartedMessage = map[hostupdate.Kind]string{
-	hostupdate.Check:   "Looking for updates on the server.",
-	hostupdate.Upgrade: "Updating the server's packages. Docker is left alone, so applications keep running.",
-	hostupdate.Docker: "Updating Docker. Every application and this dashboard stop for a minute or two; " +
-		"the page reconnects by itself.",
-	hostupdate.Reboot: "The server is restarting. Every application and this dashboard are down until it is back.",
+// hostStartedMessage is what the System page says once a job is under way. The
+// Environment card follows the job itself, so this names the action rather
+// than its progress.
+var hostStartedMessage = map[hostupdate.Kind]Notice{
+	hostupdate.Check:   infoNotice("Update check started", "Looking for updates on the server."),
+	hostupdate.Upgrade: infoNotice("Server update started", "Updating the server's packages. Docker is left alone, so applications keep running."),
+	hostupdate.Docker: infoNotice("Docker update started", "Every application and this dashboard stop for a minute or two; "+
+		"the page reconnects by itself."),
+	hostupdate.Reboot: infoNotice("Server restarting", "Every application and this dashboard are down until it is back."),
 }
 
 // JobName is what the card calls the last job.

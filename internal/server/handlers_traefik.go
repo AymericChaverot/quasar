@@ -160,15 +160,15 @@ func (s *Server) handleTraefikUpdate(w http.ResponseWriter, r *http.Request) {
 	running := s.dock.EngineInfo(r.Context()).TraefikImage
 	view := s.traefikView(running, true)
 	if !view.Available {
-		redirectSystem(w, r, "Traefik is already on "+version.TraefikImage+".")
+		s.redirectSystem(w, r, warnNotice("Nothing to update", "Traefik is already on "+version.TraefikImage+"."))
 		return
 	}
 	if s.hostJobRunning() {
-		redirectSystem(w, r, "A job is running on the server; update Traefik once it has finished.")
+		s.redirectSystem(w, r, warnNotice("Traefik not updated", "A job is running on the server; update Traefik once it has finished."))
 		return
 	}
 	if !s.traefik.begin(version.TraefikImage) {
-		redirectSystem(w, r, "A Traefik update is already running.")
+		s.redirectSystem(w, r, warnNotice("Traefik not updated", "A Traefik update is already running."))
 		return
 	}
 	s.audit(r, "traefik.update", version.TraefikImage, "from "+running)
@@ -192,9 +192,8 @@ func (s *Server) handleTraefikUpdate(w http.ResponseWriter, r *http.Request) {
 		s.traefik.finish(err)
 	}()
 
-	// Worded as the action taken rather than as progress: this message sits in
-	// the URL and stays on screen until the page is left, which is longer than
-	// the update itself takes.
-	redirectSystem(w, r, "Traefik update to "+version.TraefikImage+
-		" started. Every site is briefly unavailable while the router restarts, including this page.")
+	// Worded as the action taken rather than as progress: the Environment card
+	// is what follows the update.
+	s.redirectSystem(w, r, infoNotice("Traefik update started", "Moving to "+version.TraefikImage+
+		". Every site is briefly unavailable while the router restarts, including this page."))
 }

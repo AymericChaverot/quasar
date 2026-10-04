@@ -193,10 +193,10 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if problem != "" {
-		redirectSystem(w, r, problem)
+		s.redirectSystem(w, r, errNotice("Update check failed", "", err))
 		return
 	}
-	redirectSystem(w, r, msg)
+	s.redirectSystem(w, r, okNotice("Update check", msg))
 }
 
 // handleUpdateApply starts the self-update to the latest known release and
@@ -210,11 +210,11 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 	latest := db.GetSetting(s.db, updater.SettingLatestTag)
 	if latest == "" {
-		redirectSystem(w, r, "No release known yet — run a check first.")
+		s.redirectSystem(w, r, warnNotice("Quasar not updated", "No release known yet — run a check first."))
 		return
 	}
 	if s.hostJobRunning() {
-		redirectSystem(w, r, "A job is running on the server; update Quasar once it has finished.")
+		s.redirectSystem(w, r, warnNotice("Quasar not updated", "A job is running on the server; update Quasar once it has finished."))
 		return
 	}
 	imageRef := "ghcr.io/" + strings.ToLower(s.cfg.GitHubRepo) + ":" + latest
@@ -253,7 +253,7 @@ func (s *Server) handleUpdating(w http.ResponseWriter, r *http.Request) {
 	if run.phase == updateIdle {
 		// A bookmarked URL, or this page reloaded inside the new container once
 		// the update already landed — either way there is nothing to watch.
-		redirectSystem(w, r, "No update is running. The dashboard is on "+version.Version+".")
+		s.redirectSystem(w, r, infoNotice("No update is running", "The dashboard is on "+version.Version+"."))
 		return
 	}
 	s.render(w, r, "updating", map[string]any{

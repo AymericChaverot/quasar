@@ -3,9 +3,50 @@ package server
 import (
 	"bytes"
 	"html"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"quasar/internal/auth"
+	"quasar/internal/db"
 )
+
+// withSession gives a request a session cookie, which is what a flash is
+// left under. The session need not resolve to a user for that.
+func withSession(r *http.Request) *http.Request {
+	r.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: "test-session"})
+	return r
+}
+
+// flashed is what the page after this request would draw.
+func flashed(s *Server, r *http.Request) []Notice {
+	_, _, _, token := s.currentUser(r)
+	return s.notices.take(token, 0)
+}
+
+// Leaving a page for another says how it went in a toast, and says nothing in
+// the address: an address is bookmarked and reloaded, and a message that
+// comes back with every reload has stopped meaning anything.
+func TestARedirectCarriesItsNoticeOutsideTheAddress(t *testing.T) {
+	s := testServer(t)
+	database, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { database.Close() })
+	s.db = database
+	w := httptest.NewRecorder()
+	r := withSession(httptest.NewRequest(http.MethodPost, "/system/backups/settings", nil))
+	s.redirectSystem(w, r, okNotice("Backup settings saved", ""))
+	if loc := w.Header().Get("Location"); loc != "/system" {
+		t.Errorf("redirected to %q", loc)
+	}
+	if n := flashed(s, r); len(n) != 1 || n[0].Title != "Backup settings saved" {
+		t.Errorf("flashed %v", n)
+	}
+}
 
 // A flash is the answer to what one tab asked, so it is drawn once, by the
 // next page of that session, and by no other.

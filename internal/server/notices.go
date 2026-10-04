@@ -146,6 +146,38 @@ func (b *noticeBoard) unsubscribe(user int64, ch chan Notice) {
 	}
 }
 
+func okNotice(title, text string) Notice   { return Notice{Kind: noticeOK, Title: title, Text: text} }
+func infoNotice(title, text string) Notice { return Notice{Kind: noticeInfo, Title: title, Text: text} }
+func warnNotice(title, text string) Notice { return Notice{Kind: noticeWarn, Title: title, Text: text} }
+
+// errNotice is a failure, with what the program said — when there is one —
+// kept apart from the sentence around it.
+func errNotice(title, text string, err error) Notice {
+	n := Notice{Kind: noticeErr, Title: title, Text: text}
+	if err != nil {
+		n.Detail = err.Error()
+	}
+	return n
+}
+
+// flash leaves a notice for the page this request is about to redirect to.
+func (s *Server) flash(r *http.Request, n Notice) {
+	_, _, _, token := s.currentUser(r)
+	s.notices.addFlash(token, n)
+}
+
+// redirectWith sends the browser on to a page that will draw the notice.
+func (s *Server) redirectWith(w http.ResponseWriter, r *http.Request, to string, n Notice) {
+	s.flash(r, n)
+	http.Redirect(w, r, to, http.StatusSeeOther)
+}
+
+// redirectSystem is redirectWith for the System page, where most of the
+// platform's own actions are taken.
+func (s *Server) redirectSystem(w http.ResponseWriter, r *http.Request, n Notice) {
+	s.redirectWith(w, r, "/system", n)
+}
+
 // noticeKeepalive is how often an idle notice stream proves it is alive, under
 // the minute a proxy is likely to cut a silent connection at.
 const noticeKeepalive = 25 * time.Second

@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -301,20 +300,20 @@ func (s *Server) handleCertDelete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if target == nil {
-		redirectSystem(w, r, "No certificate for "+domain+" in the store.")
+		s.redirectSystem(w, r, errNotice("Certificate not deleted", "No certificate for "+domain+" in the store.", nil))
 		return
 	}
 	if target.UsedBy != "" {
-		redirectSystem(w, r, "The certificate for "+target.Domain+" is still routed by "+target.UsedBy+" — delete the application first.")
+		s.redirectSystem(w, r, warnNotice("Certificate still in use", "The certificate for "+target.Domain+" is still routed by "+target.UsedBy+" — delete the application first."))
 		return
 	}
 	path, writable := s.acmePath()
 	if !writable {
-		redirectSystem(w, r, "Traefik's certificate store is mounted read-only: this server's system stack predates certificate deletion. On the server, run: "+stackUpdateCommand)
+		s.redirectSystem(w, r, errNotice("Certificate not deleted", "Traefik's certificate store is mounted read-only: this server's system stack predates certificate deletion. On the server, run: "+stackUpdateCommand, nil))
 		return
 	}
 	if err := certs.Delete(path, target.Domain); err != nil {
-		redirectSystem(w, r, "Certificate deletion failed: "+err.Error())
+		s.redirectSystem(w, r, errNotice("Certificate not deleted", "", err))
 		return
 	}
 
@@ -325,21 +324,14 @@ func (s *Server) handleCertDelete(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 60*time.Second)
 	defer cancel()
 	if err := s.dock.RestartTraefik(ctx); err != nil {
-		redirectSystem(w, r, "Certificate for "+target.Domain+" removed, but Traefik could not be restarted ("+err.Error()+") — restart it by hand or it will write the certificate back.")
+		s.redirectSystem(w, r, Notice{Kind: noticeWarn, Title: "Certificate removed", Text: "Traefik could not be restarted — restart it by hand or it will write the certificate for " + target.Domain + " back.", Detail: err.Error()})
 		return
 	}
-	redirectSystem(w, r, "Certificate for "+target.Domain+" deleted and Traefik restarted.")
-}
-
-func redirectSystem(w http.ResponseWriter, r *http.Request, msg string) {
-	http.Redirect(w, r, "/system?msg="+url.QueryEscape(msg), http.StatusSeeOther)
+	s.redirectSystem(w, r, okNotice("Certificate deleted", target.Domain+" is gone and Traefik has restarted; it will issue a new one."))
 }
 
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 	data := s.systemData()
-	if msg := r.URL.Query().Get("msg"); msg != "" {
-		data["Saved"] = msg
-	}
 	if s.isAdmin(r) {
 		stack := s.stackDrift(r)
 		data["Drift"] = stack.Drift
@@ -375,11 +367,11 @@ func (s *Server) stackDrift(r *http.Request) docker.StackState {
 func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
 	ids, err := s.appIDs()
 	if err != nil {
-		redirectSystem(w, r, "Cleanup cancelled: the application list could not be read ("+err.Error()+"), and without it nothing can be told apart from a leftover.")
+		s.redirectSystem(w, r, errNotice("Cleanup cancelled", "The application list could not be read, and without it nothing can be told apart from a leftover.", err))
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		redirectSystem(w, r, "Cleanup cancelled: the selection could not be read ("+err.Error()+").")
+		s.redirectSystem(w, r, errNotice("Cleanup cancelled", "The selection could not be read.", err))
 		return
 	}
 	opts := docker.CleanupOptions{
@@ -398,7 +390,7 @@ func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
 
 	rep, err := s.dock.Cleanup(ctx, ids, opts)
 	if err != nil {
-		redirectSystem(w, r, "Cleanup failed: "+err.Error())
+		s.redirectSystem(w, r, errNotice("Cleanup failed", "", err))
 		return
 	}
 	var detail []string
@@ -410,7 +402,7 @@ func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "system.cleanup", docker.HumanSize(rep.Bytes), strings.Join(detail, ", "))
 	event.Info("cleanup", "reclaimed "+docker.HumanSize(rep.Bytes), strings.Join(detail, ", "), "by "+s.actor(r))
-	redirectSystem(w, r, rep.Summary())
+	s.redirectSystem(w, r, okNotice("Cleanup finished", rep.Summary()))
 }
 
 func (s *Server) handleBackupNow(w http.ResponseWriter, r *http.Request) {
@@ -418,11 +410,11 @@ func (s *Server) handleBackupNow(w http.ResponseWriter, r *http.Request) {
 	name, err := backup.Run(s.db, s.keyring, s.cfg.AppsDir, s.cfg.BackupsDir, s.dock.DumpForBackup)
 	backup.Report(s.cfg.BackupsDir, name, "by "+s.actor(r), started, err)
 	if err != nil {
-		http.Error(w, "backup failed: "+err.Error(), http.StatusInternalServerError)
+		s.redirectSystem(w, r, errNotice("Backup failed", "", err))
 		return
 	}
 	s.audit(r, "backup.create", name, "")
-	http.Redirect(w, r, "/system?msg=Backup created: "+name, http.StatusSeeOther)
+	s.redirectSystem(w, r, okNotice("Backup created", name))
 }
 
 func (s *Server) handleBackupDownload(w http.ResponseWriter, r *http.Request) {
@@ -437,12 +429,12 @@ func (s *Server) handleBackupDownload(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleBackupDelete(w http.ResponseWriter, r *http.Request) {
 	if err := backup.Delete(s.cfg.BackupsDir, r.PathValue("name")); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.redirectSystem(w, r, errNotice("Backup not deleted", r.PathValue("name"), err))
 		return
 	}
 	s.audit(r, "backup.delete", r.PathValue("name"), "")
 	event.Info("backup", r.PathValue("name"), "deleted", "by "+s.actor(r))
-	http.Redirect(w, r, "/system?msg=Backup deleted.", http.StatusSeeOther)
+	s.redirectSystem(w, r, okNotice("Backup deleted", r.PathValue("name")))
 }
 
 // handleBackupRestore puts a backup's database tables, data directories and
@@ -454,23 +446,23 @@ func (s *Server) handleBackupDelete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 	archiveKey, err := s.uploadedKey(r)
 	if err != nil {
-		http.Error(w, "restore failed: "+err.Error(), http.StatusBadRequest)
+		s.redirectSystem(w, r, errNotice("Restore cancelled", "The master key could not be read.", err))
 		return
 	}
 	if err := backup.Restore(s.db, s.cfg.AppsDir, s.cfg.BackupsDir, r.PathValue("name"), s.keyring, archiveKey); err != nil {
 		event.Error("restore", r.PathValue("name"), err.Error())
-		http.Error(w, "restore failed: "+err.Error(), http.StatusInternalServerError)
+		s.redirectSystem(w, r, errNotice("Restore failed", r.PathValue("name"), err))
 		return
 	}
-	msg := "Backup restored. Redeploy applications to apply their restored configuration."
+	msg := "Redeploy applications to apply their restored configuration."
 	detail := ""
 	if archiveKey != nil {
-		msg = "Backup restored and re-encrypted with this server's key. Redeploy applications to apply their restored configuration."
+		msg = "Re-encrypted with this server's key. Redeploy applications to apply their restored configuration."
 		detail = "with an uploaded master key"
 	}
 	s.audit(r, "backup.restore", r.PathValue("name"), detail)
 	event.Info("restore", r.PathValue("name"), "restored", detail, "by "+s.actor(r))
-	http.Redirect(w, r, "/system?msg="+url.QueryEscape(msg), http.StatusSeeOther)
+	s.redirectSystem(w, r, okNotice("Backup restored", msg))
 }
 
 // uploadedKey reads the optional master_key file from a restore submission,
@@ -557,7 +549,7 @@ func (s *Server) handleOffsiteSettings(w http.ResponseWriter, r *http.Request) {
 	if raw := strings.TrimSpace(r.FormValue("offsite_secret_key")); raw != "" {
 		enc, err := s.keyring.Encrypt(raw)
 		if err != nil {
-			http.Error(w, "could not store the secret key: "+err.Error(), http.StatusInternalServerError)
+			s.redirectSystem(w, r, errNotice("Offsite settings not saved", "The secret key could not be stored.", err))
 			return
 		}
 		save(db.SettingOffsiteSecretKey, enc)
@@ -566,12 +558,12 @@ func (s *Server) handleOffsiteSettings(w http.ResponseWriter, r *http.Request) {
 		save(db.SettingOffsiteSecretKey, "")
 	}
 	if failed != nil {
-		http.Error(w, failed.Error(), http.StatusInternalServerError)
+		s.redirectSystem(w, r, errNotice("Offsite settings not saved", "", failed))
 		return
 	}
 
 	s.audit(r, "settings.offsite", db.GetSetting(s.db, db.SettingOffsiteBucket), "")
-	http.Redirect(w, r, "/system?msg="+url.QueryEscape("Offsite settings saved."), http.StatusSeeOther)
+	s.redirectSystem(w, r, okNotice("Offsite settings saved", ""))
 }
 
 // handleOffsiteTest uploads a small probe object, which is the only way to know
@@ -581,16 +573,16 @@ func (s *Server) handleOffsiteSettings(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleOffsiteTest(w http.ResponseWriter, r *http.Request) {
 	cfg, err := offsite.Load(s.db, s.keyring)
 	if err != nil {
-		http.Redirect(w, r, "/system?msg="+url.QueryEscape("Offsite test failed: "+err.Error()), http.StatusSeeOther)
+		s.redirectSystem(w, r, errNotice("Offsite test failed", "", err))
 		return
 	}
 	s.audit(r, "offsite.test", cfg.Bucket, "")
 
-	msg := "Offsite test upload succeeded — the credentials and bucket work."
 	if err := offsite.UploadProbe(cfg); err != nil {
-		msg = "Offsite test failed: " + err.Error()
+		s.redirectSystem(w, r, errNotice("Offsite test failed", "", err))
+		return
 	}
-	http.Redirect(w, r, "/system?msg="+url.QueryEscape(msg), http.StatusSeeOther)
+	s.redirectSystem(w, r, okNotice("Offsite test passed", "The test upload went through: the credentials and the bucket work."))
 }
 
 // getSystemContainer fetches a quasar-* container by name for the read-only
@@ -646,7 +638,7 @@ func (s *Server) handleBackupSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.Redirect(w, r, "/system?msg=Backup settings saved.", http.StatusSeeOther)
+	s.redirectSystem(w, r, okNotice("Backup settings saved", ""))
 }
 
 // traefikConfigCarriesEmail reports whether the server's traefik.yml still has

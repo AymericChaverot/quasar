@@ -174,9 +174,10 @@ func TestUpdatesWaitForAHostJob(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	s.handleUpdateApply(w, httptest.NewRequest(http.MethodPost, "/system/update/apply", nil))
-	if loc := w.Header().Get("Location"); !strings.Contains(loc, "job+is+running") {
-		t.Fatalf("self-update went ahead under a host job: %d %s", w.Code, loc)
+	r := withSession(httptest.NewRequest(http.MethodPost, "/system/update/apply", nil))
+	s.handleUpdateApply(w, r)
+	if n := flashed(s, r); len(n) != 1 || !strings.Contains(n[0].Text, "job is running") {
+		t.Fatalf("self-update went ahead under a host job: %d %v", w.Code, n)
 	}
 	if s.update.state().phase != updateIdle {
 		t.Fatal("the self-update was claimed")
