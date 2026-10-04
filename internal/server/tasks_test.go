@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -136,5 +137,46 @@ func TestTheEndOfATaskSkipsThePageThatStartedIt(t *testing.T) {
 		}
 	default:
 		t.Error("the page arrived at was not told")
+	}
+}
+
+// The stream a page holds open carries the end of a task as a drawn toast,
+// as soon as the task is over.
+func TestTheStreamCarriesAFinishedTask(t *testing.T) {
+	s, r, user := signedIn(t)
+	srv := httptest.NewServer(http.HandlerFunc(s.handleNotices))
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+	for _, c := range r.Cookies() {
+		req.AddCookie(c)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("content type %q", ct)
+	}
+
+	// Wait for the stream to be open before the task ends, as a page would be.
+	buf := make([]byte, 4096)
+	if _, err := resp.Body.Read(buf); err != nil {
+		t.Fatal(err)
+	}
+	s.notices.deliver(user, okNotice("Cleanup finished", "Removed 3 images, freeing about 1.2 GB."), time.Time{})
+
+	got := ""
+	deadline := time.Now().Add(2 * time.Second)
+	for !strings.Contains(got, "1.2 GB") && time.Now().Before(deadline) {
+		n, err := resp.Body.Read(buf)
+		got += string(buf[:n])
+		if err != nil {
+			break
+		}
+	}
+	if !strings.Contains(got, "event: notice") || !strings.Contains(got, "toast-ok") || !strings.Contains(got, "1.2 GB") {
+		t.Errorf("the stream said:\n%s", got)
 	}
 }

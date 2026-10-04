@@ -418,16 +418,26 @@ func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/system", http.StatusSeeOther)
 }
 
+// handleBackupNow takes a backup in the background: dumping every database and
+// archiving every data directory takes as long as they are large.
 func (s *Server) handleBackupNow(w http.ResponseWriter, r *http.Request) {
-	started := time.Now()
-	name, err := backup.Run(s.db, s.keyring, s.cfg.AppsDir, s.cfg.BackupsDir, s.dock.DumpForBackup)
-	backup.Report(s.cfg.BackupsDir, name, "by "+s.actor(r), started, err)
-	if err != nil {
-		s.redirectSystem(w, r, errNotice("Backup failed", "", err))
+	rc := r.Clone(context.WithoutCancel(r.Context()))
+	if !s.startTask(r, "backup",
+		infoNotice("Backup started", "You can leave this page: a notification will say how it went."),
+		func() Notice {
+			started := time.Now()
+			name, err := backup.Run(s.db, s.keyring, s.cfg.AppsDir, s.cfg.BackupsDir, s.dock.DumpForBackup)
+			backup.Report(s.cfg.BackupsDir, name, "by "+s.actor(rc), started, err)
+			if err != nil {
+				return errNotice("Backup failed", "", err)
+			}
+			s.audit(rc, "backup.create", name, "")
+			return okNotice("Backup created", name)
+		}) {
+		s.redirectSystem(w, r, warnNotice("Backup not started", "A backup or a restore is already running."))
 		return
 	}
-	s.audit(r, "backup.create", name, "")
-	s.redirectSystem(w, r, okNotice("Backup created", name))
+	http.Redirect(w, r, "/system", http.StatusSeeOther)
 }
 
 func (s *Server) handleBackupDownload(w http.ResponseWriter, r *http.Request) {
@@ -462,20 +472,31 @@ func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 		s.redirectSystem(w, r, errNotice("Restore cancelled", "The master key could not be read.", err))
 		return
 	}
-	if err := backup.Restore(s.db, s.cfg.AppsDir, s.cfg.BackupsDir, r.PathValue("name"), s.keyring, archiveKey); err != nil {
-		event.Error("restore", r.PathValue("name"), err.Error())
-		s.redirectSystem(w, r, errNotice("Restore failed", r.PathValue("name"), err))
+	// Shares its key with a backup's: a restore under way while the same
+	// directories are being archived would leave an archive of neither.
+	name := r.PathValue("name")
+	rc := r.Clone(context.WithoutCancel(r.Context()))
+	if !s.startTask(r, "backup",
+		infoNotice("Restore started", name+". You can leave this page: a notification will say how it went."),
+		func() Notice {
+			if err := backup.Restore(s.db, s.cfg.AppsDir, s.cfg.BackupsDir, name, s.keyring, archiveKey); err != nil {
+				event.Error("restore", name, err.Error())
+				return errNotice("Restore failed", name, err)
+			}
+			msg := "Redeploy applications to apply their restored configuration."
+			detail := ""
+			if archiveKey != nil {
+				msg = "Re-encrypted with this server's key. Redeploy applications to apply their restored configuration."
+				detail = "with an uploaded master key"
+			}
+			s.audit(rc, "backup.restore", name, detail)
+			event.Info("restore", name, "restored", detail, "by "+s.actor(rc))
+			return okNotice("Backup restored", msg)
+		}) {
+		s.redirectSystem(w, r, warnNotice("Restore not started", "A backup or a restore is already running."))
 		return
 	}
-	msg := "Redeploy applications to apply their restored configuration."
-	detail := ""
-	if archiveKey != nil {
-		msg = "Re-encrypted with this server's key. Redeploy applications to apply their restored configuration."
-		detail = "with an uploaded master key"
-	}
-	s.audit(r, "backup.restore", r.PathValue("name"), detail)
-	event.Info("restore", r.PathValue("name"), "restored", detail, "by "+s.actor(r))
-	s.redirectSystem(w, r, okNotice("Backup restored", msg))
+	http.Redirect(w, r, "/system", http.StatusSeeOther)
 }
 
 // uploadedKey reads the optional master_key file from a restore submission,
@@ -591,11 +612,20 @@ func (s *Server) handleOffsiteTest(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "offsite.test", cfg.Bucket, "")
 
-	if err := offsite.UploadProbe(cfg); err != nil {
-		s.redirectSystem(w, r, errNotice("Offsite test failed", "", err))
+	// An upload to a slow or unreachable endpoint takes as long as its
+	// timeouts do, which is too long to hold a button down for.
+	if !s.startTask(r, "offsite-test",
+		infoNotice("Offsite test started", "Uploading a test object to "+cfg.Bucket+"."),
+		func() Notice {
+			if err := offsite.UploadProbe(cfg); err != nil {
+				return errNotice("Offsite test failed", "", err)
+			}
+			return okNotice("Offsite test passed", "The test upload went through: the credentials and the bucket work.")
+		}) {
+		s.redirectSystem(w, r, warnNotice("Offsite test not started", "A test is already running."))
 		return
 	}
-	s.redirectSystem(w, r, okNotice("Offsite test passed", "The test upload went through: the credentials and the bucket work."))
+	http.Redirect(w, r, "/system", http.StatusSeeOther)
 }
 
 // getSystemContainer fetches a quasar-* container by name for the read-only
