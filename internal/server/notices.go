@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -61,14 +62,15 @@ type noticeBoard struct {
 	// held is keyed by user: it is the end of something they started, which
 	// no page of theirs was open to hear.
 	held map[int64][]Notice
-	subs map[int64]map[chan Notice]struct{}
+	// subs are the open streams, with when each was opened.
+	subs map[int64]map[chan Notice]time.Time
 }
 
 func (b *noticeBoard) init() {
 	if b.flash == nil {
 		b.flash = map[string][]Notice{}
 		b.held = map[int64][]Notice{}
-		b.subs = map[int64]map[chan Notice]struct{}{}
+		b.subs = map[int64]map[chan Notice]time.Time{}
 	}
 }
 
@@ -91,26 +93,35 @@ func (b *noticeBoard) addFlash(session string, n Notice) {
 	b.flash[session] = appendCapped(b.flash[session], n)
 }
 
-// deliver hands a notice to every open page of one user, or keeps it for the
-// next one if there is none.
-func (b *noticeBoard) deliver(user int64, n Notice) {
+// deliver hands a notice to the pages of one user opened since a moment, or
+// keeps it for the next one if there is none.
+//
+// The moment is when the work it reports on started. A page open before then
+// is, as often as not, the very page that started it — in the middle of being
+// left for the one its form redirects to — and a notice handed to a page that
+// is going away is a notice nobody reads.
+func (b *noticeBoard) deliver(user int64, n Notice, since time.Time) {
 	if user == 0 {
 		return
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.init()
-	if len(b.subs[user]) == 0 {
-		b.held[user] = appendCapped(b.held[user], n)
-		return
-	}
-	for ch := range b.subs[user] {
+	sent := false
+	for ch, opened := range b.subs[user] {
+		if opened.Before(since) {
+			continue
+		}
 		// Buffered and never blocked on: a stream too slow to take one is
 		// a tab that is going away.
 		select {
 		case ch <- n:
+			sent = true
 		default:
 		}
+	}
+	if !sent {
+		b.held[user] = appendCapped(b.held[user], n)
 	}
 }
 
@@ -119,21 +130,36 @@ func (b *noticeBoard) take(session string, user int64) []Notice {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.init()
-	out := append(b.held[user], b.flash[session]...)
+	out := b.held[user]
+	// A task quick enough to have ended before the page saying it started
+	// was drawn: the end is what to show, and the start would only take its
+	// place on screen.
+	for _, n := range b.flash[session] {
+		if n.ID == "" || !slices.ContainsFunc(out, func(o Notice) bool { return o.ID == n.ID }) {
+			out = append(out, n)
+		}
+	}
 	delete(b.held, user)
 	delete(b.flash, session)
 	return out
 }
 
+// subscribe opens a stream for one of a user's pages. Whatever was being held
+// for them comes down it first: a task that ended between the page being drawn
+// and its stream opening would otherwise wait for the page after.
 func (b *noticeBoard) subscribe(user int64) chan Notice {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.init()
 	ch := make(chan Notice, heldNotices)
-	if b.subs[user] == nil {
-		b.subs[user] = map[chan Notice]struct{}{}
+	for _, n := range b.held[user] {
+		ch <- n
 	}
-	b.subs[user][ch] = struct{}{}
+	delete(b.held, user)
+	if b.subs[user] == nil {
+		b.subs[user] = map[chan Notice]time.Time{}
+	}
+	b.subs[user][ch] = time.Now()
 	return ch
 }
 

@@ -381,18 +381,6 @@ func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
 		Only: docker.ParseSelection(r.Form["sel"]),
 	}
 
-	// Deleting gigabytes of layers takes longer than a browser is willing to
-	// wait for a response, and a sweep abandoned half-way is worse than one
-	// never started: the images are gone but the containers holding them are
-	// not, so a second attempt finds a different daemon than the scan did.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Minute)
-	defer cancel()
-
-	rep, err := s.dock.Cleanup(ctx, ids, opts)
-	if err != nil {
-		s.redirectSystem(w, r, errNotice("Cleanup failed", "", err))
-		return
-	}
 	var detail []string
 	if !opts.Only.Empty() {
 		detail = append(detail, "a selection of "+strconv.Itoa(len(r.Form["sel"]))+" entries")
@@ -400,9 +388,34 @@ func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
 	if opts.Volumes {
 		detail = append(detail, "including orphaned volumes")
 	}
-	s.audit(r, "system.cleanup", docker.HumanSize(rep.Bytes), strings.Join(detail, ", "))
-	event.Info("cleanup", "reclaimed "+docker.HumanSize(rep.Bytes), strings.Join(detail, ", "), "by "+s.actor(r))
-	s.redirectSystem(w, r, okNotice("Cleanup finished", rep.Summary()))
+
+	// Deleting gigabytes of layers takes longer than a browser is willing to
+	// wait for a response, so it runs on after this one, and how it went
+	// reaches whoever started it wherever they have gone since. A sweep
+	// abandoned half-way is worse than one never started — the images are gone
+	// but the containers holding them are not, so a second attempt finds a
+	// different daemon than the scan did — which is also why a second one is
+	// not started on top of the first.
+	rc := r.Clone(context.WithoutCancel(r.Context()))
+	started := s.startTask(r, "cleanup",
+		infoNotice("Cleanup started", "You can leave this page: a notification will say how it went."),
+		func() Notice {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer cancel()
+			rep, err := s.dock.Cleanup(ctx, ids, opts)
+			if err != nil {
+				event.Error("cleanup", err.Error(), "by "+s.actor(rc))
+				return errNotice("Cleanup failed", "", err)
+			}
+			s.audit(rc, "system.cleanup", docker.HumanSize(rep.Bytes), strings.Join(detail, ", "))
+			event.Info("cleanup", "reclaimed "+docker.HumanSize(rep.Bytes), strings.Join(detail, ", "), "by "+s.actor(rc))
+			return okNotice("Cleanup finished", rep.Summary())
+		})
+	if !started {
+		s.redirectSystem(w, r, warnNotice("Cleanup not started", "A cleanup is already running."))
+		return
+	}
+	http.Redirect(w, r, "/system", http.StatusSeeOther)
 }
 
 func (s *Server) handleBackupNow(w http.ResponseWriter, r *http.Request) {

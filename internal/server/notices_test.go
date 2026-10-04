@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"quasar/internal/auth"
 	"quasar/internal/db"
@@ -70,7 +71,7 @@ func TestAFlashIsDrawnOnceByItsOwnSession(t *testing.T) {
 func TestAFinishedJobReachesItsOwnerWhereverTheyAre(t *testing.T) {
 	var b noticeBoard
 	ch := b.subscribe(7)
-	b.deliver(7, Notice{Kind: noticeOK, Title: "Cleanup"})
+	b.deliver(7, Notice{Kind: noticeOK, Title: "Cleanup"}, time.Time{})
 	select {
 	case n := <-ch:
 		if n.Title != "Cleanup" {
@@ -85,7 +86,7 @@ func TestAFinishedJobReachesItsOwnerWhereverTheyAre(t *testing.T) {
 
 	other := b.subscribe(8)
 	b.unsubscribe(7, ch)
-	b.deliver(7, Notice{Kind: noticeErr, Title: "Backup"})
+	b.deliver(7, Notice{Kind: noticeErr, Title: "Backup"}, time.Time{})
 	select {
 	case n := <-other:
 		t.Errorf("somebody else was told: %v", n)
@@ -100,7 +101,7 @@ func TestAFinishedJobReachesItsOwnerWhereverTheyAre(t *testing.T) {
 func TestHeldNoticesAreCapped(t *testing.T) {
 	var b noticeBoard
 	for i := range heldNotices + 3 {
-		b.deliver(1, Notice{Title: string(rune('a' + i))})
+		b.deliver(1, Notice{Title: string(rune('a' + i))}, time.Time{})
 	}
 	got := b.take("", 1)
 	if len(got) != heldNotices || got[len(got)-1].Title != string(rune('a'+heldNotices+2)) {

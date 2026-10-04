@@ -80,6 +80,9 @@ type Server struct {
 
 	// notices are the toasts no page has drawn yet.
 	notices noticeBoard
+
+	// tasks are the actions running on after the request that started them.
+	tasks taskRuns
 }
 
 func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) (*Server, error) {
