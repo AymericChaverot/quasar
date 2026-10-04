@@ -69,8 +69,11 @@
 
     const life = Number(t.dataset.life || 0);
     if (!life) return;
+    // A toast carried over from the last page comes with what was left of its
+    // time, and its hairline starts that far along.
+    let left = Math.min(life, Number(t.dataset.left || life));
     t.style.setProperty("--life", life + "ms");
-    let left = life;
+    t.style.setProperty("--elapsed", life - left + "ms");
     let since = 0;
     let timer = null;
     t.clock = {
@@ -87,6 +90,9 @@
           left -= Date.now() - since;
         }
         t.classList.add("is-paused");
+      },
+      remaining() {
+        return timer ? left - (Date.now() - since) : left;
       },
     };
     t.addEventListener("mouseenter", t.clock.stop);
@@ -111,6 +117,42 @@
     }
     glide();
   }
+
+  // Toasts outlive the page they were shown on. Whatever is still on screen
+  // when a page is left is put back on the next one in this tab, with the
+  // time it had left — a "Cleanup started" should not vanish because its
+  // page was swapped for the one its form redirected to, and an error stays
+  // until it is dismissed, wherever that turns out to be. The tab's own
+  // storage, so a second tab does not inherit the first one's.
+  const KEPT = "quasar.toasts";
+  window.addEventListener("pagehide", () => {
+    const keep = [];
+    for (const t of box.querySelectorAll(".toast:not(.is-going)")) {
+      const left = t.clock ? Math.round(t.clock.remaining()) : 0;
+      if (t.clock && left < 500) continue;
+      const copy = t.cloneNode(true);
+      copy.removeAttribute("data-armed");
+      copy.removeAttribute("style");
+      copy.classList.remove("is-paused", "is-restored");
+      if (t.clock) copy.dataset.left = left;
+      keep.push(copy.outerHTML);
+    }
+    try {
+      if (keep.length) sessionStorage.setItem(KEPT, JSON.stringify(keep));
+      else sessionStorage.removeItem(KEPT);
+    } catch (e) {}
+  });
+  try {
+    const kept = JSON.parse(sessionStorage.getItem(KEPT) || "[]");
+    sessionStorage.removeItem(KEPT);
+    // Before the ones this page was drawn with, which are newer.
+    const tmp = document.createElement("div");
+    tmp.innerHTML = kept.join("");
+    for (const t of [...tmp.children].reverse()) {
+      t.classList.add("is-restored");
+      box.prepend(t);
+    }
+  } catch (e) {}
 
   new MutationObserver(settle).observe(box, { childList: true });
   settle();

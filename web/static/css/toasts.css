@@ -49,6 +49,9 @@
 }
 /* Leaving, it goes back the way it came; the ones under it then close the gap
    (toasts.js slides them up rather than letting them jump). */
+/* Carried over from the page before: it was already there, so it does not
+   arrive again. */
+.toast.is-restored { animation: none; }
 .toast.is-going {
   animation: toast-out 260ms cubic-bezier(0.4, 0, 1, 1) forwards;
   pointer-events: none;
@@ -125,7 +128,9 @@
   transform-origin: left;
   transform: scaleX(0);
 }
-.toast[data-life] .toast-clock { animation: toast-clock var(--life, 6000ms) linear forwards; }
+.toast[data-life] .toast-clock {
+  animation: toast-clock var(--life, 6000ms) linear calc(-1 * var(--elapsed, 0ms)) forwards;
+}
 .toast.is-paused .toast-clock { animation-play-state: paused; }
 
 @keyframes toast-in {
