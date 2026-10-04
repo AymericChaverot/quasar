@@ -129,7 +129,7 @@ func (s *Server) targetUser(w http.ResponseWriter, r *http.Request) (int64, stri
 	}
 	users, err := auth.ListUsers(s.db)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.redirectSettings(w, r, errNotice("Users unavailable", "", err))
 		return 0, "", false
 	}
 	for _, u := range users {

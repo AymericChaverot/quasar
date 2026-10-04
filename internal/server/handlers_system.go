@@ -540,7 +540,7 @@ func (s *Server) uploadedKey(r *http.Request) (*secrets.Keyring, error) {
 func (s *Server) handleMasterKeyDownload(w http.ResponseWriter, r *http.Request) {
 	key, err := os.ReadFile(s.cfg.KeyPath)
 	if err != nil {
-		http.Error(w, "master key unavailable: "+err.Error(), http.StatusInternalServerError)
+		s.redirectSystem(w, r, errNotice("Master key unavailable", "", err))
 		return
 	}
 	// Handing out the key that opens every stored secret is the single most
@@ -683,12 +683,12 @@ func (s *Server) handleBackupSettings(w http.ResponseWriter, r *http.Request) {
 		auto = "true"
 	}
 	if err := db.SetSetting(s.db, db.SettingBackupAuto, auto); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.redirectSystem(w, r, errNotice("Backup settings not saved", "", err))
 		return
 	}
 	if v := r.FormValue("retention"); v != "" {
 		if err := db.SetSetting(s.db, db.SettingBackupRetention, v); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			s.redirectSystem(w, r, errNotice("Backup settings not saved", "", err))
 			return
 		}
 	}

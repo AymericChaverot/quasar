@@ -140,7 +140,7 @@ func (s *Server) handle2FASetupBegin(w http.ResponseWriter, r *http.Request) {
 	userID, username, _, _ := s.currentUser(r)
 	secret, qr, err := auth.BeginTOTPSetup(s.db, userID, "Quasar ("+s.cfg.Domain+")", username)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.redirectSettings(w, r, errNotice("Two-factor setup not started", "", err))
 		return
 	}
 	data := s.settingsData(r)
@@ -296,7 +296,7 @@ func (s *Server) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSessionsClear(w http.ResponseWriter, r *http.Request) {
 	if err := auth.ClearAllSessions(s.db); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.redirectSettings(w, r, errNotice("Sessions not cleared", "", err))
 		return
 	}
 	s.audit(r, "sessions.clear", "", "every session invalidated")
