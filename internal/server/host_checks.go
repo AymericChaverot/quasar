@@ -63,7 +63,7 @@ func (s *Server) checkHostIfDue() bool {
 	}
 	// Busy is not an attempt: whatever is running will be done by the next
 	// hour.
-	if err := s.startHostJob(m, hostupdate.Check, db.ActorSystem); err != nil {
+	if err := s.startHostJob(m, hostupdate.Check, db.ActorSystem, nil); err != nil {
 		return false
 	}
 	for store.Status(hostupdate.BootID()).Running {

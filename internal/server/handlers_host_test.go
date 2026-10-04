@@ -126,7 +126,7 @@ func TestStartHostJobRefusesASecond(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := hostupdate.Detect(s.cfg.HostRootPath, "fedora")
-	if err := s.startHostJob(m, hostupdate.Check, "admin"); !errors.Is(err, errHostBusy) {
+	if err := s.startHostJob(m, hostupdate.Check, "admin", nil); !errors.Is(err, errHostBusy) {
 		t.Fatalf("second job: %v, want errHostBusy", err)
 	}
 }
@@ -181,5 +181,37 @@ func TestUpdatesWaitForAHostJob(t *testing.T) {
 	}
 	if s.update.state().phase != updateIdle {
 		t.Fatal("the self-update was claimed")
+	}
+}
+
+// Whoever started a job on the server hears how it ended, wherever they are by
+// then: the end of a check, and the line that says why an upgrade failed.
+func TestAHostJobTellsWhoeverStartedIt(t *testing.T) {
+	s := fakeHost(t, managedHost...)
+	store := s.hostStore()
+	for _, c := range []struct {
+		exit, kind, title string
+		wantKind          string
+	}{
+		{"0", "check", "Update check finished", noticeOK},
+		{"100", "upgrade", "Package update failed", noticeErr},
+	} {
+		if err := store.Begin(hostupdate.Job{Kind: hostupdate.Kind(c.kind), Started: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(store.Dir, "job.log"), []byte("Reading package lists\nE: could not get lock\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(store.Dir, "job.exit"), []byte(c.exit+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var got []Notice
+		s.reportHostJob(hostupdate.Kind(c.kind), func(n Notice) { got = append(got, n) })
+		if len(got) != 1 || got[0].Title != c.title || got[0].Kind != c.wantKind {
+			t.Errorf("%s: %+v", c.kind, got)
+		}
+		if c.wantKind == noticeErr && !strings.Contains(got[0].Detail, "could not get lock") {
+			t.Errorf("the failure does not say why: %+v", got[0])
+		}
 	}
 }

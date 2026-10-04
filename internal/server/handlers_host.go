@@ -66,7 +66,10 @@ func (s *Server) hostManager(engine docker.EngineInfo) (*hostupdate.Manager, str
 // startHostJob records a job and hands it to the host. It returns once the
 // job is recorded; handing it over happens behind, and a failure there is
 // written into the job's own log, where the card reads it.
-func (s *Server) startHostJob(m *hostupdate.Manager, kind hostupdate.Kind, by string) error {
+//
+// tell, when it is not nil, is handed how the job ended — for the person who
+// started it, wherever they are by then.
+func (s *Server) startHostJob(m *hostupdate.Manager, kind hostupdate.Kind, by string, tell func(Notice)) error {
 	s.host.mu.Lock()
 	defer s.host.mu.Unlock()
 
@@ -93,7 +96,7 @@ func (s *Server) startHostJob(m *hostupdate.Manager, kind hostupdate.Kind, by st
 		if err := s.dock.RunOnHost(ctx, script); err != nil {
 			store.Abort(err.Error())
 		}
-		s.reportHostJob(kind)
+		s.reportHostJob(kind, tell)
 	}()
 	return nil
 }
@@ -101,15 +104,23 @@ func (s *Server) startHostJob(m *hostupdate.Manager, kind hostupdate.Kind, by st
 // reportHostJob waits for a job to end and writes how it went to the event
 // log. A Docker upgrade restarts this process before its job ends, so that
 // one is reported by nobody but the card.
-func (s *Server) reportHostJob(kind hostupdate.Kind) {
+func (s *Server) reportHostJob(kind hostupdate.Kind, tell func(Notice)) {
 	store := s.hostStore()
+	name := HostUpdateView{Job: hostupdate.Status{Job: hostupdate.Job{Kind: kind}}}.JobName()
 	for {
 		st := store.Status(hostupdate.BootID())
 		if !st.Running {
+			took := event.Duration(time.Since(st.Started))
 			if st.Failed() {
 				event.Error("host", string(kind)+" failed", lastLine(store.Log(5)))
+				if tell != nil {
+					tell(Notice{Kind: noticeErr, Title: name + " failed", Text: "The log is in the Environment card.", Detail: lastLine(store.Log(5))})
+				}
 			} else {
-				event.Info("host", string(kind)+" finished", "in "+event.Duration(time.Since(st.Started)))
+				event.Info("host", string(kind)+" finished", "in "+took)
+				if tell != nil {
+					tell(okNotice(name+" finished", "In "+took+". The Environment card has the details."))
+				}
 			}
 			return
 		}
@@ -217,13 +228,24 @@ func (s *Server) handleHostJob(w http.ResponseWriter, r *http.Request) {
 		s.redirectSystem(w, r, warnNotice("Nothing was started", reason))
 		return
 	}
-	if err := s.startHostJob(m, kind, s.actor(r)); err != nil {
+	// How it ends goes to whoever started it, in place of the toast saying it
+	// started. A Docker update or a restart takes this process down before its
+	// job ends, so those two are followed by the card alone.
+	user, _, _, _ := s.currentUser(r)
+	since := time.Now()
+	started := hostStartedMessage[kind]
+	started.ID = "host-" + strconv.FormatInt(since.UnixNano(), 36)
+	tell := func(n Notice) {
+		n.ID = started.ID
+		s.notices.deliver(user, n, since)
+	}
+	if err := s.startHostJob(m, kind, s.actor(r), tell); err != nil {
 		s.redirectSystem(w, r, errNotice("Nothing was started", "", err))
 		return
 	}
 	s.audit(r, "host."+string(kind), m.Name, "")
 	event.Info("host", string(kind)+" started", "with "+m.Name, "by "+s.actor(r))
-	s.redirectSystem(w, r, hostStartedMessage[kind])
+	s.redirectSystem(w, r, started)
 }
 
 // hostStartedMessage is what the System page says once a job is under way. The
