@@ -321,13 +321,24 @@ func (s *Server) handleCertDelete(w http.ResponseWriter, r *http.Request) {
 	// would write this one back on its next save.
 	s.audit(r, "cert.delete", target.Domain, "")
 	event.Info("certs", target.Domain, "certificate deleted, Traefik will issue a new one", "by "+s.actor(r))
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 60*time.Second)
-	defer cancel()
-	if err := s.dock.RestartTraefik(ctx); err != nil {
-		s.redirectSystem(w, r, Notice{Kind: noticeWarn, Title: "Certificate removed", Text: "Traefik could not be restarted — restart it by hand or it will write the certificate for " + target.Domain + " back.", Detail: err.Error()})
+	// Restarting it takes up to a minute, and takes this page's connection with
+	// it, so it runs on after the answer; the stream reconnects by itself and
+	// hears how it went.
+	domain = target.Domain
+	if !s.startTask(r, "traefik-restart",
+		infoNotice("Certificate removed", "Restarting Traefik so it lets go of "+domain+". Every site is briefly unavailable, including this page."),
+		func() Notice {
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+			if err := s.dock.RestartTraefik(ctx); err != nil {
+				return Notice{Kind: noticeWarn, Title: "Certificate removed", Text: "Traefik could not be restarted — restart it by hand or it will write the certificate for " + domain + " back.", Detail: err.Error()}
+			}
+			return okNotice("Certificate deleted", domain+" is gone and Traefik has restarted; it will issue a new one.")
+		}) {
+		s.redirectSystem(w, r, warnNotice("Certificate removed", "Traefik is already restarting; it will let go of "+domain+" when it is back."))
 		return
 	}
-	s.redirectSystem(w, r, okNotice("Certificate deleted", target.Domain+" is gone and Traefik has restarted; it will issue a new one."))
+	http.Redirect(w, r, "/system", http.StatusSeeOther)
 }
 
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
