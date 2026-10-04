@@ -1,0 +1,143 @@
+/* --- Toasts ----------------------------------------------------------------- */
+
+/* Every page's notices float in the bottom-right corner rather than sitting at
+   the top of the page. The button that caused one is often three screens down
+   from there, and a message nobody scrolls back up to read is a message nobody
+   reads. The newest is at the bottom, nearest where the eye already is. */
+.toasts {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  width: min(24rem, calc(100vw - 2.5rem));
+  /* The column is as tall as its toasts, but the gaps between them are still
+     the column: they must not swallow a click meant for the page under them. */
+  pointer-events: none;
+}
+
+/* Each of the four is one colour, used three times: the stripe, the wash and
+   the symbol behind the words. The words themselves stay the page's colour —
+   green text on a green stripe is a message that has been shouted rather than
+   said. */
+.toast-ok { --tone: var(--ok); }
+.toast-info { --tone: var(--accent); }
+.toast-warn { --tone: var(--warn); }
+.toast-err { --tone: var(--err); }
+
+.toast {
+  position: relative;
+  overflow: hidden;
+  min-height: 3.75rem;
+  padding: 0.8125rem 2.5rem 0.875rem 1.125rem;
+  border: var(--border-w) solid var(--border-strong);
+  border-left: 3px solid var(--tone);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--tone) 16%, transparent), transparent 72%),
+    var(--surface-2);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.35);
+  color: var(--text);
+  pointer-events: auto;
+  animation: toast-in 180ms ease-out;
+}
+.toast.is-going {
+  opacity: 0;
+  transform: translateX(0.75rem);
+  transition: opacity 300ms ease, transform 300ms ease;
+}
+
+/* The symbol, large and faint, behind the start of the words: it is what
+   tells the four apart at a glance from across the room, and it must never be
+   read before the title. */
+.toast-mark {
+  position: absolute;
+  top: 50%;
+  left: -0.875rem;
+  display: flex;
+  color: var(--tone);
+  opacity: 0.16;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.toast-mark svg { width: 5.25rem; height: 5.25rem; }
+
+.toast-body { position: relative; min-width: 0; }
+.toast-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.toast-text {
+  margin-top: 0.1875rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+/* What a program said, quoted: kept to a few lines so a stack trace does not
+   become a toast the height of the screen, and scrollable past them. */
+.toast-detail {
+  max-height: 6.5rem;
+  margin-top: 0.375rem;
+  overflow: auto;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Light, and out of the way of the title: closing one is something you do to
+   a toast you have read, not the first thing it offers. */
+.toast-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  padding: 0.25rem;
+  border-radius: var(--radius);
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.toast-close svg { width: 0.75rem; height: 0.75rem; }
+.toast-close:hover,
+.toast-close:focus-visible { color: var(--text); }
+
+/* The time left, as a hairline along the bottom that runs out. It runs at
+   the same pace as the clock in toasts.js and stops with it: while the toast
+   is pointed at, and while the tab is out of sight. An error has none, since
+   it does not go by itself. */
+.toast-clock {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: var(--tone);
+  opacity: 0.45;
+  transform-origin: left;
+  transform: scaleX(0);
+}
+.toast[data-life] .toast-clock { animation: toast-clock var(--life, 6000ms) linear forwards; }
+.toast.is-paused .toast-clock { animation-play-state: paused; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(0.5rem); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes toast-clock {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+/* Reduced motion collapses every animation to nothing, which would leave the
+   hairline empty from the start; better none than one that lies. */
+@media (prefers-reduced-motion: reduce) {
+  .toast-clock { display: none; }
+}
+
+@media (max-width: 640px) {
+  .toasts { right: 0.75rem; left: 0.75rem; bottom: 0.75rem; width: auto; }
+}

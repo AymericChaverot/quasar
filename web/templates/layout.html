@@ -48,6 +48,7 @@
     @import url("/static/css/progress.css") layer(components);
     @import url("/static/css/updating.css") layer(components);
     @import url("/static/css/motion.css") layer(components);
+    @import url("/static/css/toasts.css") layer(components);
     {{/* Last, and deliberately so: a station's sheet is the one written by
          somebody else, and nothing in it may end up outranking the chrome. */}}
     @import url("/static/css/stations.css") layer(components);
@@ -115,6 +116,7 @@
       <button type="button" id="confirm-ok" class="btn-primary">Confirm</button>
     </div>
   </dialog>
+  {{if not .HideNav}}{{template "toasts" .Notices}}{{end}}
   <script src="/static/js/confirm.js" defer></script>
   <script src="/static/js/log-toggles.js" defer></script>
   <script src="/static/js/number-field.js" defer></script>

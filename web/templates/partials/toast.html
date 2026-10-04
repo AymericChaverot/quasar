@@ -1,0 +1,41 @@
+{{/* One toast: a floating card in the bottom-right corner, saying how
+     something went.
+
+     Which of the four it is is said three times over — the stripe down its
+     left side, the wash of the same colour fading out to the right, and the
+     symbol standing faintly behind the words — because a colour on its own is
+     not a message to somebody who cannot tell this green from that red.
+
+     A success or a note goes by itself after six seconds and a warning after
+     nine; an error stays until it is dismissed, because why something failed
+     is what somebody came to read. toasts.js holds the clock, and stops it
+     while the toast is pointed at or the tab is out of sight. */}}
+{{define "toast"}}
+<div class="toast toast-{{.Kind}}" role="{{if eq .Kind "err"}}alert{{else}}status{{end}}"
+     {{- if eq .Kind "ok" "info"}} data-life="6000"{{else if eq .Kind "warn"}} data-life="9000"{{end}}
+     {{- with .ID}} data-notice="{{.}}"{{end}}>
+  <span class="toast-mark" aria-hidden="true">
+    {{- if eq .Kind "ok"}}{{template "icon_check_circle"}}
+    {{- else if eq .Kind "info"}}{{template "icon_info_circle"}}
+    {{- else if eq .Kind "warn"}}{{template "icon_alert_triangle"}}
+    {{- else}}{{template "icon_x_circle"}}{{end -}}
+  </span>
+  <div class="toast-body">
+    <p class="toast-title">{{.Title}}</p>
+    {{with .Text}}<p class="toast-text">{{.}}</p>{{end}}
+    {{with .Detail}}<p class="toast-detail mono">{{.}}</p>{{end}}
+  </div>
+  <button type="button" class="toast-close" aria-label="Dismiss">{{template "icon_x"}}</button>
+  <span class="toast-clock" aria-hidden="true"></span>
+</div>
+{{end}}
+
+{{/* Where every toast lands, on every page: the ones the page was drawn with,
+     and the ones that arrive afterwards — from a button on the page, or over
+     the stream for something started elsewhere that has just ended. */}}
+{{define "toasts"}}
+<div id="toasts" class="toasts" aria-live="polite" data-stream="/notices">
+  {{range .}}{{template "toast" .}}{{end}}
+</div>
+<script src="/static/js/toasts.js" defer></script>
+{{end}}

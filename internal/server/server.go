@@ -77,6 +77,9 @@ type Server struct {
 	// them what to offer, so drawing an install form twice is not two requests
 	// to somebody else's API.
 	choices stationChoiceCache
+
+	// notices are the toasts no page has drawn yet.
+	notices noticeBoard
 }
 
 func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) (*Server, error) {
@@ -246,6 +249,9 @@ func (s *Server) routes() {
 
 	s.viewer("GET /{$}", s.handleDashboard)
 	s.viewer("GET /settings", s.handleSettings)
+	// The toasts for whatever this person started that ends while they are
+	// on another page. Held open by every page.
+	s.viewer("GET /notices", s.handleNotices)
 	s.viewer("POST /theme", s.handleThemeSet)
 	// Own-account actions: a viewer has to be able to secure their own login.
 	s.viewer("POST /settings/password", s.handlePasswordChange)
@@ -541,6 +547,9 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, dat
 	hideNav, _ := data["HideNav"].(bool)
 	if role == auth.RoleAdmin && !hideNav {
 		data["Update"] = s.updateBadgeData(true)
+	}
+	if !hideNav {
+		data["Notices"] = s.pendingNotices(r)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := t.ExecuteTemplate(w, "layout", data); err != nil {
