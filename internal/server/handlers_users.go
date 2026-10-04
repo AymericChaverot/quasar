@@ -10,24 +10,22 @@ import (
 	"quasar/internal/event"
 )
 
-// settingsError re-renders the settings page with a message, so a failed user
-// action reads like a form error instead of a bare HTTP status.
-func (s *Server) settingsError(w http.ResponseWriter, r *http.Request, msg string) {
-	data := s.settingsData(r)
-	data["Error"] = msg
-	s.render(w, r, "settings", data)
+// redirectSettings sends the browser back to Settings with how it went, so a
+// failed user action reads like any other notice instead of a bare HTTP status.
+func (s *Server) redirectSettings(w http.ResponseWriter, r *http.Request, n Notice) {
+	s.redirectWith(w, r, "/settings", n)
 }
 
 func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimSpace(r.FormValue("username"))
 	role := r.FormValue("role")
 	if err := auth.CreateUser(s.db, username, r.FormValue("password"), role); err != nil {
-		s.settingsError(w, r, err.Error())
+		s.redirectSettings(w, r, errNotice("User not created", "", err))
 		return
 	}
 	s.audit(r, "user.create", username, role)
 	event.Info("users", fmt.Sprintf("%q created", username), role, "by "+s.actor(r))
-	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+	s.redirectSettings(w, r, okNotice("User created", username+", as "+role+"."))
 }
 
 func (s *Server) handleUserRole(w http.ResponseWriter, r *http.Request) {
@@ -40,16 +38,16 @@ func (s *Server) handleUserRole(w http.ResponseWriter, r *http.Request) {
 	// check in auth.SetRole does not catch this on its own: with two admins,
 	// either one could still strand themselves.
 	if selfID, _, _, _ := s.currentUser(r); selfID == id && role != auth.RoleAdmin {
-		s.settingsError(w, r, "You cannot remove your own admin access — ask another admin to do it.")
+		s.redirectSettings(w, r, warnNotice("Role not changed", "You cannot remove your own admin access — ask another admin to do it."))
 		return
 	}
 	if err := auth.SetRole(s.db, id, role); err != nil {
-		s.settingsError(w, r, err.Error())
+		s.redirectSettings(w, r, errNotice("Role not changed", "", err))
 		return
 	}
 	s.audit(r, "user.role", target, "set to "+role)
 	event.Info("users", fmt.Sprintf("%q is now %s", target, role), "by "+s.actor(r))
-	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+	s.redirectSettings(w, r, okNotice("Role changed", target+" is now "+role+"."))
 }
 
 func (s *Server) handleUserPassword(w http.ResponseWriter, r *http.Request) {
@@ -58,12 +56,12 @@ func (s *Server) handleUserPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := auth.ResetPassword(s.db, id, r.FormValue("password")); err != nil {
-		s.settingsError(w, r, err.Error())
+		s.redirectSettings(w, r, errNotice("Password not reset", "", err))
 		return
 	}
 	s.audit(r, "user.password-reset", target, "")
 	event.Info("users", fmt.Sprintf("%q had their password reset", target), "by "+s.actor(r))
-	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+	s.redirectSettings(w, r, okNotice("Password reset", target))
 }
 
 func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
@@ -72,16 +70,16 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if selfID, _, _, _ := s.currentUser(r); selfID == id {
-		s.settingsError(w, r, "You cannot delete your own account.")
+		s.redirectSettings(w, r, warnNotice("User not deleted", "You cannot delete your own account."))
 		return
 	}
 	if err := auth.DeleteUser(s.db, id); err != nil {
-		s.settingsError(w, r, err.Error())
+		s.redirectSettings(w, r, errNotice("User not deleted", "", err))
 		return
 	}
 	s.audit(r, "user.delete", target, "")
 	event.Info("users", fmt.Sprintf("%q deleted", target), "by "+s.actor(r))
-	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+	s.redirectSettings(w, r, okNotice("User deleted", target))
 }
 
 // handleTokenCreate issues an API token and shows the secret once. It is not
@@ -91,15 +89,17 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 	role := r.FormValue("role")
 	secret, err := auth.CreateToken(s.db, name, role)
 	if err != nil {
-		s.settingsError(w, r, err.Error())
+		s.redirectSettings(w, r, errNotice("Token not created", "", err))
 		return
 	}
 	s.audit(r, "token.create", name, role)
 	event.Info("api token", fmt.Sprintf("%q created", name), role, "by "+s.actor(r))
 
+	// Drawn rather than redirected to: the secret is on this page and nowhere
+	// else, ever. The toast is drawn with it.
+	s.flash(r, okNotice("Token created", name+" — copy it now: it is not stored and cannot be shown again."))
 	data := s.settingsData(r)
 	data["NewToken"] = secret
-	data["Saved"] = "Token created — copy it now, it is not stored and cannot be shown again."
 	s.render(w, r, "settings", data)
 }
 
@@ -111,12 +111,12 @@ func (s *Server) handleTokenDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	name, err := auth.DeleteToken(s.db, id)
 	if err != nil {
-		s.settingsError(w, r, err.Error())
+		s.redirectSettings(w, r, errNotice("Token not revoked", "", err))
 		return
 	}
 	s.audit(r, "token.delete", name, "")
 	event.Info("api token", fmt.Sprintf("%q revoked", name), "by "+s.actor(r))
-	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+	s.redirectSettings(w, r, okNotice("Token revoked", name))
 }
 
 // targetUser resolves the {id} of a user-management route, returning the id and

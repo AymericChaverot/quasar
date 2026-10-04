@@ -207,20 +207,20 @@ func (s *Server) handleSignInProtection(w http.ResponseWriter, r *http.Request) 
 	if err1 != nil || err2 != nil ||
 		attempts < minLoginAttempts || attempts > maxLoginAttempts ||
 		minutes < minLoginLockMins || minutes > maxLoginLockMins {
-		s.settingsError(w, r, fmt.Sprintf("Sign-in protection: between %d and %d attempts, locked for %d to %d minutes.",
-			minLoginAttempts, maxLoginAttempts, minLoginLockMins, maxLoginLockMins))
+		s.redirectSettings(w, r, warnNotice("Sign-in protection not saved", fmt.Sprintf("Between %d and %d attempts, locked for %d to %d minutes.",
+			minLoginAttempts, maxLoginAttempts, minLoginLockMins, maxLoginLockMins)))
 		return
 	}
 	for key, v := range map[string]int{db.SettingLoginAttempts: attempts, db.SettingLoginLockMinutes: minutes} {
 		if err := db.SetSetting(s.db, key, strconv.Itoa(v)); err != nil {
-			s.settingsError(w, r, "Saving the sign-in protection: "+err.Error())
+			s.redirectSettings(w, r, errNotice("Sign-in protection not saved", "", err))
 			return
 		}
 	}
 	detail := fmt.Sprintf("%d attempts, then %d minutes", attempts, minutes)
 	s.audit(r, "settings.sign-in", "", detail)
 	event.Info("security", "sign-in protection set to "+detail, "by "+s.actor(r))
-	http.Redirect(w, r, "/settings?saved=1#sign-in", http.StatusSeeOther)
+	s.redirectWith(w, r, "/settings#sign-in", okNotice("Sign-in protection saved", detail+"."))
 }
 
 // handleSignInUnblock lifts one address's lock, for an admin who knows it is

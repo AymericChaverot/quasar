@@ -153,27 +153,23 @@ func (s *Server) handle2FASetupBegin(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handle2FAEnable(w http.ResponseWriter, r *http.Request) {
 	userID, _, _, _ := s.currentUser(r)
 	if err := auth.EnableTOTP(s.db, userID, r.FormValue("code")); err != nil {
-		data := s.settingsData(r)
-		data["Error"] = err.Error() + " — scan the QR code again if needed."
-		s.render(w, r, "settings", data)
+		s.redirectSettings(w, r, errNotice("Two-factor authentication not turned on", "Scan the QR code again if needed.", err))
 		return
 	}
 	s.audit(r, "2fa.enable", "", "")
 	event.Info("security", s.actor(r)+" turned 2FA on", "from "+clientIP(r))
-	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+	s.redirectSettings(w, r, okNotice("Two-factor authentication on", "Signing in now asks for a code as well."))
 }
 
 func (s *Server) handle2FADisable(w http.ResponseWriter, r *http.Request) {
 	userID, _, _, _ := s.currentUser(r)
 	if err := auth.DisableTOTP(s.db, userID, r.FormValue("password")); err != nil {
-		data := s.settingsData(r)
-		data["Error"] = err.Error()
-		s.render(w, r, "settings", data)
+		s.redirectSettings(w, r, errNotice("Two-factor authentication not turned off", "", err))
 		return
 	}
 	s.audit(r, "2fa.disable", "", "")
 	event.Warning("security", s.actor(r)+" turned 2FA off", "from "+clientIP(r))
-	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+	s.redirectSettings(w, r, okNotice("Two-factor authentication off", "Signing in asks for the password alone."))
 }
 
 // handleRegistryAdd stores (or replaces) credentials for an image registry.
@@ -182,17 +178,15 @@ func (s *Server) handleRegistryAdd(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimSpace(r.FormValue("username"))
 	secret := r.FormValue("secret")
 	if server == "" || username == "" || secret == "" {
-		data := s.settingsData(r)
-		data["Error"] = "Registry server, username and token are all required."
-		s.render(w, r, "settings", data)
+		s.redirectSettings(w, r, warnNotice("Registry not added", "Registry server, username and token are all required."))
 		return
 	}
 	if err := db.InsertRegistry(s.db, &db.Registry{Server: server, Username: username, Secret: secret}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.redirectSettings(w, r, errNotice("Registry not added", "", err))
 		return
 	}
 	s.audit(r, "registry.add", server, username)
-	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+	s.redirectSettings(w, r, okNotice("Registry added", server))
 }
 
 func (s *Server) handleRegistryDelete(w http.ResponseWriter, r *http.Request) {
@@ -202,11 +196,11 @@ func (s *Server) handleRegistryDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := db.DeleteRegistry(s.db, id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.redirectSettings(w, r, errNotice("Registry not removed", "", err))
 		return
 	}
 	s.audit(r, "registry.delete", strconv.FormatInt(id, 10), "")
-	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+	s.redirectSettings(w, r, okNotice("Registry removed", ""))
 }
 
 // handleIntegrationsSave stores the notification and alerting configuration.
@@ -259,34 +253,28 @@ func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) 
 		save(db.SettingSMTPPassword, "")
 	}
 	if failed != nil {
-		http.Error(w, failed.Error(), http.StatusInternalServerError)
+		s.redirectSettings(w, r, errNotice("Integrations not saved", "", failed))
 		return
 	}
 
 	// No values in the detail: this form carries a git access token and an SMTP
 	// password.
 	s.audit(r, "settings.integrations", "", "")
-	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+	s.redirectSettings(w, r, okNotice("Integrations saved", ""))
 }
 
 // platform, so this is the only way to know delivery works.
 func (s *Server) handleNotifyTest(w http.ResponseWriter, r *http.Request) {
 	s.audit(r, "notify.test", "", "")
 	if err := notify.Test(s.db); err != nil {
-		s.settingsError(w, r, "Test notification failed — "+err.Error())
+		s.redirectSettings(w, r, errNotice("Test notification failed", "", err))
 		return
 	}
-	data := s.settingsData(r)
-	data["Saved"] = "Test notification sent to every configured channel."
-	s.render(w, r, "settings", data)
+	s.redirectSettings(w, r, okNotice("Test notification sent", "Every configured channel was sent one."))
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
-	data := s.settingsData(r)
-	if r.URL.Query().Get("saved") == "1" {
-		data["Saved"] = "Settings saved."
-	}
-	s.render(w, r, "settings", data)
+	s.render(w, r, "settings", s.settingsData(r))
 }
 
 func (s *Server) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
@@ -294,20 +282,16 @@ func (s *Server) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 
 	newPassword := r.FormValue("new_password")
 	if newPassword != r.FormValue("confirm_password") {
-		data := s.settingsData(r)
-		data["Error"] = "New passwords do not match."
-		s.render(w, r, "settings", data)
+		s.redirectSettings(w, r, warnNotice("Password not changed", "The new passwords do not match."))
 		return
 	}
 	if err := auth.ChangePassword(s.db, userID, token, r.FormValue("current_password"), newPassword); err != nil {
-		data := s.settingsData(r)
-		data["Error"] = err.Error()
-		s.render(w, r, "settings", data)
+		s.redirectSettings(w, r, errNotice("Password not changed", "", err))
 		return
 	}
 	s.audit(r, "password.change", "", "")
 	event.Info("security", s.actor(r)+" changed their password", "from "+clientIP(r))
-	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+	s.redirectSettings(w, r, okNotice("Password changed", "Your other sessions were signed out."))
 }
 
 func (s *Server) handleSessionsClear(w http.ResponseWriter, r *http.Request) {
