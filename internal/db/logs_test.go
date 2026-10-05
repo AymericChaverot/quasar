@@ -189,3 +189,33 @@ func TestCountLogsMatchesTheSearch(t *testing.T) {
 		}
 	}
 }
+
+// A page of logs is read from an index, not by sorting every stored line: with
+// every application at once, and with one, the plan has no sort of its own.
+// Fifty thousand lines per application made each page of the Logs page read
+// and sort all of them.
+func TestAPageOfLogsIsReadFromAnIndex(t *testing.T) {
+	d := openTestDB(t)
+	for _, appID := range []string{"", "app1"} {
+		where, args := logFilter(appID, "")
+		rows, err := d.Query(`EXPLAIN QUERY PLAN SELECT rowid FROM app_logs`+where+`
+			ORDER BY ts DESC, rowid DESC LIMIT 100 OFFSET 0`, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var plan []string
+		for rows.Next() {
+			var id, parent, unused int
+			var detail string
+			if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+				t.Fatal(err)
+			}
+			plan = append(plan, detail)
+		}
+		rows.Close()
+		got := strings.Join(plan, "; ")
+		if strings.Contains(got, "TEMP B-TREE") || !strings.Contains(got, "INDEX") {
+			t.Errorf("app %q: %s", appID, got)
+		}
+	}
+}

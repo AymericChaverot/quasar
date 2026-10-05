@@ -114,6 +114,8 @@ CREATE TABLE IF NOT EXISTS app_logs (
 	line   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_app_logs_app_ts ON app_logs(app_id, ts);
+-- Every application at once, newest first: the Logs page with no filter.
+CREATE INDEX IF NOT EXISTS idx_app_logs_ts ON app_logs(ts);
 
 CREATE TABLE IF NOT EXISTS registries (
 	id       INTEGER PRIMARY KEY AUTOINCREMENT,

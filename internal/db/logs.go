@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 )
 
@@ -68,15 +69,24 @@ func AppendLogs(database *sql.DB, appID string, entries []LogEntry) error {
 // across every app; an empty query returns the most recent lines unfiltered.
 // offset skips that many of the newest matches, which is how the Logs page
 // reaches older ones a page at a time.
+//
+// The page is found first, by its rowids alone, and only then are its lines
+// read: skipping to page 300 walks 30,000 index entries, not 30,000 lines of
+// text joined to their application. And only the filters given are written
+// into the query: a condition that holds when its parameter is empty is one
+// SQLite cannot answer from an index, and it read and sorted every stored
+// line for each page.
 func SearchLogs(database *sql.DB, appID, query string, limit, offset int) ([]LogLine, error) {
+	where, args := logFilter(appID, query)
 	rows, err := database.Query(`
 		SELECT app_logs.app_id, apps.name, apps.log_color, app_logs.ts, app_logs.line
 		FROM app_logs
 		JOIN apps ON apps.id = app_logs.app_id
-		WHERE (? = '' OR app_logs.app_id = ?)
-		  AND (? = '' OR app_logs.line LIKE '%' || ? || '%')
-		ORDER BY app_logs.ts DESC, app_logs.rowid DESC
-		LIMIT ? OFFSET ?`, appID, appID, query, query, limit, offset)
+		WHERE app_logs.rowid IN (
+			SELECT rowid FROM app_logs`+where+`
+			ORDER BY ts DESC, rowid DESC
+			LIMIT ? OFFSET ?)
+		ORDER BY app_logs.ts DESC, app_logs.rowid DESC`, append(args, limit, offset)...)
 	if err != nil {
 		return nil, err
 	}
@@ -142,12 +152,28 @@ func PruneLogs(database *sql.DB) error {
 // CountLogs is how many lines SearchLogs would find with no limit: what the
 // Logs page needs to say how many pages there are.
 func CountLogs(database *sql.DB, appID, query string) (int, error) {
+	where, args := logFilter(appID, query)
 	var n int
-	err := database.QueryRow(`
-		SELECT COUNT(*)
-		FROM app_logs
-		JOIN apps ON apps.id = app_logs.app_id
-		WHERE (? = '' OR app_logs.app_id = ?)
-		  AND (? = '' OR app_logs.line LIKE '%' || ? || '%')`, appID, appID, query, query).Scan(&n)
+	err := database.QueryRow(`SELECT COUNT(*) FROM app_logs`+where, args...).Scan(&n)
 	return n, err
+}
+
+// logFilter is the WHERE clause for the filters given, and nothing for the
+// ones left empty, so that a search scoped to one application reads that
+// application's index.
+func logFilter(appID, query string) (string, []any) {
+	var conds []string
+	var args []any
+	if appID != "" {
+		conds = append(conds, "app_id = ?")
+		args = append(args, appID)
+	}
+	if query != "" {
+		conds = append(conds, "line LIKE '%' || ? || '%'")
+		args = append(args, query)
+	}
+	if len(conds) == 0 {
+		return "", nil
+	}
+	return " WHERE " + strings.Join(conds, " AND "), args
 }
