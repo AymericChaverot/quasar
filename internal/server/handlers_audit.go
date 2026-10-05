@@ -93,25 +93,52 @@ func peerIP(r *http.Request) string {
 const auditPageSize = 50
 
 func (s *Server) handleAuditPage(w http.ResponseWriter, r *http.Request) {
-	query := strings.TrimSpace(r.URL.Query().Get("q"))
-	total, err := db.CountAudit(s.db, query)
+	data, _, err := s.auditResults(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	data["Title"] = "Audit"
+	s.render(w, r, "audit", data)
+}
+
+// handleAuditPartial is a page of entries on its own, which is how the Audit
+// page moves from one page or one search to the next: in place, rather than
+// by loading the whole page — every script and sheet of it — again.
+func (s *Server) handleAuditPartial(w http.ResponseWriter, r *http.Request) {
+	data, addr, err := s.auditResults(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	data["Partial"] = true
+	// The address bar follows, so a reload shows what is on screen; replaced
+	// rather than pushed, as on the Logs page.
+	w.Header().Set("HX-Replace-Url", addr)
+	s.renderPartial(w, "audit_results", data)
+}
+
+// auditResults is the page of entries a request asks for, and its address. Counting them is
+// cheap here — the log is capped at db.MaxAuditEntries — so the pager comes
+// whole, unlike the Logs page's.
+func (s *Server) auditResults(r *http.Request) (map[string]any, string, error) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	total, err := db.CountAudit(s.db, query)
+	if err != nil {
+		return nil, "", err
 	}
 	// A page past the end, typed in or not, is the last one.
 	pages := pageCount(total, auditPageSize)
 	page := min(pageOf(r), pages)
 	entries, err := db.ListAuditPage(s.db, query, auditPageSize, (page-1)*auditPageSize)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, "", err
 	}
-	s.render(w, r, "audit", map[string]any{
-		"Title":   "Audit",
+	filters := url.Values{"q": {query}}
+	return map[string]any{
 		"Entries": entries,
 		"Query":   query,
 		"Page":    page,
-		"Pager":   pagerFor("/audit", url.Values{"q": {query}}, page, pages),
-	})
+		"Pager":   pagerFor("/audit", filters, page, pages).withPartial("/partials/audit", filters, "#audit-results"),
+	}, pageURL("/audit", filters, page), nil
 }

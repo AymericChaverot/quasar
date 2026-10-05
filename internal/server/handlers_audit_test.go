@@ -140,3 +140,31 @@ func TestAuditPages(t *testing.T) {
 		t.Error("a page past the end is not the last page")
 	}
 }
+
+// The Audit page moves between pages and searches in place: its pager and its
+// search fetch a page of entries on its own, and the address bar follows.
+func TestAuditPagesInPlace(t *testing.T) {
+	s, database := catalogTestServer(t)
+	for i := 1; i <= auditPageSize+3; i++ {
+		db.RecordAudit(database, db.AuditEntry{Actor: "admin", Action: "app.deploy", Target: fmt.Sprintf("app-%03d", i)})
+	}
+
+	page := httptest.NewRecorder()
+	s.handleAuditPage(page, httptest.NewRequest("GET", "/audit", nil))
+	if !strings.Contains(page.Body.String(), `hx-get="/partials/audit?page=2"`) || !strings.Contains(page.Body.String(), `hx-target="#audit-results"`) {
+		t.Error("the pager does not fetch the next page in place")
+	}
+
+	w := httptest.NewRecorder()
+	s.handleAuditPartial(w, httptest.NewRequest("GET", "/partials/audit?q=deploy&page=2", nil))
+	body := w.Body.String()
+	if !strings.Contains(body, "app-003") || strings.Contains(body, "<html") {
+		t.Errorf("the partial is not a page of entries on its own:\n%s", body)
+	}
+	if got := w.Header().Get("HX-Replace-Url"); got != "/audit?page=2&q=deploy" {
+		t.Errorf("HX-Replace-Url = %q", got)
+	}
+	if !strings.Contains(body, `id="audit-clear" hx-swap-oob="true"`) {
+		t.Error("a search does not bring its Clear link along")
+	}
+}

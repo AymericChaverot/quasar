@@ -6,44 +6,17 @@
   <p class="help mt-2!">Who did what, and from where. Append-only.</p>
 </div>
 
-<form method="get" action="/audit" class="mb-6 flex flex-wrap items-end field-row gap-4">
+<form method="get" action="/audit" class="mb-6 flex flex-wrap items-end field-row gap-4"
+      hx-get="/partials/audit" hx-target="#audit-results" hx-swap="innerHTML">
   <div class="min-w-64 flex-1">
     <label for="q" class="label mb-1!">Search</label>
     <input id="q" name="q" type="text" value="{{.Query}}" placeholder="user, action or target" class="input mono">
   </div>
   <button type="submit" class="btn-primary">Search</button>
-  {{if .Query}}<a href="/audit" class="btn">Clear</a>{{end}}
+  <span id="audit-clear">{{if .Query}}<a href="/audit" class="btn">Clear</a>{{end}}</span>
 </form>
 
-{{if .Entries}}
-<div class="table-wrap">
-  <table>
-    <thead>
-      <tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th><th>IP</th></tr>
-    </thead>
-    <tbody>
-      {{range .Entries}}
-      <tr>
-        <td class="mono muted whitespace-nowrap text-xs">{{.TS.Format "2006-01-02 15:04:05"}}</td>
-        <td class="mono whitespace-nowrap">{{.Actor}}</td>
-        <td class="mono whitespace-nowrap">{{.Action}}</td>
-        {{/* Targets and details can be a path, a list of permissions or a
-             command with no space to break at; left alone, one such row
-             widens the table past its frame and pushes the IP out of it. */}}
-        <td class="mono muted min-w-40 wrap-anywhere">{{.Target}}</td>
-        <td class="muted text-sm wrap-anywhere">{{.Detail}}</td>
-        <td class="mono muted whitespace-nowrap text-xs">{{.IP}}</td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
+<div id="audit-results">
+  {{template "audit_results" .}}
 </div>
-{{template "pager" .Pager}}
-{{else}}
-<div class="empty p-6 text-center">
-  <p class="muted text-sm">
-    {{if .Query}}Nothing matches “{{.Query}}”.{{else}}No recorded actions yet.{{end}}
-  </p>
-</div>
-{{end}}
 {{end}}

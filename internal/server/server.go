@@ -386,6 +386,7 @@ func (s *Server) routes() {
 
 	s.viewer("GET /logs", s.handleLogsPage)
 	s.viewer("GET /audit", s.handleAuditPage)
+	s.viewer("GET /partials/audit", s.handleAuditPartial)
 	s.viewer("GET /partials/logs", s.handleLogsSearchPartial)
 	s.viewer("GET /partials/logs/pager", s.handleLogsPagerPartial)
 

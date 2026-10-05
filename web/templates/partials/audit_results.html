@@ -1,0 +1,39 @@
+{{/* A page of the Audit page's entries, with its pager. Drawn into the page
+     on its first load, and alone after that: moving to another page or
+     searching swaps this in place rather than loading the whole page again. */}}
+{{define "audit_results"}}
+{{if .Entries}}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th><th>IP</th></tr>
+    </thead>
+    <tbody>
+      {{range .Entries}}
+      <tr>
+        <td class="mono muted whitespace-nowrap text-xs">{{.TS.Format "2006-01-02 15:04:05"}}</td>
+        <td class="mono whitespace-nowrap">{{.Actor}}</td>
+        <td class="mono whitespace-nowrap">{{.Action}}</td>
+        {{/* Targets and details can be a path, a list of permissions or a
+             command with no space to break at; left alone, one such row
+             widens the table past its frame and pushes the IP out of it. */}}
+        <td class="mono muted min-w-40 wrap-anywhere">{{.Target}}</td>
+        <td class="muted text-sm wrap-anywhere">{{.Detail}}</td>
+        <td class="mono muted whitespace-nowrap text-xs">{{.IP}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{template "pager" .Pager}}
+{{else}}
+<div class="empty p-6 text-center">
+  <p class="muted text-sm">
+    {{if .Query}}Nothing matches “{{.Query}}”.{{else}}No recorded actions yet.{{end}}
+  </p>
+</div>
+{{end}}
+{{/* The way back to every entry, which only a search needs. It follows the
+     search on screen, so a page of results swapped in brings it along. */}}
+{{if .Partial}}<span id="audit-clear" hx-swap-oob="true">{{if .Query}}<a href="/audit" class="btn">Clear</a>{{end}}</span>{{end}}
+{{end}}
