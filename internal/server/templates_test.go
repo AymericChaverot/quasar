@@ -4,9 +4,11 @@ import (
 	"database/sql"
 	"html/template"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"quasar/internal/backup"
@@ -604,5 +606,25 @@ func TestEveryDistroIconIsDrawn(t *testing.T) {
 		if got := render(icon); got == server || !strings.Contains(got, `fill="currentColor"`) {
 			t.Errorf("os_icon %q is not drawn: %s", icon, got)
 		}
+	}
+}
+
+// A script or a sheet is revalidated rather than downloaded again on every
+// page: it carries a tag made from its contents, and a browser that already
+// has that version is told so in a 304.
+func TestStaticFilesAreRevalidatedNotRefetched(t *testing.T) {
+	h := staticAssets(fstest.MapFS{"js/app.js": {Data: []byte("console.log(1)")}})
+	first := httptest.NewRecorder()
+	h.ServeHTTP(first, httptest.NewRequest(http.MethodGet, "/js/app.js", nil))
+	tag := first.Header().Get("ETag")
+	if first.Code != http.StatusOK || tag == "" {
+		t.Fatalf("first fetch: %d, ETag %q", first.Code, tag)
+	}
+	again := httptest.NewRequest(http.MethodGet, "/js/app.js", nil)
+	again.Header.Set("If-None-Match", tag)
+	second := httptest.NewRecorder()
+	h.ServeHTTP(second, again)
+	if second.Code != http.StatusNotModified {
+		t.Errorf("a file the browser already has came back %d", second.Code)
 	}
 }

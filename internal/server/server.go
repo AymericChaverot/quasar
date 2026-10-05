@@ -1,13 +1,16 @@
 package server
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"html/template"
 	"io/fs"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"quasar/internal/auth"
 	"quasar/internal/config"
@@ -118,12 +121,39 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.Serve
 // Last-Modified to revalidate against and every page load would pull the fonts
 // down again. Their names are tied to their contents, so they can be pinned
 // hard; nothing else here can, since the stylesheets change under fixed names.
+//
+// Everything else carries an ETag made from its contents instead, and is
+// revalidated on each use: a page load asks whether each script and sheet has
+// changed and is told no, rather than downloading all of them again — which is
+// what every page of the dashboard did, every time. A release that changes a
+// file changes its tag, so nothing stale outlives an update.
 func staticAssets(root fs.FS) http.Handler {
 	files := http.FileServerFS(root)
+	var tags sync.Map // path → quoted ETag
+	tagFor := func(name string) string {
+		if t, ok := tags.Load(name); ok {
+			if tag, ok := t.(string); ok {
+				return tag
+			}
+		}
+		data, err := fs.ReadFile(root, strings.TrimPrefix(name, "/"))
+		if err != nil {
+			return ""
+		}
+		sum := sha256.Sum256(data)
+		t := `"` + hex.EncodeToString(sum[:8]) + `"`
+		tags.Store(name, t)
+		return t
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, ".woff2") {
 			w.Header().Set("Content-Type", "font/woff2")
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else if tag := tagFor(r.URL.Path); tag != "" {
+			// http.ServeContent answers If-None-Match with a 304 on its own
+			// once the tag is set.
+			w.Header().Set("ETag", tag)
+			w.Header().Set("Cache-Control", "no-cache")
 		}
 		files.ServeHTTP(w, r)
 	})
