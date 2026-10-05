@@ -43,8 +43,6 @@ func signedIn(t *testing.T) (*Server, *http.Request, int64) {
 // the one can take the other's place on screen.
 func TestATaskReportsToWhoeverStartedIt(t *testing.T) {
 	s, r, user := signedIn(t)
-	ch := s.notices.subscribe(user)
-	defer s.notices.unsubscribe(user, ch)
 
 	release := make(chan struct{})
 	if !s.startTask(r, "sweep", infoNotice("Sweep started", ""), func() Notice {
@@ -53,6 +51,10 @@ func TestATaskReportsToWhoeverStartedIt(t *testing.T) {
 	}) {
 		t.Fatal("the task did not start")
 	}
+	// The page the form lands on, whose stream opens after the task started.
+	time.Sleep(time.Millisecond)
+	ch := s.notices.subscribe(user)
+	defer s.notices.unsubscribe(user, ch)
 
 	flash := flashed(s, r)
 	if len(flash) != 1 || flash[0].Kind != noticeInfo || flash[0].ID == "" {
