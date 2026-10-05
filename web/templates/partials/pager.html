@@ -1,5 +1,9 @@
 {{/* The links under a paged list. Nothing at all while the list fits on one
-     page: "1" with every way greyed out says nothing worth the room. */}}
+     page: "1" with every way greyed out says nothing worth the room.
+
+     A list that pages in place goes back to the top of the page with each new
+     page, as a page loaded whole would: the pager is at the bottom, and a
+     new page read from its last line up is read backwards. */}}
 {{define "pager"}}
 {{if gt .Pages 1}}
 <nav class="pager" aria-label="Pages">
@@ -13,7 +17,7 @@
        the row and a field repeating it at the end. The last number in the row
        is how many pages there are. */}}
   <form method="get" action="{{$p.Path}}" class="pager-jump"
-        {{if $p.Target}}hx-get="{{$p.Partial}}" hx-target="{{$p.Target}}" hx-swap="innerHTML"{{end}}>
+        {{if $p.Target}}hx-get="{{$p.Partial}}" hx-target="{{$p.Target}}" hx-swap="innerHTML show:window:top"{{end}}>
     {{range $p.Filters}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
     <input name="page" type="number" min="1"{{if not $p.Pending}} max="{{$p.Pages}}"{{end}} value="{{.Page}}"
            class="btn pager-num is-current" aria-current="page"
@@ -21,7 +25,7 @@
            title="Type a page number and press Enter">
   </form>
   {{else if .URL}}
-  <a href="{{.URL}}" class="btn pager-num"{{if $p.Target}} hx-get="{{.Partial}}" hx-target="{{$p.Target}}" hx-swap="innerHTML"{{end}}>{{.Label}}</a>
+  <a href="{{.URL}}" class="btn pager-num"{{if $p.Target}} hx-get="{{.Partial}}" hx-target="{{$p.Target}}" hx-swap="innerHTML show:window:top"{{end}}>{{.Label}}</a>
   {{else}}
   <span class="btn pager-num" aria-disabled="true">{{.Label}}</span>
   {{end}}
