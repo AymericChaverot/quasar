@@ -26,6 +26,10 @@ type Pager struct {
 	// Partial is Path's counterpart for the field, Target what it replaces.
 	Partial string
 	Target  string
+	// Pending is set on a pager drawn before the list was counted: it knows
+	// the pages around this one and whether there is an older one, and this
+	// is where the full pager is fetched from.
+	Pending string
 }
 
 // PageLink is one entry on the pager: an arrow, a page number, or the gap
@@ -144,4 +148,14 @@ func sortedKeys(v url.Values) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// provisionalPager is the pager for a page of a list that has not been
+// counted yet, and is known to go on past it: the pages before, the next one,
+// and a gap after it standing for however many more there are.
+func provisionalPager(path string, query url.Values, page int) Pager {
+	p := pagerFor(path, query, page, page+1)
+	last := len(p.Links) - 1
+	p.Links = append(p.Links[:last:last], PageLink{Label: "…", Gap: true}, p.Links[last])
+	return p
 }

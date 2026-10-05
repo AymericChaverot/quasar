@@ -86,6 +86,10 @@ type Server struct {
 
 	// tasks are the actions running on after the request that started them.
 	tasks taskRuns
+
+	// logCounts are recent counts of log searches, so stepping through the
+	// pages of one does not count it again on each.
+	logCounts countCache
 }
 
 func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secrets.Keyring) (*Server, error) {
@@ -383,6 +387,7 @@ func (s *Server) routes() {
 	s.viewer("GET /logs", s.handleLogsPage)
 	s.viewer("GET /audit", s.handleAuditPage)
 	s.viewer("GET /partials/logs", s.handleLogsSearchPartial)
+	s.viewer("GET /partials/logs/pager", s.handleLogsPagerPartial)
 
 	s.viewer("GET /system", s.handleSystem)
 	s.viewer("GET /system/containers/{name}", s.handleSystemContainerDetail)

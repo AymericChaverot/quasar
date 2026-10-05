@@ -18,10 +18,22 @@
     </tbody>
   </table>
 </div>
-{{template "pager" .Pager}}
+{{template "logs_pager" .Pager}}
 {{else}}
 <div class="empty p-6 text-center">
   <p class="muted text-sm">No matching log lines.</p>
+</div>
+{{end}}
+{{end}}
+
+{{/* The pager under a page of logs. Drawn before the search was counted, it
+     knows the pages around this one and that there are older ones, and
+     replaces itself with the full pager as soon as the count is in — the
+     lines on screen never wait for it. */}}
+{{define "logs_pager"}}
+{{if or .Pending (gt .Pages 1)}}
+<div id="log-pager"{{with .Pending}} hx-get="{{.}}" hx-trigger="load" hx-swap="outerHTML"{{end}}>
+  {{template "pager" .}}
 </div>
 {{end}}
 {{end}}

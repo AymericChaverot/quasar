@@ -15,9 +15,9 @@
   <form method="get" action="{{$p.Path}}" class="pager-jump"
         {{if $p.Target}}hx-get="{{$p.Partial}}" hx-target="{{$p.Target}}" hx-swap="innerHTML"{{end}}>
     {{range $p.Filters}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
-    <input name="page" type="number" min="1" max="{{$p.Pages}}" value="{{.Page}}"
+    <input name="page" type="number" min="1"{{if not $p.Pending}} max="{{$p.Pages}}"{{end}} value="{{.Page}}"
            class="btn pager-num is-current" aria-current="page"
-           aria-label="Page {{.Page}} of {{$p.Pages}} — type another and press Enter"
+           aria-label="Page {{.Page}}{{if not $p.Pending}} of {{$p.Pages}}{{end}} — type another and press Enter"
            title="Type a page number and press Enter">
   </form>
   {{else if .URL}}
