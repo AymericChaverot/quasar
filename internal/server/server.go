@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -590,10 +591,34 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, dat
 	if !hideNav {
 		data["Notices"] = s.pendingNotices(r)
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := t.ExecuteTemplate(w, "layout", data); err != nil {
+	if err := execute(w, t, "layout", data); err != nil {
 		log.Printf("render %s: %v", page, err)
 	}
+}
+
+var renderBufs = sync.Pool{New: func() any { return new(bytes.Buffer) }}
+
+// execute renders a template in full before any of it is sent. A template
+// that fails halfway would otherwise have already gone out as a 200 with half
+// a page — and htmx swaps half a panel in as readily as a whole one. Rendered
+// first, the failure is a 500 htmx leaves on the floor, and the page keeps
+// what it had.
+func execute(w http.ResponseWriter, t *template.Template, name string, data any) error {
+	buf := renderBufs.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer func() {
+		// A page far larger than usual is not kept around for the next one.
+		if buf.Cap() <= 1<<20 {
+			renderBufs.Put(buf)
+		}
+	}()
+	if err := t.ExecuteTemplate(buf, name, data); err != nil {
+		http.Error(w, "The page could not be drawn.", http.StatusInternalServerError)
+		return err
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 // navSection maps a request path to the header entry that should read as the
@@ -624,8 +649,7 @@ func navSection(path string) string {
 func (s *Server) renderPartial(w http.ResponseWriter, name string, data any) {
 	// Every page set includes all partials; use the dashboard set as host.
 	t := s.pages["dashboard"]
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := t.ExecuteTemplate(w, name, data); err != nil {
+	if err := execute(w, t, name, data); err != nil {
 		log.Printf("render partial %s: %v", name, err)
 	}
 }
