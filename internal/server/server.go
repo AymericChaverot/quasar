@@ -163,6 +163,10 @@ func staticAssets(root fs.FS) http.Handler {
 		if strings.HasSuffix(r.URL.Path, ".woff2") {
 			w.Header().Set("Content-Type", "font/woff2")
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else if strings.HasPrefix(r.URL.Path, "vendor/") {
+			// Named after their versions (vendor/README.md), so a file under
+			// a name never changes, and can be kept as long as the fonts.
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else if tag := tagFor(r.URL.Path); tag != "" {
 			// http.ServeContent answers If-None-Match with a 304 on its own
 			// once the tag is set.
