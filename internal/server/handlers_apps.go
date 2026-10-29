@@ -43,6 +43,12 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		// What the history picker has to offer, from the same list the
 		// partial behind it reads, so the two cannot drift apart.
 		"Measurements": picker(r, ServerPicker, ServerMeasurements),
+		"Pre": s.prerender(r, map[string]string{
+			"system":     "/partials/system",
+			"metrics":    "/partials/metrics",
+			"apps":       "/partials/apps",
+			"containers": "/partials/system-containers",
+		}),
 	})
 }
 

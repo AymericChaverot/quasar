@@ -197,6 +197,17 @@ var templateFuncs = template.FuncMap{
 		return many
 	},
 	"hasPrefix": strings.HasPrefix,
+	// pre is a panel the page drew before it was sent (see prerender), or
+	// nothing — in which case the panel's placeholder is drawn instead and it
+	// fetches itself on load.
+	"pre": func(data any, name string) template.HTML {
+		if m, ok := data.(map[string]any); ok {
+			if p, ok := m["Pre"].(map[string]template.HTML); ok {
+				return p[name]
+			}
+		}
+		return ""
+	},
 	// redactURL keeps a token pasted into a clone URL out of the page.
 	"redactURL":  docker.RedactURL,
 	"logPalette": db.LogColorPalette,

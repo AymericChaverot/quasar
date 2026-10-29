@@ -4,14 +4,19 @@
   {{if .IsAdmin}}<a href="/apps/new" class="btn-primary">{{template "icon_plus"}}New application</a>{{end}}
 </div>
 
+{{/* Each panel is drawn with the page when it answered in time (see
+     prerender), and otherwise fetches itself on load behind a placeholder. */}}
 <section class="mb-10">
   <h2 class="h-label mb-3">Server health</h2>
-  <div hx-get="/partials/system" hx-trigger="load, every 5s [quasarSeen(this)], quasar:seen" hx-swap="innerHTML">
+  {{$p := pre . "system"}}
+  <div hx-get="/partials/system" hx-trigger="{{if not $p}}load, {{end}}every 5s [quasarSeen(this)], quasar:seen" hx-swap="innerHTML">
+    {{if $p}}{{$p}}{{else}}
     <div class="grid grid-cols-3 gap-4">
       <div class="card h-24 animate-pulse"></div>
       <div class="card h-24 animate-pulse"></div>
       <div class="card h-24 animate-pulse"></div>
     </div>
+    {{end}}
   </div>
 </section>
 
@@ -20,31 +25,38 @@
     <h2 class="h-label mb-0!">History</h2>
     {{template "metrics_range" (dict "ID" "server-metrics" "URL" "/partials/metrics" "Measurements" $.Measurements)}}
   </div>
-  <div id="server-metrics-cards" hx-get="/partials/metrics" hx-trigger="load, every 60s [quasarSeen(this)], quasar:seen"
+  {{$p := pre . "metrics"}}
+  <div id="server-metrics-cards" hx-get="/partials/metrics" hx-trigger="{{if not $p}}load, {{end}}every 60s [quasarSeen(this)], quasar:seen"
        hx-include="#server-metrics-range" hx-swap="innerHTML">
+    {{if $p}}{{$p}}{{else}}
     <div class="metrics-grid">
       <div class="card h-48 animate-pulse"></div>
       <div class="card h-48 animate-pulse"></div>
       <div class="card h-48 animate-pulse"></div>
     </div>
+    {{end}}
   </div>
 </section>
 
 <section class="mb-10">
   <h2 class="h-label mb-3">Applications</h2>
-  <div id="apps-pane" hx-get="/partials/apps" hx-trigger="load, every 5s [quasarSeen(this)], quasar:seen" hx-swap="innerHTML">
-    <div class="card h-24 animate-pulse"></div>
+  {{$p := pre . "apps"}}
+  <div id="apps-pane" hx-get="/partials/apps" hx-trigger="{{if not $p}}load, {{end}}every 5s [quasarSeen(this)], quasar:seen" hx-swap="innerHTML">
+    {{if $p}}{{$p}}{{else}}<div class="card h-24 animate-pulse"></div>{{end}}
   </div>
 </section>
 
 <section>
   <h2 class="h-label mb-3">System containers</h2>
-  <div hx-get="/partials/system-containers" hx-trigger="load, every 10s [quasarSeen(this)], quasar:seen" hx-swap="innerHTML">
+  {{$p := pre . "containers"}}
+  <div hx-get="/partials/system-containers" hx-trigger="{{if not $p}}load, {{end}}every 10s [quasarSeen(this)], quasar:seen" hx-swap="innerHTML">
+    {{if $p}}{{$p}}{{else}}
     <div class="grid grid-cols-3 gap-3">
       <div class="empty h-20 animate-pulse"></div>
       <div class="empty h-20 animate-pulse"></div>
       <div class="empty h-20 animate-pulse"></div>
     </div>
+    {{end}}
   </div>
 </section>
 {{end}}

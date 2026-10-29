@@ -1,0 +1,89 @@
+package server
+
+import (
+	"bytes"
+	"html/template"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+)
+
+// The panels that answer in time are drawn with the page; one that is slow or
+// fails is left out, and the page does not wait for the slow one.
+func TestPrerenderDrawsWhatAnswersInTime(t *testing.T) {
+	s := &Server{mux: http.NewServeMux()}
+	s.mux.HandleFunc("GET /partials/fast", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Cookie") != "quasar_session=abc" {
+			http.Error(w, "no session", http.StatusUnauthorized)
+			return
+		}
+		_, _ = io.WriteString(w, "<p>fast "+r.URL.Query().Get("x")+"</p>")
+	})
+	s.mux.HandleFunc("GET /partials/slow", func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(5 * time.Second):
+		case <-r.Context().Done():
+		}
+		_, _ = io.WriteString(w, "<p>slow</p>")
+	})
+	s.mux.HandleFunc("GET /partials/broken", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	})
+
+	page := httptest.NewRequest("GET", "/", nil)
+	page.Header.Set("Cookie", "quasar_session=abc")
+	start := time.Now()
+	got := s.prerender(page, map[string]string{
+		"fast": "/partials/fast?x=1", "slow": "/partials/slow", "broken": "/partials/broken",
+	})
+	if took := time.Since(start); took > prerenderBudget+time.Second {
+		t.Errorf("the page waited %v for its panels", took)
+	}
+	if got["fast"] != "<p>fast 1</p>" {
+		t.Errorf("fast panel = %q", got["fast"])
+	}
+	if _, ok := got["slow"]; ok {
+		t.Error("a panel past the budget was drawn")
+	}
+	if _, ok := got["broken"]; ok {
+		t.Error("a failed panel was drawn")
+	}
+}
+
+// A dashboard drawn with its panels does not fetch them again on load, and
+// one drawn without them does, behind its placeholders.
+func TestDashboardDrawsPrerenderedPanels(t *testing.T) {
+	s := testServer(t)
+	render := func(pre map[string]template.HTML) string {
+		var buf bytes.Buffer
+		data := map[string]any{"IsAdmin": true}
+		if pre != nil {
+			data["Pre"] = pre
+		}
+		if err := s.pages["dashboard"].ExecuteTemplate(&buf, "content", data); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+
+	with := render(map[string]template.HTML{"apps": `<table id="drawn-apps"></table>`})
+	if !strings.Contains(with, `<table id="drawn-apps"></table>`) {
+		t.Error("the drawn panel is not in the page")
+	}
+	apps := with[strings.Index(with, `id="apps-pane"`):]
+	apps = apps[:strings.Index(apps, ">")]
+	if strings.Contains(apps, "load,") {
+		t.Errorf("a drawn panel still fetches itself on load: %s", apps)
+	}
+	if !strings.Contains(with, `hx-get="/partials/system" hx-trigger="load,`) {
+		t.Error("a panel that was not drawn no longer fetches itself")
+	}
+
+	without := render(nil)
+	if strings.Count(without, `hx-trigger="load,`) != 4 || !strings.Contains(without, "animate-pulse") {
+		t.Error("without its panels the dashboard does not fall back to placeholders")
+	}
+}
