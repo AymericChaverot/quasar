@@ -18,7 +18,7 @@ func (s *Server) handleSystemPartial(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAppsPartial(w http.ResponseWriter, r *http.Request) {
 	apps, err := db.ListApps(s.db, s.keyring)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	if len(apps) == 0 {
@@ -221,7 +221,7 @@ func (s *Server) handleAppDeploymentsPartial(w http.ResponseWriter, r *http.Requ
 	}
 	deps, err := db.ListDeployments(s.db, a.ID, 10)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	// What is running now is not something to go back to. For a single

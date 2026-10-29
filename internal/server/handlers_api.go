@@ -120,7 +120,7 @@ func apiAppOf(v AppView) apiApp {
 func (s *Server) handleAPIApps(w http.ResponseWriter, r *http.Request) {
 	apps, err := db.ListApps(s.db, s.keyring)
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, err.Error())
+		apiInternalError(w, r, err)
 		return
 	}
 	out := make([]apiApp, 0, len(apps))
@@ -166,7 +166,7 @@ func (s *Server) handleAPIRestart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.dock.Restart(r.Context(), a); err != nil {
-		writeAPIError(w, http.StatusInternalServerError, err.Error())
+		apiInternalError(w, r, err)
 		return
 	}
 	s.auditAPI(r, "app.restart", a.Name, "triggered by API token")
@@ -178,7 +178,7 @@ func (s *Server) handleAPIRestart(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAPISystem(w http.ResponseWriter, r *http.Request) {
 	stats, err := vpsCollect(s.cfg.HostRootPath)
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, err.Error())
+		apiInternalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

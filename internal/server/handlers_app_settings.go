@@ -62,7 +62,7 @@ func (s *Server) handleAppProtection(w http.ResponseWriter, r *http.Request) {
 
 	headers := r.FormValue("security_headers") == "on"
 	if err := db.UpdateAppProtection(s.db, a.ID, rate, strings.Join(cidrs, ","), headers); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	s.audit(r, "app.protection", a.Name, fmt.Sprintf("rate=%d allow=%q headers=%v", rate, strings.Join(cidrs, ","), headers))
@@ -93,7 +93,7 @@ func (s *Server) handleAppPreBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := db.UpdateAppPreBackup(s.db, s.keyring, a.ID, strings.TrimSpace(r.FormValue("pre_backup_cmd"))); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	s.renderPartial(w, "env_saved", nil)
@@ -146,7 +146,7 @@ func (s *Server) handleAppComposeService(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := db.UpdateAppComposeService(s.db, a.ID, service); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	a.ComposeService = service
@@ -188,7 +188,7 @@ func (s *Server) handleAppHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := db.UpdateAppHealth(s.db, a.ID, path); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	s.renderPartial(w, "env_saved", nil)
@@ -207,7 +207,7 @@ func (s *Server) handleAppLogColor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := db.UpdateAppLogColor(s.db, a.ID, color); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	s.renderPartial(w, "env_saved", nil)
@@ -239,7 +239,7 @@ func (s *Server) handleAppLimits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := db.UpdateAppLimits(s.db, a.ID, cpu, memMB); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	a.CPULimit, a.MemLimitMB = cpu, memMB
@@ -297,7 +297,7 @@ func (s *Server) handleAppBasicAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.FormValue("disable") == "1" {
 		if err := db.UpdateAppBasicAuth(s.db, a.ID, "", ""); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalError(w, r, err)
 			return
 		}
 		a.BasicAuthUser, a.BasicAuthHash = "", ""
@@ -313,11 +313,11 @@ func (s *Server) handleAppBasicAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	if err := db.UpdateAppBasicAuth(s.db, a.ID, user, string(hash)); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	a.BasicAuthUser, a.BasicAuthHash = user, string(hash)
@@ -340,7 +340,7 @@ func (s *Server) handleAppDomains(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := db.UpdateAppDomains(s.db, a.ID, domains); err != nil {
-		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+		internalError(w, r, fmt.Errorf("database error: %w", err))
 		return
 	}
 	s.renderPartial(w, "env_saved", nil)
@@ -353,20 +353,20 @@ func (s *Server) handleAppEnvSave(w http.ResponseWriter, r *http.Request) {
 	}
 	a.EnvContent = strings.ReplaceAll(r.FormValue("env_content"), "\r\n", "\n")
 	if err := db.UpdateAppEnv(s.db, s.keyring, a.ID, a.EnvContent); err != nil {
-		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+		internalError(w, r, fmt.Errorf("database error: %w", err))
 		return
 	}
 	if a.DeployType == "compose" {
 		if yaml := r.FormValue("compose_yaml"); yaml != "" {
 			a.ComposeYAML = yaml
 			if err := db.UpdateAppCompose(s.db, s.keyring, a.ID, yaml); err != nil {
-				http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+				internalError(w, r, fmt.Errorf("database error: %w", err))
 				return
 			}
 		}
 	}
 	if err := s.dock.WriteEnvFile(a); err != nil {
-		http.Error(w, "write .env failed: "+err.Error(), http.StatusInternalServerError)
+		internalError(w, r, fmt.Errorf("write .env failed: %w", err))
 		return
 	}
 	// The values themselves are never recorded — that would put every secret
@@ -420,7 +420,7 @@ func (s *Server) handleAppSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := db.UpdateAppSource(s.db, a.ID, gitURL, branch); err != nil {
-		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+		internalError(w, r, fmt.Errorf("database error: %w", err))
 		return
 	}
 	if gitURL != a.GitURL {

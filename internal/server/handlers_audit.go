@@ -95,7 +95,7 @@ const auditPageSize = 50
 func (s *Server) handleAuditPage(w http.ResponseWriter, r *http.Request) {
 	data, _, err := s.auditResults(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	data["Title"] = "Audit"
@@ -108,7 +108,7 @@ func (s *Server) handleAuditPage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAuditPartial(w http.ResponseWriter, r *http.Request) {
 	data, addr, err := s.auditResults(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	data["Partial"] = true

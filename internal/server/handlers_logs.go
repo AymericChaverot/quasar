@@ -56,14 +56,14 @@ func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request)
 		// out — is the last one, which is the one case that counts first.
 		total, cerr := s.countLogs(app, q)
 		if cerr != nil {
-			http.Error(w, cerr.Error(), http.StatusInternalServerError)
+			internalError(w, r, cerr)
 			return
 		}
 		page = pageCount(total, logPageSize)
 		lines, err = db.SearchLogs(s.db, app, q, logPageSize+1, (page-1)*logPageSize)
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	more := len(lines) > logPageSize
@@ -104,7 +104,7 @@ func (s *Server) handleLogsPagerPartial(w http.ResponseWriter, r *http.Request) 
 	query := r.URL.Query()
 	total, err := s.countLogs(query.Get("app"), query.Get("q"))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	page := pageOf(r)

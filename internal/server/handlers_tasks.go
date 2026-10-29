@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -37,7 +38,7 @@ func (s *Server) handleTaskAdd(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := db.InsertTask(s.db, &db.Task{AppID: a.ID, Command: command, IntervalMinutes: interval}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	s.audit(r, "task.add", a.Name, command)
@@ -52,7 +53,7 @@ func (s *Server) handleTaskDelete(w http.ResponseWriter, r *http.Request) {
 	if id, err := strconv.ParseInt(r.PathValue("task"), 10, 64); err == nil {
 		if t, err := db.GetTask(s.db, id); err == nil && t.AppID == a.ID {
 			if err := db.DeleteTask(s.db, id); err != nil {
-				http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+				internalError(w, r, fmt.Errorf("database error: %w", err))
 				return
 			}
 			s.audit(r, "task.delete", a.Name, t.Command)

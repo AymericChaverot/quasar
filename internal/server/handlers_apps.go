@@ -502,7 +502,7 @@ func (s *Server) handleAppMove(w http.ResponseWriter, r *http.Request) {
 	}
 	apps, err := db.ListApps(s.db, s.keyring)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, err)
 		return
 	}
 	idx := -1
@@ -527,7 +527,7 @@ func (s *Server) handleAppMove(w http.ResponseWriter, r *http.Request) {
 	}
 	for i, other := range apps {
 		if err := db.SetAppOrder(s.db, other.ID, i+1); err != nil {
-			http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+			internalError(w, r, fmt.Errorf("database error: %w", err))
 			return
 		}
 	}
@@ -546,7 +546,7 @@ func (s *Server) handleAppDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := db.DeleteApp(s.db, a.ID); err != nil {
-		http.Error(w, "database error: "+err.Error(), http.StatusInternalServerError)
+		internalError(w, r, fmt.Errorf("database error: %w", err))
 		return
 	}
 	// The app row is already gone. What is left is its debris, and a failure
