@@ -43,6 +43,8 @@ type Server struct {
 	keyring *secrets.Keyring
 	pages   map[string]*template.Template
 	mux     *http.ServeMux
+	// handler is the mux behind what wraps every response; see compressed.
+	handler http.Handler
 
 	// guards records the access level every route was registered at, so the
 	// route table can be asserted on rather than trusted. Adding a mutating
@@ -111,10 +113,17 @@ func New(cfg config.Config, database *sql.DB, dock *docker.Client, keyring *secr
 		return nil, err
 	}
 	s.routes()
+	s.handler = compressed(s.mux)
 	return s, nil
 }
 
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.ServeHTTP(w, r) }
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.handler == nil { // a Server built by hand, as tests do
+		s.mux.ServeHTTP(w, r)
+		return
+	}
+	s.handler.ServeHTTP(w, r)
+}
 
 // parseTemplates builds one template set per page: layout + partials + page.
 // staticAssets serves the embedded static tree.
