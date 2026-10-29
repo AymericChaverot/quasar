@@ -164,6 +164,15 @@ func TestAuditPagesInPlace(t *testing.T) {
 	if got := w.Header().Get("HX-Replace-Url"); got != "/audit?page=2&q=deploy" {
 		t.Errorf("HX-Replace-Url = %q", got)
 	}
+	// A search from the page's own form is somewhere Back returns to.
+	search := httptest.NewRequest("GET", "/partials/audit?q=deploy", nil)
+	search.Header.Set("HX-Request", "true")
+	search.Header.Set("HX-Trigger", "audit-search")
+	sw := httptest.NewRecorder()
+	s.handleAuditPartial(sw, search)
+	if got := sw.Header().Get("HX-Push-Url"); got != "/audit?q=deploy" || sw.Header().Get("HX-Replace-Url") != "" {
+		t.Errorf("a new search: HX-Push-Url = %q, HX-Replace-Url = %q", got, sw.Header().Get("HX-Replace-Url"))
+	}
 	if !strings.Contains(body, `id="audit-clear" hx-swap-oob="true"`) {
 		t.Error("a search does not bring its Clear link along")
 	}

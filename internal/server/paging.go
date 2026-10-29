@@ -159,3 +159,16 @@ func provisionalPager(path string, query url.Values, page int) Pager {
 	p.Links = append(p.Links[:last:last], PageLink{Label: "…", Gap: true}, p.Links[last])
 	return p
 }
+
+// followURL keeps the address bar on the results a list was just moved to, so
+// a reload shows what is on screen. A search sent from the list's own form is
+// a history entry, and Back returns to the one before it; stepping through
+// the pages of one search only replaces the address, since a page each is not
+// worth a press of Back each.
+func followURL(w http.ResponseWriter, r *http.Request, searchForm, addr string) {
+	if r.Header.Get("HX-Trigger") == searchForm {
+		w.Header().Set("HX-Push-Url", addr)
+		return
+	}
+	w.Header().Set("HX-Replace-Url", addr)
+}

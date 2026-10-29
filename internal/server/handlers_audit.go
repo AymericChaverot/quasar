@@ -112,9 +112,7 @@ func (s *Server) handleAuditPartial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data["Partial"] = true
-	// The address bar follows, so a reload shows what is on screen; replaced
-	// rather than pushed, as on the Logs page.
-	w.Header().Set("HX-Replace-Url", addr)
+	followURL(w, r, "audit-search", addr)
 	s.renderPartial(w, "audit_results", data)
 }
 

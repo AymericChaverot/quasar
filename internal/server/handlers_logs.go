@@ -88,11 +88,8 @@ func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request)
 	for _, l := range lines {
 		views = append(views, LogLineView{LogLine: l, HTML: renderLogLine(l.Line)})
 	}
-	// The address bar follows the results — a new search as much as another
-	// page — so a reload shows what is on screen. Replaced rather than
-	// pushed: stepping through pages is not worth a history entry each.
 	if r.Header.Get("HX-Request") != "" {
-		w.Header().Set("HX-Replace-Url", pageURL("/logs", query, page))
+		followURL(w, r, "log-search", pageURL("/logs", query, page))
 	}
 	s.renderPartial(w, "logs_results", map[string]any{
 		"Lines": views,
