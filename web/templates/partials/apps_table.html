@@ -14,8 +14,8 @@
         <th><span class="app-name"><span class="station-slot"></span>Application</span></th>
         <th>URL</th>
         <th>Type</th>
-        <th>Status</th>
-        <th>Uptime</th>
+        <th class="col-status">Status</th>
+        <th class="col-uptime">Uptime</th>
       </tr>
     </thead>
     <tbody>
@@ -88,7 +88,7 @@
           </span>
         </td>
         <td>{{template "status_badge" .Status.State}}</td>
-        <td class="mono muted">{{if .Status.Uptime}}{{.Status.Uptime}}{{else}}–{{end}}</td>
+        <td class="col-uptime mono muted">{{if .Status.Uptime}}{{.Status.Uptime}}{{else}}–{{end}}</td>
       </tr>
       {{end}}
     </tbody>

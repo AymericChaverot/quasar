@@ -73,3 +73,11 @@
 .pager-jump input::-webkit-inner-spin-button,
 .pager-jump input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .pager-jump input:focus { outline: none; background: var(--surface-2); }
+
+/* Columns whose contents change while the table is polled keep one width.
+   Left to the table, a badge going from Running to Deploying, or an uptime
+   going from 9m to 10m, widened its column and moved every column beside it
+   — the whole table shuffling sideways every few seconds. Sized for the
+   widest thing each can hold: "Not deployed", "12d 23h". */
+.table-wrap .col-status { width: 9.5rem; white-space: nowrap; }
+.table-wrap .col-uptime { width: 7.5rem; white-space: nowrap; }
