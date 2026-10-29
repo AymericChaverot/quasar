@@ -27,6 +27,10 @@ func TestPagesCarryTheirPolicyAndItsNonce(t *testing.T) {
 	if strings.Contains(csp, "unsafe-eval") {
 		t.Error("the policy allows eval")
 	}
+	// Scripts come from the dashboard and nowhere else, no CDN included.
+	if want := "script-src 'self' 'nonce-" + m[1] + "';"; !strings.Contains(csp, want) {
+		t.Errorf("the policy's script-src is not %q: %s", want, csp)
+	}
 	scripts := regexp.MustCompile(`<script(?:\s[^>]*)?>`).FindAllString(w.Body.String(), -1)
 	for _, tag := range scripts {
 		if strings.Contains(tag, "src=") {

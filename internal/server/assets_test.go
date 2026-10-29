@@ -36,7 +36,7 @@ func TestEveryReferencedStaticFileIsEmbedded(t *testing.T) {
 }
 
 // The scripts the dashboard runs come from the dashboard: none from a CDN.
-// Tailwind is the one exception left until its stylesheet is compiled.
+// Nor any stylesheet: Tailwind is compiled into app.css ahead of time.
 func TestNoScriptsFromElsewhere(t *testing.T) {
 	external := regexp.MustCompile(`<(?:script|link)[^>]+(?:src|href)="https?://([^"]+)"`)
 	err := fs.WalkDir(web.Files, "templates", func(path string, d fs.DirEntry, err error) error {
@@ -45,9 +45,7 @@ func TestNoScriptsFromElsewhere(t *testing.T) {
 		}
 		body, _ := fs.ReadFile(web.Files, path)
 		for _, m := range external.FindAllStringSubmatch(string(body), -1) {
-			if !strings.HasPrefix(m[1], "unpkg.com/@tailwindcss/browser@") {
-				t.Errorf("%s loads %s from outside the dashboard", path, m[1])
-			}
+			t.Errorf("%s loads %s from outside the dashboard", path, m[1])
 		}
 		return nil
 	})

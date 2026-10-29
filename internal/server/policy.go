@@ -21,11 +21,6 @@ import (
 // style attributes throughout, a station's theme is an inline sheet, and
 // htmx adds one of its own. A style cannot run anything.
 //
-// Tailwind's stylesheet is still compiled in the browser, by a script from
-// unpkg; it is allowed by its exact address until it is compiled at build
-// time instead.
-const tailwindRuntime = "https://unpkg.com/@tailwindcss/browser@4.3.3"
-
 // pagePolicy sets the policy and its companion headers on a page's response,
 // and returns the nonce its inline scripts carry.
 func pagePolicy(w http.ResponseWriter) string {
@@ -33,7 +28,7 @@ func pagePolicy(w http.ResponseWriter) string {
 	h := w.Header()
 	h.Set("Content-Security-Policy", strings.Join([]string{
 		"default-src 'self'",
-		"script-src 'self' 'nonce-" + nonce + "' " + tailwindRuntime,
+		"script-src 'self' 'nonce-" + nonce + "'",
 		"style-src 'self' 'unsafe-inline'",
 		// A station's typeface is embedded as a data: URI, and so is the
 		// two-factor QR code.

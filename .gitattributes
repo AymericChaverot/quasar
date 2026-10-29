@@ -6,3 +6,6 @@
 *.png    binary
 *.jpg    binary
 *.ico    binary
+
+# Compiled from web/styles by `go generate ./web`; CI checks it is current.
+web/static/app.css linguist-generated

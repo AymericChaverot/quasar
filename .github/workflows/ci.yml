@@ -15,6 +15,21 @@ jobs:
           go-version-file: go.mod
       - name: Build
         run: go build ./...
+      # web/static/app.css is compiled from web/styles and committed; compile
+      # it again and fail if it comes out different, so a forgotten
+      # `go generate ./web` never ships a page with missing styles.
+      - name: Stylesheet is current
+        env:
+          TAILWIND_VERSION: 4.3.3
+        run: |
+          base="https://github.com/tailwindlabs/tailwindcss/releases/download/v${TAILWIND_VERSION}"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "$base/tailwindcss-linux-x64"
+          curl -fsSL "$base/sha256sums.txt" | grep ' ./tailwindcss-linux-x64$' | sed 's| \./| |' | sha256sum -c -
+          install -m 755 tailwindcss-linux-x64 tailwindcss
+          cd "$GITHUB_WORKSPACE"
+          PATH="$RUNNER_TEMP:$PATH" go generate ./web
+          git diff --exit-code web/static/app.css
       # Runs go vet among the rest; .golangci.yml is the single description of
       # what counts as a problem, shared with whatever editor the author uses.
       - name: Lint

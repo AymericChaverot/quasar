@@ -1,6 +1,6 @@
 /* Quasar themes: the typefaces, and the variables every other sheet is drawn
    from. Each theme only redefines those variables; the components are styled
-   once, from the variables, in the sheets under css/ — which the layout imports
+   once, from the variables, in the other sheets here — which app.css imports
    in cascade order after this one. The active theme is set through the
    data-theme attribute on <html>, persisted in a cookie. */
 

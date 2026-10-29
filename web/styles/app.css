@@ -1,0 +1,46 @@
+/* The dashboard's stylesheet: Tailwind and every sheet in this directory,
+   compiled into the one file the layout links, web/static/app.css. Run
+   `go generate ./web` after changing a sheet or a template (README.md).
+
+   Tailwind 4 emits every utility inside @layer utilities, and an unlayered
+   sheet outranks every layer no matter how weak its selectors are — importing
+   these plainly would hand them every contest they used to lose, silently
+   undoing the utility on any element where the two set the same property.
+   Declaring the order here and pulling them into `components` puts utilities
+   back on top, which is where they sat under Tailwind 3.
+
+   The order below is the cascade order. themes.css carries the variables
+   every other sheet is drawn from; after it, a sheet may only be overridden by
+   one further down the list. Moving a line moves the rules. */
+
+@layer theme, base, components, utilities;
+
+/* Utilities are generated for the class names these files spell out, and for
+   no others: a class assembled at run time from pieces is never found. Go
+   code is in the list for the few fragments of HTML it writes itself. */
+@import "tailwindcss" source(none);
+@source "../templates";
+@source "../static/js";
+@source "../../internal/**/*.go";
+
+@import "./themes.css" layer(components);
+@import "./base.css" layer(components);
+@import "./chrome.css" layer(components);
+@import "./components.css" layer(components);
+@import "./settings.css" layer(components);
+@import "./tables.css" layer(components);
+@import "./storage.css" layer(components);
+@import "./logs.css" layer(components);
+/* The per-theme extras come after the components they repaint, and are every
+   one of them scoped to a [data-theme], so they only ever reach their own
+   theme. They sit here, and not at the end, because a few of them tie on
+   specificity with a rule below — a disabled button that must not light up on
+   hover is the one that bites — and on a tie it is this order that decides. */
+@import "./theme-extras.css" layer(components);
+@import "./progress.css" layer(components);
+@import "./updating.css" layer(components);
+@import "./motion.css" layer(components);
+@import "./toasts.css" layer(components);
+/* Last, and deliberately so: a station's sheet is the one written by somebody
+   else, and nothing in it may end up outranking the chrome. */
+@import "./stations.css" layer(components);
