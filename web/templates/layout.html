@@ -118,6 +118,9 @@
   </dialog>
   {{if not .HideNav}}{{template "toasts" .Notices}}{{end}}
   <script src="/static/js/confirm.js" defer></script>
+  {{/* After confirm.js, so a request held for its question is not shown as
+       working while the question is still up. */}}
+  <script src="/static/js/busy.js" defer></script>
   <script src="/static/js/log-toggles.js" defer></script>
   <script src="/static/js/number-field.js" defer></script>
   {{/* Pins every shimmer to the document clock so a polled panel does not
