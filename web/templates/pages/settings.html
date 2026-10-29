@@ -439,6 +439,51 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
     {{end}}
   </section>
 
+  {{/* How long the Logs and Audit pages reach back, and emptying either now.
+       Applied the moment it is saved, then every hour. */}}
+  <section id="retention" class="space-y-4">
+    <h2 class="h-label">Logs &amp; audit</h2>
+    {{with .Retention}}
+    <form method="post" action="/settings/retention" class="card space-y-4 p-4">
+      <div class="flex flex-wrap items-end field-row gap-3">
+        <label class="text-sm">
+          <span class="label mb-1!">Keep logs for (days)</span>
+          <input name="log_days" type="number" min="{{.MinLogDays}}" max="{{.MaxLogDays}}" value="{{.LogDays}}" required class="input mono w-28!">
+        </label>
+        <label class="text-sm">
+          <span class="label mb-1!">Keep the audit trail for (days)</span>
+          <input name="audit_days" type="number" min="0" max="{{.MaxAuditDays}}" value="{{.AuditDays}}" required class="input mono w-28!">
+        </label>
+        <button type="submit" class="btn">Save</button>
+      </div>
+      <p class="help">
+        What every application wrote is stored for {{.LogDays}} {{plural .LogDays "day" "days"}}, then deleted. The audit
+        trail is kept {{if .AuditDays}}for {{.AuditDays}} {{plural .AuditDays "day" "days"}}{{else}}with no age limit{{end}},
+        and never beyond its newest {{.MaxAudit}} entries — 0 days means no age limit. A shorter window takes effect as soon
+        as it is saved.
+      </p>
+    </form>
+    <div class="card space-y-3 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <p class="text-sm"><span class="mono">{{.LogLines}}</span> <span class="muted">stored log {{plural .LogLines "line" "lines"}}</span></p>
+        <form method="post" action="/settings/logs/purge"
+              data-confirm="Every stored log line of every application is deleted. What containers write from now on is stored as before."
+              data-confirm-type="logs">
+          <button type="submit" class="btn-danger">{{template "icon_trash"}}Delete all logs</button>
+        </form>
+      </div>
+      <div class="flex flex-wrap items-center justify-between gap-3 border-t pt-3" style="border-color: var(--border)">
+        <p class="text-sm"><span class="mono">{{.AuditCount}}</span> <span class="muted">audit {{plural .AuditCount "entry" "entries"}}</span></p>
+        <form method="post" action="/settings/audit/purge"
+              data-confirm="The whole audit trail is deleted. Its first entry afterwards is this purge: who did it, and from where."
+              data-confirm-type="audit">
+          <button type="submit" class="btn-danger">{{template "icon_trash"}}Empty the audit trail</button>
+        </form>
+      </div>
+    </div>
+    {{end}}
+  </section>
+
   <section class="space-y-4">
     <h2 class="h-label">Sessions</h2>
     <div class="card flex items-center justify-between p-4">

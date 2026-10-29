@@ -251,3 +251,10 @@ func (s *Server) handleSystemContainerLogs(w http.ResponseWriter, r *http.Reques
 		return s.dock.StreamLogsByName(r.Context(), sc.Name, send)
 	})
 }
+
+// forget drops every count, for when the lines they counted are gone.
+func (c *countCache) forget() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.m = nil
+}

@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"strconv"
 	"time"
 )
@@ -71,7 +72,8 @@ func PurgeLogs(db *sql.DB) (int64, error) {
 // PurgeAudit deletes the whole audit trail and leaves one entry in its place,
 // the purge itself, in the same transaction: a trail that can be emptied
 // without a trace is not a trail. The entry is the caller's, so it names who
-// did it and from where.
+// did it and from where; its detail, when left empty, says how many entries
+// went.
 func PurgeAudit(db *sql.DB, purge AuditEntry) (int64, error) {
 	tx, err := db.Begin()
 	if err != nil {
@@ -81,6 +83,9 @@ func PurgeAudit(db *sql.DB, purge AuditEntry) (int64, error) {
 	n, err := affected(tx.Exec("DELETE FROM audit_log"))
 	if err != nil {
 		return 0, err
+	}
+	if purge.Detail == "" {
+		purge.Detail = fmt.Sprintf("%d earlier entries deleted", n)
 	}
 	if _, err := tx.Exec(`INSERT INTO audit_log (actor, action, target, detail, ip) VALUES (?, ?, ?, ?, ?)`,
 		purge.Actor, purge.Action, purge.Target, purge.Detail, purge.IP); err != nil {
