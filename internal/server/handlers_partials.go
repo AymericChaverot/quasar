@@ -21,6 +21,10 @@ func (s *Server) handleAppsPartial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if len(apps) == 0 {
+		s.renderPartial(w, "apps_empty", s.isAdmin(r))
+		return
+	}
 	views := make([]AppView, 0, len(apps))
 	for i, a := range apps {
 		v := s.appView(r, a)

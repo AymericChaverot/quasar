@@ -1,9 +1,6 @@
 {{define "apps_table"}}
 {{if not .}}
-<div class="empty p-10 text-center">
-  <p class="muted text-sm">No applications yet.</p>
-  <a href="/apps/new" class="link mt-2 inline-block text-sm underline underline-offset-4">Deploy your first application</a>
-</div>
+{{template "apps_empty" true}}
 {{else}}
 <div class="table-wrap">
   <table>
@@ -98,4 +95,13 @@
   </table>
 </div>
 {{end}}
+{{end}}
+
+{{/* An empty list carries no row to read the role from, so it is told
+     whether to offer the first deploy: a viewer would only get a 403. */}}
+{{define "apps_empty"}}
+<div class="empty p-10 text-center">
+  <p class="muted text-sm">No applications yet.</p>
+  {{if .}}<a href="/apps/new" class="link mt-2 inline-block text-sm underline underline-offset-4">Deploy your first application</a>{{end}}
+</div>
 {{end}}

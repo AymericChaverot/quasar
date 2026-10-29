@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="mb-8 flex items-center justify-between">
   <h1 class="page-title">Dashboard</h1>
-  <a href="/apps/new" class="btn-primary">{{template "icon_plus"}}New application</a>
+  {{if .IsAdmin}}<a href="/apps/new" class="btn-primary">{{template "icon_plus"}}New application</a>{{end}}
 </div>
 
 <section class="mb-10">
