@@ -106,7 +106,11 @@ func (c *Client) Status(ctx context.Context, a *db.App) AppStatus {
 }
 
 func (c *Client) composeStatus(ctx context.Context, appID string) AppStatus {
-	list := c.composeContainers(ctx, appID)
+	return composeStatusOf(c.composeContainers(ctx, appID))
+}
+
+// composeStatusOf is a stack's state from its project's containers.
+func composeStatusOf(list []container.Summary) AppStatus {
 	if len(list) == 0 {
 		return AppStatus{State: "not deployed"}
 	}

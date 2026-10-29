@@ -25,13 +25,9 @@ func (s *Server) handleAppsPartial(w http.ResponseWriter, r *http.Request) {
 		s.renderPartial(w, "apps_empty", s.isAdmin(r))
 		return
 	}
-	views := make([]AppView, 0, len(apps))
-	for i, a := range apps {
-		v := s.appView(r, a)
-		v.First = i == 0
-		v.Last = i == len(apps)-1
-		views = append(views, v)
-	}
+	views := s.appViews(r, apps)
+	views[0].First = true
+	views[len(views)-1].Last = true
 	s.renderPartial(w, "apps_table", views)
 }
 

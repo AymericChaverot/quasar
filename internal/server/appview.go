@@ -3,7 +3,6 @@ package server
 import (
 	"net/http"
 
-	"quasar/internal/auth"
 	"quasar/internal/db"
 	"quasar/internal/docker"
 )
@@ -96,16 +95,43 @@ func appHost(a *db.App, domain string) string {
 }
 
 func (s *Server) appView(r *http.Request, a *db.App) AppView {
-	_, _, role, _ := s.currentUser(r)
+	v := s.appViewBase(a, s.isAdmin(r))
+	v.Status = s.dock.Status(r.Context(), a)
+	return v
+}
+
+// appViews is appView for the whole dashboard list: the role is read once
+// rather than once a row, and every state comes from one listing of the
+// daemon's containers rather than from a listing and an inspection per row.
+func (s *Server) appViews(r *http.Request, apps []*db.App) []AppView {
+	admin := s.isAdmin(r)
+	views := make([]AppView, 0, len(apps))
+	stack := make(map[string]bool, len(apps))
+	for _, a := range apps {
+		v := s.appViewBase(a, admin)
+		stack[a.ID] = v.Stack
+		views = append(views, v)
+	}
+	statuses := s.dock.Statuses(r.Context(), apps, stack)
+	for i := range views {
+		views[i].Status = statuses[views[i].ID]
+	}
+	return views
+}
+
+// appViewBase is everything in an AppView but the live state.
+func (s *Server) appViewBase(a *db.App, admin bool) AppView {
+	// Read once: it looks at the checkout, and whether the app is a stack
+	// follows from it.
+	build := s.dock.GitBuildFor(a)
 	return AppView{
 		App:     a,
-		Status:  s.dock.Status(r.Context(), a),
 		Domain:  s.cfg.Domain,
 		Deploy:  s.dock.Deploying(a.ID),
-		Build:   s.dock.GitBuildFor(a),
-		Stack:   s.dock.UsesCompose(a),
+		Build:   build,
+		Stack:   a.DeployType == "compose" || (a.DeployType == "git" && build.Mode == db.GitBuildCompose),
 		Network: s.dock.Network(),
-		IsAdmin: role == auth.RoleAdmin,
+		IsAdmin: admin,
 	}
 }
 

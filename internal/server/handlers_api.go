@@ -97,8 +97,11 @@ type apiApp struct {
 	Uptime     string `json:"uptime,omitempty"`
 }
 
-func (s *Server) apiAppFrom(r *http.Request, a *db.App) apiApp {
-	v := s.appView(r, a)
+func (s *Server) apiAppFrom(r *http.Request, a *db.App) apiApp { return apiAppOf(s.appView(r, a)) }
+
+// apiAppOf is an application as the API reports it.
+func apiAppOf(v AppView) apiApp {
+	a := v.App
 	return apiApp{
 		ID:         a.ID,
 		Name:       a.Name,
@@ -121,8 +124,8 @@ func (s *Server) handleAPIApps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := make([]apiApp, 0, len(apps))
-	for _, a := range apps {
-		out = append(out, s.apiAppFrom(r, a))
+	for _, v := range s.appViews(r, apps) {
+		out = append(out, apiAppOf(v))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"apps": out})
 }
