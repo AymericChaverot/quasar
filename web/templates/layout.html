@@ -57,8 +57,8 @@
 <body class="h-full antialiased">
   {{if not .HideNav}}
   <header class="site-header">
-    <div class="mx-auto flex h-14 max-w-6xl items-stretch justify-between px-6">
-      <div class="flex items-stretch gap-4">
+    <div class="mx-auto flex h-14 max-w-6xl items-stretch justify-between px-4 sm:px-6">
+      <div class="header-start flex items-stretch gap-4">
         <a href="/" class="brand self-center">{{template "logo_mark"}}Quasar</a>
         <span class="brand-version self-center">{{.Version}}</span>
         <span class="brand-rule self-center"></span>
@@ -78,13 +78,13 @@
       <div class="flex items-center">
         {{if .Update}}{{template "update_badge" .Update}}{{end}}
         <form method="post" action="/logout" class="flex items-center">
-          <button class="btn-signout">{{template "icon_logout"}}Sign out</button>
+          <button class="btn-signout" aria-label="Sign out">{{template "icon_logout"}}<span class="signout-label">Sign out</span></button>
         </form>
       </div>
     </div>
   </header>
   {{end}}
-  <main class="mx-auto max-w-6xl px-6 py-8">
+  <main class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
     {{template "content" .}}
   </main>
   {{/* The one confirmation box on the site, asked by every data-confirm form

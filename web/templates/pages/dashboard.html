@@ -21,7 +21,7 @@
 </section>
 
 <section class="mb-10">
-  <div class="mb-3 flex items-center justify-between">
+  <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
     <h2 class="h-label mb-0!">History</h2>
     {{template "metrics_range" (dict "ID" "server-metrics" "URL" "/partials/metrics" "Measurements" $.Measurements)}}
   </div>

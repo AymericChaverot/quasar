@@ -201,7 +201,7 @@
   </div>
   {{/* The same picker the dashboard's history carries, over this
        application's own two measurements. */}}
-  <div class="mt-6 mb-3 flex items-center justify-between">
+  <div class="mt-6 mb-3 flex flex-wrap items-center justify-between gap-2">
     <h2 class="h-label mb-0!">History</h2>
     {{template "metrics_range" (dict "ID" "app-metrics" "URL" (printf "/partials/apps/%s/metrics" .ID) "Measurements" $.Measurements)}}
   </div>
@@ -261,7 +261,7 @@
        records. It sits here rather than beside the CPU and memory charts
        because it answers a different question: those are about load right now,
        this is about the disk filling up over weeks. */}}
-  <div class="mb-3 flex items-center justify-between">
+  <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
     <h2 class="h-label mb-0!">Growth</h2>
     {{template "metrics_range" (dict "ID" "app-storage" "URL" (printf "/partials/apps/%s/storage-history" .ID) "Measurements" $.StorageMeasurements)}}
   </div>

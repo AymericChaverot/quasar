@@ -8,7 +8,13 @@
 .table-wrap {
   border: var(--border-w) solid var(--border);
   border-radius: var(--radius);
-  overflow: hidden;
+  /* Clipped to the rounded corners, and scrolled sideways rather than cut
+     off where a table is wider than the screen — a phone's, mostly. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* So that what a cell positions absolutely — a screen-reader label — is
+     placed, and clipped, inside the table rather than off the page. */
+  position: relative;
   background: var(--ground);
 }
 .table-wrap table { width: 100%; text-align: left; font-size: 0.875rem; }

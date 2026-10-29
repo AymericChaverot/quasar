@@ -225,3 +225,24 @@
   letter-spacing: 0.1em;
   color: var(--text-faint);
 }
+
+/* A phone's width. Seven sections, the version, the update button and Sign out
+   do not fit across one: they ran off the right edge and widened the page
+   with them. The nav scrolls sideways under the brand instead, the version
+   and its rule step aside, and Sign out keeps its icon alone — it is still
+   the red one, and still says what it is to a screen reader. */
+@media (max-width: 47.99rem) {
+  .header-start { min-width: 0; flex: 1; }
+  .brand-version, .brand-rule { display: none; }
+  .main-nav {
+    min-width: 0;
+    gap: 1.125rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-right: 0.75rem;
+  }
+  .main-nav::-webkit-scrollbar { display: none; }
+  .nav-link { flex-shrink: 0; }
+  .signout-label { display: none; }
+  .range-pick { flex-wrap: wrap; }
+}

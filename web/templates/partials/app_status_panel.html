@@ -13,7 +13,7 @@
        stay drawn but disabled, so the row does not change shape twice. */}}
   {{$state := .Status.State}}
   {{$busy := eq $state "deploying"}}
-  <div class="flex items-center gap-2">
+  <div class="flex flex-wrap items-center gap-2">
     {{if or (eq $state "stopped") (eq $state "error")}}
     <button hx-post="/apps/{{.ID}}/start" hx-target="#status-panel" hx-swap="innerHTML" hx-sync="#status-panel:replace" class="btn">{{template "icon_play"}}Start</button>
     {{end}}
