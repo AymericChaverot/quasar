@@ -35,12 +35,12 @@
                application's own history before deploying anything. */}}
           {{if .ByCompose}}
           <button hx-post="/apps/{{$appID}}/rollback" hx-vals='{"deployment": "{{.ID}}"}'
-                  hx-target="#status-panel" hx-swap="innerHTML"
+                  hx-target="#status-panel" hx-swap="innerHTML" hx-sync="#status-panel:replace"
                   hx-confirm="Put the stack back on the compose file this deployment ran? The environment file is left as it is."
                   class="btn py-1! text-xs">Rollback</button>
           {{else}}
           <button hx-post="/apps/{{$appID}}/rollback" hx-vals='{"tag": "{{.ImageTag}}"}'
-                  hx-target="#status-panel" hx-swap="innerHTML"
+                  hx-target="#status-panel" hx-swap="innerHTML" hx-sync="#status-panel:replace"
                   hx-confirm="Roll back to {{.ImageTag}}?"
                   class="btn py-1! text-xs">Rollback</button>
           {{end}}

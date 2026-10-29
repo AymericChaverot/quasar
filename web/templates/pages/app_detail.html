@@ -40,8 +40,12 @@
   </div>
 </div>
 
+{{/* The poll and the buttons that answer into this panel queue on it: an
+     action replaces a poll still on its way, and a poll is dropped while an
+     action is — otherwise a read taken before a start lands after it, and
+     puts back the state the start just changed. */}}
 <div id="status-panel"
-     hx-get="/partials/apps/{{.ID}}/status" hx-trigger="every 3s" hx-swap="innerHTML">
+     hx-get="/partials/apps/{{.ID}}/status" hx-trigger="every 3s" hx-swap="innerHTML" hx-sync="this:drop">
   {{template "app_status_panel" .}}
 </div>
 
