@@ -604,7 +604,10 @@ var renderBufs = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 // first, the failure is a 500 htmx leaves on the floor, and the page keeps
 // what it had.
 func execute(w http.ResponseWriter, t *template.Template, name string, data any) error {
-	buf := renderBufs.Get().(*bytes.Buffer)
+	buf, ok := renderBufs.Get().(*bytes.Buffer)
+	if !ok {
+		buf = new(bytes.Buffer)
+	}
 	buf.Reset()
 	defer func() {
 		// A page far larger than usual is not kept around for the next one.
