@@ -49,36 +49,46 @@
   </section>
   {{end}}
 
-  {{/* From here down, every section's heading is drawn with the page and its
-       contents are fetched once the page is on screen. All four are asked for
-       at the same moment, so the slowest of them — Docker's disk report — sets
-       how long the page takes to finish rather than how long it takes to
-       appear. None of them is polled: nothing here changes on its own. */}}
+  {{/* From here down, every section's contents are asked for at the same
+       moment as the page, and drawn with it when they answer in time; the
+       slowest of them — Docker's disk report — is never waited for past a
+       moment, and arrives on its own once the page is on screen. None of them
+       is polled: nothing here changes on its own. */}}
   <section class="space-y-4">
     <h2 class="h-label">Environment</h2>
     {{/* outerHTML, unlike the three below: the partial brings its own wrapper
-         so that it can poll itself while a Traefik update is running. */}}
+         so that it can poll itself while a Traefik update is running — so a
+         drawn one goes in as it is, wrapper and all.
+
+         Every panel here is drawn with the page when it answered in time (see
+         prerender), and otherwise fetches itself on load. */}}
+    {{with pre . "environment"}}{{.}}{{else}}
     <div hx-get="/partials/system/environment" hx-trigger="load" hx-swap="outerHTML">
       <div class="card h-40 animate-pulse"></div>
     </div>
+    {{end}}
   </section>
 
   <section class="space-y-4">
     <h2 class="h-label">TLS certificates</h2>
-    <div hx-get="/partials/system/certs" hx-trigger="load" hx-swap="innerHTML">
-      <div class="card h-32 animate-pulse"></div>
+    {{$p := pre . "certs"}}
+    <div hx-get="/partials/system/certs"{{if not $p}} hx-trigger="load"{{end}} hx-swap="innerHTML">
+      {{if $p}}{{$p}}{{else}}<div class="card h-32 animate-pulse"></div>{{end}}
     </div>
   </section>
 
   <section class="space-y-4">
     <h2 class="h-label">Docker storage</h2>
-    <div hx-get="/partials/system/storage" hx-trigger="load" hx-swap="innerHTML">
+    {{$p := pre . "storage"}}
+    <div hx-get="/partials/system/storage"{{if not $p}} hx-trigger="load"{{end}} hx-swap="innerHTML">
+      {{if $p}}{{$p}}{{else}}
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div class="card h-20 animate-pulse"></div>
         <div class="card h-20 animate-pulse"></div>
         <div class="card h-20 animate-pulse"></div>
         <div class="card h-20 animate-pulse"></div>
       </div>
+      {{end}}
     </div>
   </section>
 
@@ -89,16 +99,18 @@
   {{if .IsAdmin}}
   <section class="space-y-4">
     <h2 class="h-label">Volumes</h2>
-    <div hx-get="/partials/system/volumes" hx-trigger="load" hx-swap="innerHTML">
-      <div class="card h-24 animate-pulse"></div>
+    {{$p := pre . "volumes"}}
+    <div hx-get="/partials/system/volumes"{{if not $p}} hx-trigger="load"{{end}} hx-swap="innerHTML">
+      {{if $p}}{{$p}}{{else}}<div class="card h-24 animate-pulse"></div>{{end}}
     </div>
   </section>
   {{end}}
 
   <section class="space-y-4">
     <h2 class="h-label">Application storage</h2>
-    <div hx-get="/partials/system/app-sizes" hx-trigger="load" hx-swap="innerHTML">
-      <div class="card h-24 animate-pulse"></div>
+    {{$p := pre . "sizes"}}
+    <div hx-get="/partials/system/app-sizes"{{if not $p}} hx-trigger="load"{{end}} hx-swap="innerHTML">
+      {{if $p}}{{$p}}{{else}}<div class="card h-24 animate-pulse"></div>{{end}}
     </div>
   </section>
 

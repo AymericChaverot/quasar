@@ -125,3 +125,28 @@ func TestLogsPageArrivesWithItsLines(t *testing.T) {
 		t.Errorf("drawn results still fetch themselves: %s", tag)
 	}
 }
+
+// The environment panel replaces itself when it polls, so a drawn one goes in
+// as it came — its own wrapper — and not inside the placeholder that would
+// fetch it again.
+func TestSystemPageDrawsEnvironmentWhole(t *testing.T) {
+	s := testServer(t)
+	var buf bytes.Buffer
+	data := map[string]any{
+		"Title": "System", "IsAdmin": true,
+		"Pre": map[string]template.HTML{"environment": `<div id="system-env">drawn</div>`},
+	}
+	if err := s.pages["system"].ExecuteTemplate(&buf, "content", data); err != nil {
+		t.Fatal(err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, `<div id="system-env">drawn</div>`) {
+		t.Error("the drawn environment is not in the page")
+	}
+	if strings.Contains(html, `hx-get="/partials/system/environment"`) {
+		t.Error("a drawn environment is still fetched again")
+	}
+	if !strings.Contains(html, `hx-get="/partials/system/certs" hx-trigger="load"`) {
+		t.Error("a panel that was not drawn no longer fetches itself")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -342,6 +343,17 @@ func (s *Server) handleCertDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
+	panels := map[string]string{
+		"environment": "/partials/system/environment",
+		"certs":       "/partials/system/certs",
+		"storage":     "/partials/system/storage",
+		"sizes":       "/partials/system/app-sizes",
+	}
+	if s.isAdmin(r) {
+		panels["volumes"] = "/partials/system/volumes"
+	}
+	pre := make(chan map[string]template.HTML, 1)
+	go func() { pre <- s.prerender(r, panels) }()
 	data := s.systemData()
 	if s.isAdmin(r) {
 		stack := s.stackDrift(r)
@@ -350,6 +362,7 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 		data["Version"] = version.Version
 		data["Command"] = stackUpdateCommand
 	}
+	data["Pre"] = <-pre
 	s.render(w, r, "system", data)
 }
 
