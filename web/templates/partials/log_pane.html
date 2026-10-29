@@ -5,7 +5,10 @@
      soon as the reader scrolls up, because being yanked back to the tail
      mid-read is worse than falling behind, and offers a way back. */}}
 {{define "log_pane"}}
-<div class="log-pane-wrap relative" hx-ext="sse" sse-connect="{{.}}">
+{{/* The stream is opened by log-pane.js once the pane is on screen: on an
+     application page it sits in a tab that may never be opened, and an open
+     stream is a "docker logs --follow" held on the server for nobody. */}}
+<div class="log-pane-wrap relative" hx-ext="sse" data-sse-connect="{{.}}">
   {{template "log_toggles"}}
   <div id="log-pane" sse-swap="message" hx-swap="beforeend" class="log-pane"></div>
   <button type="button" id="log-tail" class="btn absolute bottom-3 right-3 py-1! text-xs" hidden>

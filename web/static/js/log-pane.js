@@ -15,9 +15,21 @@
   pane.addEventListener("scroll", sync);
   jump.addEventListener("click", tail);
   new MutationObserver(function () { if (follow) tail(); }).observe(pane, { childList: true });
-  // A pane in a closed tab is not laid out, so the lines that arrive meanwhile
-  // scroll nothing and it opens at the top. It is resized from nothing when
-  // its tab opens, which is when it can be taken to the end.
-  new ResizeObserver(function () { if (follow) tail(); }).observe(pane);
+  // The stream opens the first time the pane is on screen, not with the page.
+  var wrap = pane.closest("[data-sse-connect]");
+  function connect() {
+    if (!wrap || wrap.hasAttribute("sse-connect") || !pane.offsetParent) return;
+    wrap.setAttribute("sse-connect", wrap.dataset.sseConnect);
+    htmx.process(wrap);
+  }
+
+  // A pane in a closed tab is not laid out, so it has no size until its tab
+  // opens — which is the moment to start the stream, and to take the pane to
+  // the end of whatever has arrived.
+  new ResizeObserver(function () {
+    connect();
+    if (follow) tail();
+  }).observe(pane);
+  connect();
   tail();
 })();
