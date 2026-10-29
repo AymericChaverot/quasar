@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"net/url"
@@ -322,6 +323,20 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 	if a == nil {
 		return
 	}
+	// The panels are fetched while the page reads the application's own state,
+	// rather than after it.
+	base := "/partials/apps/" + url.PathEscape(a.ID) + "/"
+	panels := map[string]string{
+		"tls": base + "tls", "stats": base + "stats", "metrics": base + "metrics",
+		"storage": base + "storage", "growth": base + "storage-history",
+		"tasks": base + "tasks", "deployments": base + "deployments",
+	}
+	if s.dock.UsesCompose(a) {
+		panels["containers"] = base + "containers"
+	}
+	pre := make(chan map[string]template.HTML, 1)
+	go func() { pre <- s.prerender(r, panels) }()
+
 	data := map[string]any{
 		"Title": a.Name,
 		"App":   s.appDetailView(r, a),
@@ -340,6 +355,7 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 			data["Station"] = block
 		}
 	}
+	data["Pre"] = <-pre
 	s.render(w, r, "app_detail", data)
 }
 
