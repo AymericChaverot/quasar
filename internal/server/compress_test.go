@@ -80,7 +80,8 @@ func TestEventStreamsAreNotHeldBack(t *testing.T) {
 	req, _ := http.NewRequest("GET", srv.URL, nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	// The transport's own gzip handling is off, so the encoding is seen as sent.
-	resp, err := (&http.Transport{DisableCompression: true}).RoundTrip(req)
+	client := &http.Client{Transport: &http.Transport{DisableCompression: true}}
+	resp, err := client.Do(req) //nolint:bodyclose // closed below; read in a goroutine the linter does not follow
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,11 +159,14 @@ func TestWebsocketsPassThroughCompression(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), &websocket.DialOptions{
+	c, resp, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), &websocket.DialOptions{
 		HTTPHeader: http.Header{"Accept-Encoding": {"gzip"}},
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
 	}
 	defer c.CloseNow()
 	if _, msg, err := c.Read(ctx); err != nil || string(msg) != "hello" {
