@@ -30,7 +30,7 @@ Metrics are sampled in the background and kept for 7 days.
 
 **Audit** lists who did what, when, and from where: deployments, setting changes, file edits, sign-ins, station actions…
 
-- Entries can't be edited or deleted.
+- Entries can't be edited, and only go as a whole: by age, or all at once. In **Settings** → **Logs & audit**, set how many days they are kept (0, the default, keeps them with no age limit, up to the newest 20,000), or **Empty the audit trail**. Emptying it leaves one entry behind: the purge itself, with who did it and from where.
 - Use the search box to filter them. The number of matching entries is shown above the list.
 - Entries come 50 at a time, newest first. Use the pager under the list, or type a page number into the current page's box.
 - Actions triggered by a webhook or an API token are recorded under that name.
