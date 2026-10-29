@@ -174,6 +174,27 @@
     if (close) dismiss(close.closest(".toast"));
   });
 
+  // A request the page made that failed. A poll is left out: it is not
+  // something anybody pressed, it tries again by itself, and a server that is
+  // down for a minute would otherwise say so every five seconds.
+  const failed = document.getElementById("toast-request-failed");
+  function requestFailed(e, why) {
+    const elt = e.detail.elt;
+    if (!failed || (elt && /\bevery\b/.test(elt.getAttribute("hx-trigger") || ""))) return;
+    const t = failed.content.firstElementChild.cloneNode(true);
+    t.querySelector(".toast-text").textContent = why;
+    box.append(t);
+  }
+  document.addEventListener("htmx:responseError", (e) => {
+    const xhr = e.detail.xhr;
+    const type = xhr.getResponseHeader("Content-Type") || "";
+    const text = type.startsWith("text/plain") ? xhr.responseText.trim() : "";
+    requestFailed(e, text && text.length <= 300 ? text : xhr.status + " " + (xhr.statusText || "error"));
+  });
+  document.addEventListener("htmx:sendError", (e) => {
+    requestFailed(e, "Quasar could not be reached. Check the connection and try again.");
+  });
+
   if (box.dataset.stream && window.EventSource) {
     const src = new EventSource(box.dataset.stream);
     src.addEventListener("notice", (e) => {

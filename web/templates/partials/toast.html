@@ -37,5 +37,11 @@
 <div id="toasts" class="toasts" aria-live="polite" data-stream="/notices">
   {{range .}}{{template "toast" .}}{{end}}
 </div>
+{{/* What toasts.js fills in when a request made from the page fails: htmx
+     swaps nothing for an error, so without it a button that failed looks
+     exactly like a button that was never pressed. */}}
+<template id="toast-request-failed">
+  {{template "toast" (dict "Kind" "err" "ID" "request-failed" "Title" "Request failed" "Text" "-")}}
+</template>
 <script src="/static/js/toasts.js" defer></script>
 {{end}}
