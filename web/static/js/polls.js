@@ -33,6 +33,35 @@
     document.querySelectorAll(POLLED).forEach(function (el) { wasSeen.set(el, seen(el)); });
   }
 
+  // A poll that brings back exactly what it brought last time changes
+  // nothing, and is not swapped in. Swapping it anyway rebuilt the panel every
+  // few seconds for nothing: the row under the pointer lost its hover, the
+  // button with the focus lost it, and text being selected was unselected.
+  //
+  // Kept by the address polled rather than by element: a panel that swaps its
+  // own outer HTML is a new element after every swap, and the same panel.
+  var lastAnswer = new Map();
+  document.addEventListener("htmx:beforeSwap", function (e) {
+    var elt = e.detail.elt;
+    if (!elt || !elt.matches || !elt.matches(POLLED)) return;
+    if (!e.detail.requestConfig || e.detail.requestConfig.verb !== "get") return;
+    var key = elt.getAttribute("hx-get");
+    var text = e.detail.serverResponse;
+    if (lastAnswer.get(key) === text) e.detail.shouldSwap = false;
+    else lastAnswer.set(key, text);
+  });
+  // Something other than the poll wrote into the panel — a button answering
+  // into it — so what is on screen is no longer the poll's last answer, and
+  // the next one is swapped in whatever it says.
+  // (A panel replacing its own outer HTML is a new element answering for the
+  // old one, so it is told apart by the address it polls, not by identity.)
+  document.addEventListener("htmx:afterSwap", function (e) {
+    var target = e.detail.target, elt = e.detail.elt;
+    if (!target || !target.getAttribute) return;
+    var key = target.getAttribute("hx-get");
+    if (!elt || !elt.getAttribute || elt.getAttribute("hx-get") !== key) lastAnswer.delete(key);
+  });
+
   document.addEventListener("visibilitychange", catchUp);
   // A tab switch is a click that shows and hides panes; it has run by the
   // time the next frame is drawn.
