@@ -16,7 +16,7 @@
      typing. */}}
 {{define "limits_state"}}
 <div id="limits-state" class="space-y-3"
-     hx-get="/partials/apps/{{.ID}}/limits" hx-trigger="every 5s [quasarSeen(this)], quasar:seen" hx-swap="outerHTML">
+     hx-get="/partials/apps/{{.ID}}/limits" hx-trigger="every 5s, quasar:seen" hx-swap="outerHTML">
   <div class="flex flex-wrap items-center gap-2">
     {{if or .CPULimit .MemLimitMB}}
     <span class="badge badge-ok"><span class="dot"></span>{{.LimitsText}}</span>

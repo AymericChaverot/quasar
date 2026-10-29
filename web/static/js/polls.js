@@ -1,25 +1,36 @@
 // Polls only run where somebody can see them.
 //
-// Every panel that refreshes itself carries `every Ns [quasarSeen(this)]`:
-// htmx asks this on each tick and skips the tick on a no. A browser tab in the
-// background, or a tab of the application page that is not open, has nobody
-// reading it — and was costing the server a container listing, a stats read
-// and a database query every few seconds all the same.
+// Every panel that refreshes itself also listens for `quasar:seen`, which is
+// what marks it as polled here. Each of its requests is asked first whether
+// anybody can see it, and dropped on a no: a browser tab in the background, or
+// a tab of the application page that is not open, has nobody reading it — and
+// was costing the server a container listing, a stats read and a database
+// query every few seconds all the same.
+//
+// (Not as an htmx trigger filter, `every 5s [seen(this)]`: htmx evaluates
+// those with Function(), which the page's Content-Security-Policy forbids.)
 //
 // The other half is catching up. A panel that comes back into view — its tab
 // opened, the browser tab brought forward — would otherwise show what it had
-// when it was left until its next tick, so it is asked straight away, by the
-// `quasar:seen` event every polled panel also listens for.
+// when it was left until its next tick, so it is asked straight away, by that
+// same `quasar:seen` event.
 (function () {
   function seen(el) {
     if (document.hidden) return false;
     if (typeof el.checkVisibility === "function") return el.checkVisibility();
     return el.offsetParent !== null || getComputedStyle(el).position === "fixed";
   }
-  window.quasarSeen = seen;
 
-  var POLLED = '[hx-trigger*="quasarSeen"]';
+  var POLLED = '[hx-trigger*="quasar:seen"]';
   var wasSeen = new WeakMap();
+
+  document.addEventListener("htmx:beforeRequest", function (e) {
+    var elt = e.detail.elt;
+    if (elt && elt.matches && elt.matches(POLLED) && !seen(elt)) {
+      e.preventDefault();
+      wasSeen.set(elt, false);
+    }
+  });
 
   // Every polled panel that has just come into view since this last looked.
   function catchUp() {

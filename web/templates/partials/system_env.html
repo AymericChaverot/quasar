@@ -9,7 +9,7 @@
      of those polls fail, which is why the poll lives on the wrapper that
      survives them rather than on anything the response replaces. */}}
 {{define "system_env"}}
-<div id="system-env"{{if or .Traefik.Busy .HostUpdate.Busy}} hx-get="/partials/system/environment" hx-trigger="every 2s [quasarSeen(this)], quasar:seen" hx-swap="outerHTML"{{end}}>
+<div id="system-env"{{if or .Traefik.Busy .HostUpdate.Busy}} hx-get="/partials/system/environment" hx-trigger="every 2s, quasar:seen" hx-swap="outerHTML"{{end}}>
 <div class="card">
 
   <div class="env-row">

@@ -15,7 +15,7 @@
      typing. */}}
 {{define "basic_auth_state"}}
 <div id="basic-auth-state" class="space-y-3"
-     hx-get="/partials/apps/{{.ID}}/basic-auth" hx-trigger="every 5s [quasarSeen(this)], quasar:seen" hx-swap="outerHTML">
+     hx-get="/partials/apps/{{.ID}}/basic-auth" hx-trigger="every 5s, quasar:seen" hx-swap="outerHTML">
   <div class="flex flex-wrap items-center gap-2">
     {{if .BasicAuthUser}}
     <span class="badge badge-ok"><span class="dot"></span>protected</span>

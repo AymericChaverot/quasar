@@ -45,7 +45,7 @@
      action is — otherwise a read taken before a start lands after it, and
      puts back the state the start just changed. */}}
 <div id="status-panel"
-     hx-get="/partials/apps/{{.ID}}/status" hx-trigger="every 3s [quasarSeen(this)], quasar:seen" hx-swap="innerHTML" hx-sync="this:drop">
+     hx-get="/partials/apps/{{.ID}}/status" hx-trigger="every 3s, quasar:seen" hx-swap="innerHTML" hx-sync="this:drop">
   {{template "app_status_panel" .}}
 </div>
 
@@ -180,7 +180,7 @@
   {{/* Like every panel below: drawn with the page when it answered in time
        (see prerender), and otherwise fetched on load behind a placeholder. */}}
   {{$p := pre $ "containers"}}
-  <div hx-get="/partials/apps/{{.ID}}/containers" hx-trigger="{{if not $p}}load, {{end}}every 5s [quasarSeen(this)], quasar:seen" hx-swap="innerHTML">
+  <div hx-get="/partials/apps/{{.ID}}/containers" hx-trigger="{{if not $p}}load, {{end}}every 5s, quasar:seen" hx-swap="innerHTML">
     {{if $p}}{{$p}}{{else}}<div class="card h-20 animate-pulse"></div>{{end}}
   </div>
 </section>
@@ -196,7 +196,7 @@
 <section class="mt-8">
   <h2 class="h-label mb-3">Container resources</h2>
   {{$p := pre $ "stats"}}
-  <div hx-get="/partials/apps/{{.ID}}/stats" hx-trigger="{{if not $p}}load, {{end}}every 5s [quasarSeen(this)], quasar:seen" hx-swap="innerHTML">
+  <div hx-get="/partials/apps/{{.ID}}/stats" hx-trigger="{{if not $p}}load, {{end}}every 5s, quasar:seen" hx-swap="innerHTML">
     {{if $p}}{{$p}}{{else}}<div class="card h-20 animate-pulse"></div>{{end}}
   </div>
   {{/* The same picker the dashboard's history carries, over this
@@ -206,7 +206,7 @@
     {{template "metrics_range" (dict "ID" "app-metrics" "URL" (printf "/partials/apps/%s/metrics" .ID) "Measurements" $.Measurements)}}
   </div>
   {{$p := pre $ "metrics"}}
-  <div id="app-metrics-cards" hx-get="/partials/apps/{{.ID}}/metrics" hx-trigger="{{if not $p}}load, {{end}}every 60s [quasarSeen(this)], quasar:seen"
+  <div id="app-metrics-cards" hx-get="/partials/apps/{{.ID}}/metrics" hx-trigger="{{if not $p}}load, {{end}}every 60s, quasar:seen"
        hx-include="#app-metrics-range" hx-swap="innerHTML">
     {{if $p}}{{$p}}{{else}}
     <div class="metrics-grid">
@@ -445,7 +445,7 @@
 <section class="mt-8">
   <h2 class="h-label mb-3">Deployment history</h2>
   {{$p := pre $ "deployments"}}
-  <div hx-get="/partials/apps/{{.ID}}/deployments" hx-trigger="{{if not $p}}load, {{end}}every 5s [quasarSeen(this)], quasar:seen" hx-swap="innerHTML">
+  <div hx-get="/partials/apps/{{.ID}}/deployments" hx-trigger="{{if not $p}}load, {{end}}every 5s, quasar:seen" hx-swap="innerHTML">
     {{if $p}}{{$p}}{{else}}<div class="card h-16 animate-pulse"></div>{{end}}
   </div>
 </section>
