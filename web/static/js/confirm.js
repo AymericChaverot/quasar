@@ -123,4 +123,18 @@
     }
     ask(question, trigger, function () { e.detail.issueRequest(true); });
   });
+
+  // Nothing on the page moves while a question is up. The buttons that ask
+  // live in polled panels, and a poll landing behind the dialog replaced the
+  // very button waiting for its answer: htmx will not send a request for an
+  // element no longer in the page, so the yes went nowhere. A poll is only
+  // ever a read, and the next one after the answer catches up.
+  document.addEventListener("htmx:beforeRequest", function (e) {
+    if (dialog.open) e.preventDefault();
+  });
+  document.addEventListener("htmx:beforeSwap", function (e) {
+    if (dialog.open && e.detail.requestConfig && e.detail.requestConfig.verb === "get") {
+      e.detail.shouldSwap = false;
+    }
+  });
 })();
