@@ -44,6 +44,11 @@ type Client struct {
 
 	mu   sync.Mutex
 	runs map[string]*deployRun // app ID -> in-flight/last deploy
+
+	// The latest CPU reading of each container sampled, by ID; see
+	// StatsByName.
+	cpuMu      sync.Mutex
+	cpuSamples map[string]cpuSample
 }
 
 // DeployState is the part of a deploy the status panel and the API care about:
