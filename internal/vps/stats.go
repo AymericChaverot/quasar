@@ -4,9 +4,6 @@
 package vps
 
 import (
-	"time"
-
-	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/mem"
 )
@@ -21,12 +18,13 @@ type Stats struct {
 	DiskTotalGB float64
 }
 
-// Collect samples CPU over 500ms and reads current memory/disk usage.
+// Collect reads CPU use since the previous reading (see cpu.go) and current
+// memory/disk usage.
 func Collect(hostRoot string) (Stats, error) {
 	var s Stats
 
-	if pcts, err := cpu.Percent(500*time.Millisecond, false); err == nil && len(pcts) > 0 {
-		s.CPUPercent = pcts[0]
+	if pct, err := hostCPU.read(); err == nil {
+		s.CPUPercent = pct
 	}
 
 	if vm, err := mem.VirtualMemory(); err == nil {
