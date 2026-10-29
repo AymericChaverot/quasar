@@ -48,15 +48,12 @@ func ListAudit(db *sql.DB, query string, limit int) ([]*AuditEntry, error) {
 // ListAuditPage is ListAudit past the offset newest matches: the Audit page
 // reads the trail a page at a time.
 func ListAuditPage(db *sql.DB, query string, limit, offset int) ([]*AuditEntry, error) {
+	where, args := auditFilter(query)
 	rows, err := db.Query(`
 		SELECT id, ts, actor, action, target, detail, ip
-		FROM audit_log
-		WHERE ? = ''
-		   OR actor LIKE '%' || ? || '%'
-		   OR action LIKE '%' || ? || '%'
-		   OR target LIKE '%' || ? || '%'
+		FROM audit_log`+where+`
 		ORDER BY id DESC
-		LIMIT ? OFFSET ?`, query, query, query, query, limit, offset)
+		LIMIT ? OFFSET ?`, append(args, limit, offset)...)
 	if err != nil {
 		return nil, err
 	}
@@ -84,12 +81,18 @@ func PruneAudit(db *sql.DB) error {
 // CountAudit is how many entries ListAudit would find with no limit.
 func CountAudit(db *sql.DB, query string) (int, error) {
 	var n int
-	err := db.QueryRow(`
-		SELECT COUNT(*)
-		FROM audit_log
-		WHERE ? = ''
-		   OR actor LIKE '%' || ? || '%'
-		   OR action LIKE '%' || ? || '%'
-		   OR target LIKE '%' || ? || '%'`, query, query, query, query).Scan(&n)
+	where, args := auditFilter(query)
+	err := db.QueryRow(`SELECT COUNT(*) FROM audit_log`+where, args...).Scan(&n)
 	return n, err
+}
+
+// auditFilter is the WHERE clause for a search, and nothing at all without
+// one, which is what lets an unfiltered page be read straight off the key.
+func auditFilter(query string) (string, []any) {
+	if query == "" {
+		return "", nil
+	}
+	p := containsPattern(query)
+	return ` WHERE actor LIKE ? ESCAPE '\' OR action LIKE ? ESCAPE '\' OR target LIKE ? ESCAPE '\'`,
+		[]any{p, p, p}
 }

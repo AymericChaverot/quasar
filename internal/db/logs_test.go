@@ -178,12 +178,16 @@ func TestCountLogsMatchesTheSearch(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	AppendLogs(database, "app1", []LogEntry{{Line: "hello"}, {Line: "an error"}})
-	AppendLogs(database, "app2", []LogEntry{{Line: "another error"}})
+	AppendLogs(database, "app1", []LogEntry{{Line: "hello"}, {Line: "an error"}, {Line: "disk at 50% for user_id 7"}})
+	AppendLogs(database, "app2", []LogEntry{{Line: "another error"}, {Line: "disk at 500 for userXid"}})
 	for _, tc := range []struct {
 		app, query string
 		want       int
-	}{{"", "", 3}, {"app1", "", 2}, {"", "error", 2}, {"app2", "hello", 0}} {
+	}{
+		{"", "", 5}, {"app1", "", 3}, {"", "error", 2}, {"app2", "hello", 0},
+		// Wildcards in a search are the characters themselves.
+		{"", "50%", 1}, {"", "user_id", 1}, {"", `\`, 0},
+	} {
 		if n, err := CountLogs(database, tc.app, tc.query); err != nil || n != tc.want {
 			t.Errorf("CountLogs(%q, %q) = %d, %v; want %d", tc.app, tc.query, n, err, tc.want)
 		}

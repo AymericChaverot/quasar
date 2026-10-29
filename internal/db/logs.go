@@ -169,8 +169,8 @@ func logFilter(appID, query string) (string, []any) {
 		args = append(args, appID)
 	}
 	if query != "" {
-		conds = append(conds, "line LIKE '%' || ? || '%'")
-		args = append(args, query)
+		conds = append(conds, `line LIKE ? ESCAPE '\'`)
+		args = append(args, containsPattern(query))
 	}
 	if len(conds) == 0 {
 		return "", nil
