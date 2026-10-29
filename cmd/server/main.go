@@ -169,7 +169,7 @@ func serve(ln net.Listener, handler http.Handler) {
 	// deploy progress — and the shutdown does not sit out its whole grace
 	// period waiting for them.
 	base, endStreams := context.WithCancel(context.Background())
-	hs := &http.Server{Handler: handler, BaseContext: func(net.Listener) context.Context { return base }}
+	hs := newHTTPServer(handler, base)
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
 	served := make(chan error, 1)
@@ -188,6 +188,22 @@ func serve(ln net.Listener, handler http.Handler) {
 			event.Warning("shutdown", "closed the requests still open after "+shutdownGrace.String())
 		}
 		event.Info("shutdown", "stopped in "+event.Duration(time.Since(started)))
+	}
+}
+
+// newHTTPServer is the server the dashboard listens with.
+//
+// A connection that never finishes sending its headers, or sits open doing
+// nothing, is given up on — otherwise anyone could hold connections open by
+// the thousand for the price of a few bytes each. The body and the response
+// are left unbounded: an archive being restored takes as long as it takes to
+// upload, and a log stream or a terminal is meant to stay open.
+func newHTTPServer(handler http.Handler, base context.Context) *http.Server {
+	return &http.Server{
+		Handler:           handler,
+		BaseContext:       func(net.Listener) context.Context { return base },
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
 	}
 }
 
