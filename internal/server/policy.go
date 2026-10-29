@@ -48,8 +48,12 @@ func pagePolicy(w http.ResponseWriter) string {
 	return nonce
 }
 
+// newNonce draws a nonce in the URL-safe alphabet, which the policy's grammar
+// accepts as well: "+" and "/" are characters html/template may write as
+// entities inside an attribute, and the nonce should reach the page exactly
+// as the header spells it.
 func newNonce() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b) // crypto/rand.Read does not fail; see its documentation
-	return base64.RawStdEncoding.EncodeToString(b)
+	return base64.RawURLEncoding.EncodeToString(b)
 }

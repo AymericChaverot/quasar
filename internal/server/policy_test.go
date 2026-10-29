@@ -51,3 +51,15 @@ func TestPagesCarryTheirPolicyAndItsNonce(t *testing.T) {
 		t.Error("two pages were sent the same nonce")
 	}
 }
+
+// A nonce is drawn from letters, digits, "-" and "_" only: html/template may
+// write "+" or "/" as an entity in the attribute, and the page would then
+// carry a different spelling of it than the header.
+func TestNoncesNeedNoEscaping(t *testing.T) {
+	plain := regexp.MustCompile(`^[A-Za-z0-9_-]{22}$`)
+	for range 1000 {
+		if n := newNonce(); !plain.MatchString(n) {
+			t.Fatalf("nonce %q", n)
+		}
+	}
+}
