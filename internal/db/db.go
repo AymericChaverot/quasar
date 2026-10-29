@@ -313,16 +313,36 @@ var migrations = []string{
 	"ALTER TABLE apps ADD COLUMN log_color TEXT NOT NULL DEFAULT ''",
 }
 
+// maxConns is how many connections the pool keeps: enough for the polls of a
+// few open tabs to read beside a writer, and few enough that each one's page
+// cache stays a small cost.
+const maxConns = 4
+
 func Open(path string) (*sql.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
+	// Every connection the pool opens is set up the same way, from here.
+	//
+	// WAL lets reads run beside the one write SQLite allows at a time, which
+	// is what the pool below is for: a search through every stored log line
+	// used to hold the only connection, and the dashboard's polls and the log
+	// writer queued behind it. Writers still take turns, inside SQLite rather
+	// than in the pool: a write waits for the one in progress (busy_timeout),
+	// and a transaction takes the write lock when it begins (_txlock) rather
+	// than when it first writes, since one that read first and then found the
+	// lock taken would fail at once instead of waiting.
+	//
+	// synchronous=NORMAL is the setting WAL is meant to run with: a commit is
+	// durable once the log is synced at a checkpoint, and the database can
+	// never be left corrupt — only the last moments before a power cut lost.
+	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(15000)"+
+		"&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_txlock=immediate")
 	if err != nil {
 		return nil, err
 	}
-	// SQLite handles one writer at a time; a single connection avoids SQLITE_BUSY.
-	db.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(maxConns)
+	db.SetMaxIdleConns(maxConns)
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close() // the schema error is the one worth returning
 		return nil, err

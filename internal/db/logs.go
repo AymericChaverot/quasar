@@ -117,9 +117,8 @@ const MaxLogRowsPerApp = 50_000
 
 // PruneLogs enforces the per-app row cap, keeping the newest lines.
 func PruneLogs(database *sql.DB) error {
-	// The app IDs are collected before any delete runs: the pool is limited to
-	// a single connection, so writing while a query is still open would
-	// deadlock against the reader holding it.
+	// The app IDs are collected before any delete runs, so no delete is made
+	// under a read still in progress.
 	rows, err := database.Query("SELECT DISTINCT app_id FROM app_logs")
 	if err != nil {
 		return err

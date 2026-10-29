@@ -77,7 +77,8 @@ func AssignLogColors(db *sql.DB) error {
 
 // appsByLogColor splits the applications, oldest first, into those with no
 // colour yet and the colours the others already have. The rows are read to
-// the end before anything is written: the pool is a single connection.
+// the end before anything is written, so no write is made under a read still
+// in progress.
 func appsByLogColor(db *sql.DB) (uncolored, taken []string, err error) {
 	rows, err := db.Query("SELECT id, log_color FROM apps ORDER BY created_at, rowid")
 	if err != nil {
