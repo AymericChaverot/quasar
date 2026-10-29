@@ -4,6 +4,8 @@ import (
 	"html"
 	"html/template"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,12 +20,18 @@ const logPageSize = 100
 // handleLogsPage renders the cross-app log search page.
 func (s *Server) handleLogsPage(w http.ResponseWriter, r *http.Request) {
 	apps, _ := db.ListApps(s.db, s.keyring)
+	app, q, page := r.URL.Query().Get("app"), r.URL.Query().Get("q"), pageOf(r)
+	results := "/partials/logs?" + url.Values{"app": {app}, "q": {q}, "page": {strconv.Itoa(page)}}.Encode()
 	s.render(w, r, "logs", map[string]any{
 		"Title": "Logs",
 		"Apps":  apps,
-		"App":   r.URL.Query().Get("app"),
-		"Query": r.URL.Query().Get("q"),
-		"Page":  pageOf(r),
+		"App":   app,
+		"Query": q,
+		"Page":  page,
+		// The page of lines, drawn with the page rather than after it: a
+		// search over every stored line that is slow to answer is the one
+		// case left to arrive on its own.
+		"Pre": s.prerender(r, map[string]string{"results": results}),
 	})
 }
 

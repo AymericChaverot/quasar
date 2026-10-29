@@ -6,9 +6,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"quasar/internal/db"
+	"quasar/internal/secrets"
 )
 
 // The panels that answer in time are drawn with the page; one that is slow or
@@ -85,5 +89,39 @@ func TestDashboardDrawsPrerenderedPanels(t *testing.T) {
 	without := render(nil)
 	if strings.Count(without, `hx-trigger="load,`) != 4 || !strings.Contains(without, "animate-pulse") {
 		t.Error("without its panels the dashboard does not fall back to placeholders")
+	}
+}
+
+// The Logs page arrives with its first page of lines in it, fetched through
+// the same route and session the page's own search uses.
+func TestLogsPageArrivesWithItsLines(t *testing.T) {
+	s, r, _ := signedIn(t)
+	s.guards, s.mux = map[string]string{}, http.NewServeMux()
+	s.routes()
+	k, err := secrets.LoadOrCreateKey(filepath.Join(t.TempDir(), "master.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.keyring = k
+	if err := db.InsertApp(s.db, k, &db.App{ID: "a1", Name: "Web", Subdomain: "web", DeployType: "image", ImageRef: "nginx"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AppendLogs(s.db, "a1", []db.LogEntry{{Line: "hello from the first paint"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	page := httptest.NewRequest("GET", "/logs?app=a1", nil)
+	for _, c := range r.Cookies() {
+		page.AddCookie(c)
+	}
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, page)
+	body := w.Body.String()
+	if w.Code != 200 || !strings.Contains(body, "hello from the first paint") {
+		t.Fatalf("the page came without its lines (%d)", w.Code)
+	}
+	results := body[strings.Index(body, `id="log-results"`):]
+	if tag := results[:strings.Index(results, ">")]; strings.Contains(tag, "hx-trigger") {
+		t.Errorf("drawn results still fetch themselves: %s", tag)
 	}
 }

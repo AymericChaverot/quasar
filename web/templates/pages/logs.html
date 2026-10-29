@@ -20,7 +20,8 @@
   <button type="submit" class="btn-primary">Search</button>
 </form>
 
-<div id="log-results" hx-get="/partials/logs?app={{.App | urlquery}}&q={{.Query | urlquery}}&page={{.Page}}" hx-trigger="load" hx-swap="innerHTML">
-  <div class="card h-20 animate-pulse"></div>
+{{$p := pre . "results"}}
+<div id="log-results"{{if not $p}} hx-get="/partials/logs?app={{.App | urlquery}}&q={{.Query | urlquery}}&page={{.Page}}" hx-trigger="load" hx-swap="innerHTML"{{end}}>
+  {{if $p}}{{$p}}{{else}}<div class="card h-20 animate-pulse"></div>{{end}}
 </div>
 {{end}}
