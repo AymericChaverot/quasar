@@ -242,6 +242,12 @@ func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyri
 			if err := db.PruneAppSizes(database, time.Now().Add(-seriesRetention)); err != nil {
 				log.Printf("monitor: trimming the application sizes: %v", err)
 			}
+			// Stored output and the audit trail go after however long the
+			// Settings page says, which the operator may have changed since
+			// the last hour.
+			if err := db.PruneRetained(database, time.Now()); err != nil {
+				log.Printf("monitor: trimming stored output and the audit trail: %v", err)
+			}
 			if err := db.PruneLogs(database); err != nil {
 				log.Printf("monitor: trimming stored output: %v", err)
 			}
