@@ -100,6 +100,34 @@
   </button>
   {{end}}
 </div>
+{{/* Before anything is drawn, the strip is put in the state tabs.js would
+     leave it in once it ran: the advanced tabs out if they were asked for,
+     and the tab the address names open. Without it, the page was drawn on its
+     first tab and then jumped to the one in the link, with the strip growing
+     its advanced tabs as it went. The panes are not parsed yet, so the one to
+     show is shown by a sheet tabs.js removes once it has set them itself. */}}
+<script>
+(function () {
+  var strip = document.currentScript.previousElementSibling;
+  var unlock = strip.querySelector("#advanced-unlock");
+  try {
+    if (unlock && localStorage.getItem("quasar.advanced." + unlock.dataset.app) === "1") {
+      strip.querySelectorAll(".page-tab.is-advanced").forEach(function (t) { t.classList.remove("hidden"); });
+      unlock.hidden = true;
+    }
+  } catch (e) {}
+  var id = location.hash.slice(1);
+  if (!id || !strip.querySelector('.page-tab[data-tab="' + CSS.escape(id) + '"]')) return;
+  strip.querySelectorAll(".page-tab").forEach(function (t) {
+    t.classList.toggle("is-on", t.dataset.tab === id);
+    t.setAttribute("aria-selected", t.dataset.tab === id);
+  });
+  var sheet = document.createElement("style");
+  sheet.id = "tab-first";
+  sheet.textContent = '.page-pane{display:none!important}.page-pane[data-pane="' + CSS.escape(id) + '"]{display:block!important}';
+  document.head.appendChild(sheet);
+})();
+</script>
 
 {{if $.Station}}
 {{/* The station this application was deployed from: a control surface somebody

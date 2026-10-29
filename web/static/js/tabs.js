@@ -49,6 +49,10 @@
 
   fromHash();
   addEventListener("hashchange", fromHash);
+  // The panes are set now; the sheet that showed the right one before this
+  // ran (see the script under the strip) has done its work.
+  var first = document.getElementById("tab-first");
+  if (first) first.remove();
 })();
 
 // The gate in front of the advanced tabs, on an application deployed from a
