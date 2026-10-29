@@ -49,6 +49,10 @@ type Client struct {
 	// StatsByName.
 	cpuMu      sync.Mutex
 	cpuSamples map[string]cpuSample
+
+	// The last disk usage read for the System page; see Storage.
+	storageMu sync.Mutex
+	storage   storageReading
 }
 
 // DeployState is the part of a deploy the status panel and the API care about:

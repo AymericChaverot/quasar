@@ -21,11 +21,17 @@ type fakeDaemon struct {
 	started    map[string]string // container ID -> StartedAt
 	lists      atomic.Int32
 	inspects   atomic.Int32
+	diskUsages atomic.Int32
 }
 
 func (f *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path[strings.Index(r.URL.Path[1:], "/")+1:] // drop /v1.xx
 	switch {
+	case path == "/system/df":
+		f.diskUsages.Add(1)
+		_, _ = w.Write([]byte(`{"LayersSize": 1000, "Images": [], "Containers": [], "Volumes": [], "BuildCache": []}`))
+	case path == "/networks":
+		_, _ = w.Write([]byte(`[]`))
 	case path == "/containers/json":
 		f.lists.Add(1)
 		var want string

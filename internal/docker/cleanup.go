@@ -399,12 +399,44 @@ type Storage struct {
 	Cleanup CleanupScan
 }
 
+// storageFresh is how long a Storage reading is given out again. Docker's disk
+// usage walks every image, layer and volume and can take seconds on a busy
+// server; the System page asked for it on every visit and every reload. A
+// sweep forgets it at once, so what a sweep freed is never hidden behind it.
+const storageFresh = 30 * time.Second
+
 func (c *Client) Storage(ctx context.Context, appIDs []string) (Storage, error) {
+	key := strings.Join(appIDs, ",")
+	c.storageMu.Lock()
+	cached := c.storage
+	c.storageMu.Unlock()
+	if cached.key == key && !cached.at.IsZero() && time.Since(cached.at) < storageFresh {
+		return cached.val, nil
+	}
+
 	s, err := c.resolve(ctx, appIDs)
 	if err != nil {
 		return Storage{}, err
 	}
-	return Storage{Usage: s.usage, Cleanup: s.scan()}, nil
+	st := Storage{Usage: s.usage, Cleanup: s.scan()}
+	c.storageMu.Lock()
+	c.storage = storageReading{key: key, at: time.Now(), val: st}
+	c.storageMu.Unlock()
+	return st, nil
+}
+
+// storageReading is the last Storage, for the application IDs it was read
+// against: the same objects are reclaimable or not depending on them.
+type storageReading struct {
+	key string
+	at  time.Time
+	val Storage
+}
+
+func (c *Client) forgetStorage() {
+	c.storageMu.Lock()
+	c.storage = storageReading{}
+	c.storageMu.Unlock()
 }
 
 func (s sweep) scan() CleanupScan {
@@ -754,6 +786,7 @@ const cleanupStalls = 2
 // endpoints, which take no exclusions: the whole difference between this and
 // `docker system prune -a` is what it refuses to touch.
 func (c *Client) Cleanup(ctx context.Context, appIDs []string, opts CleanupOptions) (CleanupReport, error) {
+	defer c.forgetStorage()
 	before, err := c.api.DiskUsage(ctx, types.DiskUsageOptions{})
 	if err != nil {
 		return CleanupReport{}, err
