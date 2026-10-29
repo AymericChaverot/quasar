@@ -210,7 +210,7 @@
     <div class="station-cell station-{{if .Width}}{{.Width}}{{else}}full{{end}}"
          id="station-panel-{{.ID}}"
          hx-get="/apps/{{$app}}/station/panel/{{.ID}}"
-         hx-trigger="load, {{stationRefreshAll}} from:body, {{stationRefresh .ID}} from:body{{if .Refresh.Seconds}}, every {{.Refresh.Seconds}}s{{end}}"
+         hx-trigger="load, {{stationRefreshAll}} from:body, {{stationRefresh .ID}} from:body{{if .Refresh.Seconds}}, every {{.Refresh.Seconds}}s [quasarSeen(this)], quasar:seen{{end}}"
          hx-swap="innerHTML"></div>
     {{end}}
   </div>
@@ -238,7 +238,7 @@
 {{define "station_job"}}
 <div class="card mb-4 p-4"
      {{if .Running}}hx-get="/apps/{{.AppID}}/station/job/{{.Action}}"
-     hx-trigger="every 1s" hx-swap="outerHTML"{{end}}>
+     hx-trigger="every 1s [quasarSeen(this)], quasar:seen" hx-swap="outerHTML"{{end}}>
   <p class="flex items-center gap-2 text-sm font-medium">
     {{.Action}}
     {{if .Running}}<span class="badge badge-warn">running · {{.Elapsed}}</span>

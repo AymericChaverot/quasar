@@ -30,7 +30,7 @@
 
 <section>
   <h2 class="h-label mb-3">Container resources</h2>
-  <div hx-get="/partials/apps/{{$app.ID}}/containers/{{.Name}}/stats" hx-trigger="load, every 5s" hx-swap="innerHTML">
+  <div hx-get="/partials/apps/{{$app.ID}}/containers/{{.Name}}/stats" hx-trigger="load, every 5s [quasarSeen(this)], quasar:seen" hx-swap="innerHTML">
     <div class="card h-20 animate-pulse"></div>
   </div>
 </section>

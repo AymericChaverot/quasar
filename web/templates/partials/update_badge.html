@@ -10,7 +10,7 @@
      div and the header keeps its shape. */}}
 {{define "update_badge"}}
 <div id="update-badge" class="flex items-center"
-     hx-get="/partials/update-badge" hx-trigger="every 60s" hx-swap="outerHTML">
+     hx-get="/partials/update-badge" hx-trigger="every 60s [quasarSeen(this)], quasar:seen" hx-swap="outerHTML">
   {{if and .IsAdmin .UpdateAvail}}
   <form method="post" action="/system/update/apply"
         data-confirm="Update the dashboard to {{.Latest}}? Applications keep running; the dashboard restarts briefly.">
