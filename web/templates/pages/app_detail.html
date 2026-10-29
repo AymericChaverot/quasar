@@ -106,7 +106,7 @@
      first tab and then jumped to the one in the link, with the strip growing
      its advanced tabs as it went. The panes are not parsed yet, so the one to
      show is shown by a sheet tabs.js removes once it has set them itself. */}}
-<script>
+<script nonce="{{$.Nonce}}">
 (function () {
   var strip = document.currentScript.previousElementSibling;
   var unlock = strip.querySelector("#advanced-unlock");

@@ -589,6 +589,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, dat
 	if data == nil {
 		data = map[string]any{}
 	}
+	data["Nonce"] = pagePolicy(w)
 	data["Theme"] = themeFrom(r)
 	data["Version"] = version.Version
 	data["Nav"] = navSection(r.URL.Path)

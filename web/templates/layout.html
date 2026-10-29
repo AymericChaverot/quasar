@@ -8,7 +8,7 @@
   <link rel="icon" href="/static/favicon.svg">
   {{/* Before anything is drawn, so a reader who turned log colours or
        backgrounds off never sees them flash on; log-toggles.js explains. */}}
-  <script>try { if (localStorage.getItem("quasar.logBackgrounds") === "off") document.documentElement.dataset.logBg = "off"; if (localStorage.getItem("quasar.logColors") === "off") document.documentElement.dataset.logColors = "off"; } catch (e) {}</script>
+  <script nonce="{{.Nonce}}">try { if (localStorage.getItem("quasar.logBackgrounds") === "off") document.documentElement.dataset.logBg = "off"; if (localStorage.getItem("quasar.logColors") === "off") document.documentElement.dataset.logColors = "off"; } catch (e) {}</script>
   {{/* The two faces the interface is actually set in. Without these the
        browser only discovers them after parsing themes.css, and the first
        paint lands in a fallback face at a different width. */}}
