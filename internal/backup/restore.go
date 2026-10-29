@@ -3,6 +3,7 @@ package backup
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -102,12 +103,21 @@ func Restore(database *sql.DB, appsDir, dir, name string, live, archiveKey *secr
 // restoreTables copies whole tables from the snapshot into the live DB inside
 // one transaction. Tables whose schema differs (older backups) are skipped.
 func restoreTables(database *sql.DB, snapPath string) error {
-	if _, err := database.Exec("ATTACH DATABASE ? AS restore_src", snapPath); err != nil {
+	// An attached database belongs to the connection that attached it, and the
+	// pool has several: the attach, the copy and the detach all go through the
+	// one held here.
+	ctx := context.Background()
+	conn, err := database.Conn(ctx)
+	if err != nil {
 		return err
 	}
-	defer database.Exec("DETACH DATABASE restore_src")
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "ATTACH DATABASE ? AS restore_src", snapPath); err != nil {
+		return err
+	}
+	defer conn.ExecContext(ctx, "DETACH DATABASE restore_src")
 
-	tx, err := database.Begin()
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
