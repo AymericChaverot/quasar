@@ -58,4 +58,16 @@ See [what a station is](/stations/overview/).
 | **Traefik** | Routes each domain to its application, and gets the certificates. |
 | **Socket proxy** | Limits what the dashboard can ask Docker to do. |
 
+```mermaid
+graph TD
+  B[Browser] --> T[Traefik]
+  T -->|app.your-domain.com| A[Applications]
+  T -->|admin.your-domain.com| D[Dashboard]
+  D --> P[Socket proxy]
+  T -.->|reads the routes| P
+  P --> K[Docker]
+```
+
+Neither the dashboard nor Traefik holds the Docker socket: both go through the proxy.
+
 Everything lives in `/opt/quasar`. See [files on the server](/reference/server-layout/).

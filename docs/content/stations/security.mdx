@@ -7,6 +7,25 @@ A station is code written by someone else, running on your server with the permi
 
 ## Layers
 
+When you click a station's button, everything the script asks for goes back through the dashboard:
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant D as Dashboard
+  participant S as Script process
+  participant C as Container
+  B->>D: Runs an action
+  D->>S: Starts a new process
+  S->>D: quasar.exec('web', [...])
+  D->>D: Checks the permission, logs it
+  D->>C: Runs the command
+  C-->>D: Output
+  D-->>S: {code, stdout, stderr}
+  S-->>D: Data, never HTML
+  D-->>B: Drawn with Quasar's components
+```
+
 1. **Separate process.** The script runs in a new process for each call, with no Docker access, no database, no disk and no network. Every request goes through the dashboard, which checks it against the permissions. Escaping the JavaScript engine gains nothing.
 2. **No markup.** The script returns data, never HTML, so it can't inject anything into the dashboard.
 3. **Nothing by default.** A station gets only the permissions it declared and you accepted.
