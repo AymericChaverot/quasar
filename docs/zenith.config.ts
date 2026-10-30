@@ -8,10 +8,16 @@ export default defineConfig({
   base: '/docs',
   title: 'Quasar Documentation',
   logo: { src: './theme/logo.svg', alt: 'Quasar' },
+  // The site's chartreuse as is on dark backgrounds; darkened on light ones, where
+  // #d4e815 would not be readable as link text.
+  accent: { dark: '#d4e815', light: 'oklch(52% 0.13 115)' },
   description: 'Documentation for Quasar, a self-hosted mini-PaaS in Go.',
   github: 'https://github.com/AymericChaverot/quasar',
   links: [{ label: 'Website', href: site }],
-  customCss: ['./theme/accent.css', './theme/icons.css'],
+  customCss: ['./theme/icons.css'],
+  // The logo with its colors written out: social images can't resolve the
+  // stylesheet variables the site's logo relies on.
+  og: { logo: { src: './theme/og-logo.svg' } },
   openapi: {
     quasar: './openapi/quasar.yaml',
   },
