@@ -21,6 +21,16 @@ Two of these can be turned off in `/opt/quasar/docker-compose.yml`:
 - Two-factor authentication is available for every account. See [users](/server/users/).
 - An address that fails too many sign-ins is refused for a while. See [sign-in protection](/server/users/#sign-in-protection).
 
+## Pages
+
+Every page of the dashboard is sent with a strict Content-Security-Policy. If some text ever got past the escaping meant to stop it (an application's name, a log line, a station's label), it would still be shown, but nothing in it would run:
+
+- Scripts only come from the dashboard itself, or are inline scripts carrying a nonce drawn for that response.
+- Nothing is evaluated from a string, and the page only talks to the dashboard.
+- Another site can't frame the dashboard (`frame-ancestors 'self'`, `X-Frame-Options: SAMEORIGIN`).
+
+Every script the dashboard uses, htmx and the terminal included, is served from the binary: no page loads anything from a CDN.
+
 ## Secrets
 
 - Environment variables, compose files and Git tokens are encrypted in the database.
