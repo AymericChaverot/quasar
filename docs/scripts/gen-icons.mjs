@@ -3,7 +3,7 @@
  *
  * ZenithDocs shows an icon beside a page only when the page names one from its
  * own set, and that set is smaller than this documentation has pages. Sections
- * name theirs in meta.json, which 0.2.1 draws beside an always-open group; the
+ * name theirs in meta.json, which ZenithDocs draws beside the folder title; the
  * pages are matched here on the URL they link to and given a mask, so the
  * drawing takes the text colour and the hover and current-page states keep
  * working untouched.

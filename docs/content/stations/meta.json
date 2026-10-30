@@ -1,7 +1,6 @@
 {
   "title": "Stations",
   "icon": "layers",
-  "collapsible": false,
   "pages": [
     "overview",
     "installing",

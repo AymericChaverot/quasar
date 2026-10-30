@@ -1,0 +1,48 @@
+---
+title: Applications
+description: Deploy containerised apps, give them a domain, and keep them running.
+---
+
+An application is one container or one compose stack, served on a subdomain of its own with HTTPS. Start with deploying one; each of the other pages covers one part of its page in the dashboard.
+
+## Deploying
+
+<Cards>
+  <Card title="Deploying an application" href="/applications/deploying/" icon="rocket">
+    From an image, a Git repository or a compose file, and what Redeploy and Update do.
+  </Card>
+  <Card title="Compose stacks" href="/applications/compose/" icon="component">
+    How Quasar runs a docker-compose.yml behind Traefik.
+  </Card>
+  <Card title="Domains and TLS" href="/applications/domains-tls/" icon="cloud">
+    Subdomains, custom domains, and HTTPS certificates.
+  </Card>
+</Cards>
+
+## Configuring
+
+<Cards>
+  <Card title="Environment variables" href="/applications/environment/" icon="sliders">
+    Set an application's environment, and how it reaches compose stacks.
+  </Card>
+  <Card title="Storage" href="/applications/storage/" icon="folder">
+    Keep an application's data, browse it, and back up databases safely.
+  </Card>
+  <Card title="Resources and health checks" href="/applications/resources-health/" icon="zap">
+    Limit CPU and memory, watch usage, and restart apps that stop answering.
+  </Card>
+  <Card title="Access protection" href="/applications/protection/" icon="settings">
+    Put a sign-in page in front of an app, limit request rates, and restrict addresses.
+  </Card>
+</Cards>
+
+## Running
+
+<Cards>
+  <Card title="Logs and history" href="/applications/logs-history/" icon="list">
+    Read an application's logs, and roll back a deployment.
+  </Card>
+  <Card title="Webhooks, tasks and terminal" href="/applications/automation/" icon="terminal">
+    Deploy on push, run commands on a schedule, and open a shell in a container.
+  </Card>
+</Cards>
