@@ -1,6 +1,6 @@
 # Quasar
 
-A self-hosted, very small mini-PaaS in Go. From a blank Linux VPS to a working
+A self-hosted platform in Go. From a blank Linux VPS to a working
 platform in one command: an admin dashboard on `admin.your-domain.com`, and
 containerised applications deployed on subdomains of their own with automatic
 TLS (Traefik v3 + Let's Encrypt).

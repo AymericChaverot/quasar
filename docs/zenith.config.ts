@@ -11,7 +11,7 @@ export default defineConfig({
   // The site's chartreuse as is on dark backgrounds; darkened on light ones, where
   // #d4e815 would not be readable as link text.
   accent: { dark: '#d4e815', light: 'oklch(52% 0.13 115)' },
-  description: 'Documentation for Quasar, a self-hosted mini-PaaS in Go.',
+  description: 'Documentation for Quasar, a self-hosted platform in Go.',
   github: 'https://github.com/AymericChaverot/quasar',
   links: [{ label: 'Website', href: site }],
   customCss: ['./theme/icons.css'],
