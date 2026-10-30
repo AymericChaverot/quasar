@@ -18,6 +18,8 @@ export default defineConfig({
   // The logo with its colors written out: social images can't resolve the
   // stylesheet variables the site's logo relies on.
   og: { logo: { src: './theme/og-logo.svg' } },
+  // The site publishes these pages on every tag, so a broken link stops the build.
+  linkValidation: 'error',
   openapi: {
     quasar: './openapi/quasar.yaml',
   },
