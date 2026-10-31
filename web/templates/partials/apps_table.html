@@ -79,6 +79,10 @@
             <a href="{{.URL}}" target="_blank" rel="noopener" title="{{.Label}}"
                aria-label="Repository {{.Label}}" class="link inline-flex items-center">{{template "forge_icon" .Forge}}</a>
             {{end}}
+            {{with .Image}}
+            <a href="{{.URL}}" target="_blank" rel="noopener" title="{{.Label}}{{with .Tag}}:{{.}}{{end}}"
+               aria-label="Image {{.Label}}" class="link inline-flex items-center">{{template "registry_icon" .Registry}}</a>
+            {{end}}
             {{.DeployType}}
             {{if eq .Build.Mode "compose"}}
             <span class="chip" title="Built as a stack from {{.Build.ComposeFile}}">compose</span>

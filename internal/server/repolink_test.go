@@ -113,6 +113,49 @@ func TestAppsTableLinksRepository(t *testing.T) {
 	}
 }
 
+func TestImageLinkOf(t *testing.T) {
+	cases := []struct {
+		ref  string
+		want ImageLink
+	}{
+		{"nginx", ImageLink{"https://hub.docker.com/_/nginx", "nginx", "", registryDockerHub}},
+		{"nginx:1.27", ImageLink{"https://hub.docker.com/_/nginx", "nginx", "1.27", registryDockerHub}},
+		{"library/redis:7", ImageLink{"https://hub.docker.com/_/redis", "redis", "7", registryDockerHub}},
+		{"acme/api:latest", ImageLink{"https://hub.docker.com/r/acme/api", "acme/api", "latest", registryDockerHub}},
+		{"docker.io/acme/api", ImageLink{"https://hub.docker.com/r/acme/api", "acme/api", "", registryDockerHub}},
+		{"ghcr.io/acme/api:v2", ImageLink{"https://github.com/acme/api/pkgs/container/api", "acme/api", "v2", registryGHCR}},
+		{"ghcr.io/acme/tools/api@sha256:abc", ImageLink{"https://github.com/acme/api/pkgs/container/tools%2Fapi", "acme/tools/api", "", registryGHCR}},
+		{"quay.io/acme/api:1", ImageLink{"https://quay.io/repository/acme/api", "acme/api", "1", registryQuay}},
+	}
+	for _, c := range cases {
+		got, ok := imageLinkOf(c.ref)
+		if !ok || got != c.want {
+			t.Errorf("imageLinkOf(%q) = %+v, %v; want %+v", c.ref, got, ok, c.want)
+		}
+	}
+	for _, ref := range []string{"", "registry.example.com/acme/api", "localhost:5000/api", "ghcr.io/api"} {
+		if got, ok := imageLinkOf(ref); ok {
+			t.Errorf("imageLinkOf(%q) = %+v, want no link", ref, got)
+		}
+	}
+}
+
+// The list links an image app's image from the type column.
+func TestAppsTableLinksImage(t *testing.T) {
+	s := testServer(t)
+	rows := []AppView{{
+		App:    &db.App{ID: "abcd1234", Name: "Blog", Subdomain: "blog", DeployType: "image", ImageRef: "ghcr.io/acme/blog:2"},
+		Domain: "example.com",
+	}}
+	var buf bytes.Buffer
+	if err := s.pages["dashboard"].ExecuteTemplate(&buf, "apps_table", rows); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `href="https://github.com/acme/blog/pkgs/container/blog"`) {
+		t.Error("list does not link the image")
+	}
+}
+
 func TestRepoLinkOnBranch(t *testing.T) {
 	cases := []struct {
 		raw, branch, want string

@@ -76,6 +76,19 @@ func (v AppView) Repo() *RepoLink {
 	return &link
 }
 
+// Image is where an image app's image can be read on its registry, or nil for
+// an app not deployed from one, or from a registry with no page Quasar knows.
+func (v AppView) Image() *ImageLink {
+	if v.DeployType != "image" {
+		return nil
+	}
+	link, ok := imageLinkOf(v.ImageRef)
+	if !ok {
+		return nil
+	}
+	return &link
+}
+
 // basicAuthMinLength is the shortest password accepted for edge protection.
 const basicAuthMinLength = 4
 

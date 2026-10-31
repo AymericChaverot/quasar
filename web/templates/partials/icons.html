@@ -161,6 +161,16 @@
 
 {{define "icon_git"}}<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>{{end}}
 
+{{define "icon_container"}}<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 7.7c0-.6-.4-1.2-.8-1.5l-6.3-3.9a1.72 1.72 0 0 0-1.7 0l-10.3 6c-.5.2-.9.8-.9 1.4v6.6c0 .5.4 1.2.8 1.5l6.3 3.9a1.72 1.72 0 0 0 1.7 0l10.3-6c.5-.3.9-1 .9-1.5Z"/><path d="M10 21.9V14L2.1 9.1"/><path d="m10 14 11.9-6.9"/><path d="M14 19.8v-8.1"/><path d="M18 17.5V9.4"/></svg>{{end}}
+
+{{/* Dispatch for an image link: ImageLink.Registry names the registry. GitHub's
+     container registry gets GitHub's mark, as it is where the image is read. */}}
+{{define "registry_icon"}}
+{{- if eq . "ghcr"}}{{template "icon_github"}}
+{{- else if eq . "quay"}}{{template "icon_box"}}
+{{- else}}{{template "icon_container"}}{{end -}}
+{{end}}
+
 {{/* Dispatch for a repository link: RepoLink.Forge names the forge, this
      draws it, written out for the same reason as file_icon's. */}}
 {{define "forge_icon"}}

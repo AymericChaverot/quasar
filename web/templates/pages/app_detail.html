@@ -30,6 +30,13 @@
       {{template "forge_icon" .Forge}}<span>{{.Label}}</span>{{with $branch}}<span class="muted">· {{.}}</span>{{end}}
     </a>
     {{end}}
+    {{/* The same for an image app: the image on its registry, with its tag. */}}
+    {{with .Image}}
+    <a href="{{.URL}}" target="_blank" rel="noopener" title="{{.URL}}"
+       class="chip chip-name flex items-center gap-1.5">
+      {{template "registry_icon" .Registry}}<span>{{.Label}}</span>{{with .Tag}}<span class="muted">· {{.}}</span>{{end}}
+    </a>
+    {{end}}
     <span class="chip">{{.DeployType}}</span>
     {{/* A git app is two very different deployments behind one label, so the
          one it actually is belongs next to it. */}}
