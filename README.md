@@ -93,7 +93,7 @@ few seconds; applications are untouched.
 
 | Component       | Role |
 |-----------------|------|
-| Go + HTMX + Tailwind | Admin dashboard (single binary, < 50 MB of RAM) |
+| Go + HTMX + Tailwind | Admin dashboard (single binary, < 100 MB of RAM) |
 | Traefik v3      | Reverse proxy, label-based routing, ACME certificates |
 | tecnativa/docker-socket-proxy | Restricted Docker access — the dashboard never mounts the socket |
 | SQLite (modernc, CGO-free) | Metadata in `storage/database.sqlite` |
