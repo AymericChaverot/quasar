@@ -10,25 +10,45 @@
   var button = bell.querySelector(".bell-button");
   var panel = bell.querySelector(".bell-panel");
 
+  // Shown once it is drawn, at its full size: an empty box that then grows
+  // would make the page under it jump.
+  var opening = false;
   function open() {
-    panel.hidden = false;
-    panel.classList.add("is-loading");
+    if (opening) return;
+    opening = true;
     button.setAttribute("aria-expanded", "true");
     htmx.ajax("GET", "/partials/bell", { target: panel, swap: "innerHTML" }).then(function () {
-      panel.classList.remove("is-loading");
+      opening = false;
+      if (button.getAttribute("aria-expanded") === "true") panel.hidden = false;
+    }, function () {
+      opening = false;
+      button.setAttribute("aria-expanded", "false");
     });
   }
 
   function close(focus) {
-    if (panel.hidden) return;
+    if (button.getAttribute("aria-expanded") !== "true") return;
     panel.hidden = true;
     button.setAttribute("aria-expanded", "false");
     if (focus) button.focus();
   }
 
+  // The tabs: every list is in the panel already, one is shown.
+  panel.addEventListener("click", function (e) {
+    var tab = e.target.closest("[data-bell-tab]");
+    if (!tab) return;
+    panel.querySelectorAll("[data-bell-tab]").forEach(function (t) {
+      var on = t === tab;
+      t.classList.toggle("is-on", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+      var list = document.getElementById(t.getAttribute("aria-controls"));
+      if (list) list.hidden = !on;
+    });
+  });
+
   button.addEventListener("click", function () {
-    if (panel.hidden) open();
-    else close(false);
+    if (button.getAttribute("aria-expanded") === "true") close(false);
+    else open();
   });
   document.addEventListener("click", function (e) {
     if (!bell.contains(e.target)) close(false);

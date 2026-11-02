@@ -60,7 +60,6 @@
   /* On a phone the bell is not at the edge: pinned to the screen instead. */
   .bell-panel { position: fixed; top: 3.75rem; right: 1rem; }
 }
-.bell-panel.is-loading { min-height: 6rem; }
 
 .bell-head {
   display: flex;
@@ -88,7 +87,11 @@
 .bell-tab:hover { color: var(--text); }
 .bell-tab.is-on { color: var(--text); border-color: var(--accent); }
 .bell-tab-count { margin-left: 0.3125rem; color: var(--text-faint); font-family: var(--font-mono); font-size: 0.6875rem; }
-.bell-list { max-height: min(26rem, calc(100vh - 12rem)); overflow-y: auto; overscroll-behavior: contain; }
+/* One height whatever the tab holds, so going from a long list to a short
+   one does not pull the panel up under the pointer. */
+.bell-list { height: min(26rem, calc(100vh - 12rem)); overflow-y: auto; overscroll-behavior: contain; }
+.bell-list[hidden] { display: none; }
+.bell-empty { display: flex; flex-direction: column; justify-content: center; height: 100%; }
 .bell-empty { padding: 2.5rem 1rem; text-align: center; font-size: 0.8125rem; color: var(--text-muted); }
 .bell-foot {
   padding: 0.5rem 0.875rem;

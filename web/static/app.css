@@ -4446,9 +4446,6 @@
       right: 1rem;
     }
   }
-  .bell-panel.is-loading {
-    min-height: 6rem;
-  }
   .bell-head {
     display: flex;
     align-items: center;
@@ -4494,11 +4491,18 @@
     font-size: 0.6875rem;
   }
   .bell-list {
-    max-height: min(26rem, calc(100vh - 12rem));
+    height: min(26rem, calc(100vh - 12rem));
     overflow-y: auto;
     overscroll-behavior: contain;
   }
+  .bell-list[hidden] {
+    display: none;
+  }
   .bell-empty {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    height: 100%;
     padding: 2.5rem 1rem;
     text-align: center;
     font-size: 0.8125rem;

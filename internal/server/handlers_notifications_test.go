@@ -82,9 +82,13 @@ func TestTheBellReadsWhatItShows(t *testing.T) {
 	if strings.Contains(panel, "Somebody else") {
 		t.Error("the panel shows somebody else's job")
 	}
-	mine := get("GET", "/partials/bell?origin=mine", "").Body.String()
+	// The three tabs come together; the Mine one lists only the backup.
+	mine := panel[strings.Index(panel, `id="bell-list-2"`):]
 	if strings.Contains(mine, "photos failed") || !strings.Contains(mine, "Backup created") {
 		t.Errorf("the Mine tab: %s", mine)
+	}
+	if strings.Count(panel, `role="tabpanel"`) != 3 || strings.Count(panel, " hidden>") < 2 {
+		t.Error("the panel does not carry its three tabs, one shown")
 	}
 
 	newest, _ := db.Notifications(s.db, user, db.NotificationFilter{Limit: 1})

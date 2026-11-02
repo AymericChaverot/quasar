@@ -139,23 +139,38 @@ func (s *Server) handleBellCount(w http.ResponseWriter, r *http.Request) {
 	s.renderPartial(w, "bell_count", db.UnreadNotifications(s.db, user))
 }
 
-// handleBellPanel is the bell's panel, drawn as it opens and on each tab.
+// BellPanel is the bell's panel: its three tabs, each drawn in full, so
+// going from one to another is showing it rather than asking for it.
+type BellPanel struct {
+	Tabs   []BellTab
+	Unread int
+	// Newest is how far opening the panel marks as read.
+	Newest int64
+}
+
+// BellTab is one of the panel's tabs and what it lists.
+type BellTab struct {
+	Value, Label string
+	Count        int
+	Days         []NotificationDay
+}
+
+// handleBellPanel is the bell's panel, drawn as it opens.
 func (s *Server) handleBellPanel(w http.ResponseWriter, r *http.Request) {
 	user, _, _, _ := s.currentUser(r)
-	v, err := s.notificationsFor(user, db.NotificationFilter{Origin: notificationOrigin(r), Limit: bellPanelSize})
-	if err != nil {
-		http.Error(w, "the notifications could not be read", http.StatusInternalServerError)
-		return
-	}
-	counts := map[string]int{"": v.Counts.All, "alerts": v.Counts.Alerts, "mine": v.Counts.Mine}
+	counts := db.CountNotifications(s.db, user)
+	p := BellPanel{Unread: counts.Unread}
+	of := map[string]int{"": counts.All, "alerts": counts.Alerts, "mine": counts.Mine}
 	for _, o := range notificationOrigins {
-		href := "/partials/bell"
-		if o.Value != "" {
-			href += "?origin=" + o.Value
+		v, err := s.notificationsFor(user, db.NotificationFilter{Origin: o.Value, Limit: bellPanelSize})
+		if err != nil {
+			http.Error(w, "the notifications could not be read", http.StatusInternalServerError)
+			return
 		}
-		v.Origins = append(v.Origins, NotificationFilterChip{Label: o.Label, Href: href, Count: counts[o.Value], On: v.Origin == o.Value})
+		p.Newest = max(p.Newest, v.Newest)
+		p.Tabs = append(p.Tabs, BellTab{Value: o.Value, Label: o.Label, Count: of[o.Value], Days: v.Days})
 	}
-	s.renderPartial(w, "bell_panel", v)
+	s.renderPartial(w, "bell_panel", p)
 }
 
 // handleNotificationsSeen marks what was shown as read, and has the bell's

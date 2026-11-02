@@ -21,30 +21,34 @@
       hx-swap="outerHTML">{{if gt . 99}}99+{{else if .}}{{.}}{{end}}</span>
 {{end}}
 
+{{/* The three tabs arrive together and bell.js shows one: a tab is a
+     glance at a list already there, not a request that blanks the panel. */}}
 {{define "bell_panel"}}
 <div class="bell-head">
   <span class="bell-heading">Notifications</span>
   <a href="/notifications" class="bell-all">See all</a>
 </div>
 <div class="bell-tabs" role="tablist">
-  {{range .Origins}}
-  <button type="button" role="tab" aria-selected="{{.On}}" class="bell-tab{{if .On}} is-on{{end}}"
-          hx-get="{{.Href}}" hx-target="#bell-panel" hx-swap="innerHTML">
-    {{.Label}}<span class="bell-tab-count">{{.Count}}</span>
+  {{range $i, $t := .Tabs}}
+  <button type="button" role="tab" id="bell-tab-{{$i}}" aria-controls="bell-list-{{$i}}" aria-selected="{{eq $i 0}}"
+          class="bell-tab{{if eq $i 0}} is-on{{end}}" data-bell-tab>
+    {{$t.Label}}<span class="bell-tab-count">{{$t.Count}}</span>
   </button>
   {{end}}
 </div>
-<div class="bell-list">
-  {{template "notification_days" .Days}}
-  {{if not .Days}}
+{{range $i, $t := .Tabs}}
+<div id="bell-list-{{$i}}" class="bell-list" role="tabpanel" aria-labelledby="bell-tab-{{$i}}"{{if ne $i 0}} hidden{{end}}>
+  {{template "notification_days" $t.Days}}
+  {{if not $t.Days}}
   <div class="bell-empty">
     <p>Nothing to report.</p>
-    <p class="faint text-xs mt-1">Alerts, and how the long jobs you start end, show up here.</p>
+    <p class="faint text-xs mt-1">{{if eq $t.Value "mine"}}How the long jobs you start end shows up here.{{else if eq $t.Value "alerts"}}What this server has to warn you about shows up here.{{else}}Alerts, and how the long jobs you start end, show up here.{{end}}</p>
   </div>
   {{end}}
 </div>
+{{end}}
 <div class="bell-foot faint">Kept 30 days</div>
-{{if .Counts.Unread}}<span hidden hx-post="/notifications/seen" hx-vals='{"upto": "{{.Newest}}"}' hx-trigger="load" hx-swap="none"></span>{{end}}
+{{if .Unread}}<span hidden hx-post="/notifications/seen" hx-vals='{"upto": "{{.Newest}}"}' hx-trigger="load" hx-swap="none"></span>{{end}}
 {{end}}
 
 {{define "notification_days"}}
