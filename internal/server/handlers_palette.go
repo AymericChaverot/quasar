@@ -103,6 +103,31 @@ var paletteActions = []PaletteDo{
 	{Title: "Check for a Quasar update", Within: "System", Action: "/system/update/check", Words: "upgrade version release"},
 }
 
+// paletteChoices is what the palette offers besides the applications: the
+// pages and actions the reader's role reaches, and the themes.
+func paletteChoices(admin, stations bool, theme string) ([]PalettePage, []PaletteDo, []PaletteTheme) {
+	var pages []PalettePage
+	for _, p := range palettePages {
+		if p.admin && !admin {
+			continue
+		}
+		pages = append(pages, p.PalettePage)
+	}
+	// The stations' own page is in the header only once there is one.
+	if stations {
+		pages = append(pages, PalettePage{Title: "Stations", Href: "/stations", Words: "plugins panels"})
+	}
+	actions := []PaletteDo{}
+	if admin {
+		actions = append(actions, paletteActions...)
+	}
+	var ts []PaletteTheme
+	for _, t := range themes {
+		ts = append(ts, PaletteTheme{ID: t.ID, Name: t.Name, Current: t.ID == theme})
+	}
+	return pages, actions, ts
+}
+
 // handlePalette is what the palette matches against.
 func (s *Server) handlePalette(w http.ResponseWriter, r *http.Request) {
 	admin := s.isAdmin(r)
@@ -119,24 +144,7 @@ func (s *Server) handlePalette(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	for _, p := range palettePages {
-		if p.admin && !admin {
-			continue
-		}
-		idx.Pages = append(idx.Pages, p.PalettePage)
-	}
-	// The stations' own page is in the header only once there is one.
-	if db.CountEnabledStations(s.db) > 0 {
-		idx.Pages = append(idx.Pages, PalettePage{Title: "Stations", Href: "/stations", Words: "plugins panels"})
-	}
-	if admin {
-		idx.Actions = append(idx.Actions, paletteActions...)
-	}
-
-	current := themeFrom(r)
-	for _, t := range themes {
-		idx.Themes = append(idx.Themes, PaletteTheme{ID: t.ID, Name: t.Name, Current: t.ID == current})
-	}
+	idx.Pages, idx.Actions, idx.Themes = paletteChoices(admin, db.CountEnabledStations(s.db) > 0, themeFrom(r))
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
