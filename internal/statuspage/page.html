@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="{{.RefreshSeconds}}">
+<meta name="robots" content="noindex">
+<title>{{.Title}}</title>
+<link rel="stylesheet" href="/page.css">
+</head>
+<body>
+<main>
+  <header>
+    <h1>{{if .Link}}<a href="{{.Link}}" rel="noopener">{{.Title}}</a>{{else}}{{.Title}}{{end}}</h1>
+    {{with .Description}}<p class="muted">{{.}}</p>{{end}}
+  </header>
+
+  {{with .Banner}}
+  <div class="banner is-{{.Tone}}" role="status">
+    <span class="dot" aria-hidden="true"></span>
+    <div>
+      <p class="banner-text">{{.Text}}</p>
+      {{with .Detail}}<p class="faint">{{.}}</p>{{end}}
+    </div>
+  </div>
+  {{end}}
+
+  {{if .Services}}
+  <h2>Services</h2>
+  <section class="card">
+    {{range .Services}}
+    <div class="service">
+      <div class="row">
+        <span class="name">{{.Name}}</span>
+        {{if .State}}<span class="state is-{{.Tone}}">{{.State}}</span>{{end}}
+      </div>
+      {{if .Bars}}
+      <div class="bars" role="img" aria-label="{{.Name}}: a bar a day over the last {{len .Bars}} days">
+        {{range .Bars}}<span class="bar is-{{.Tone}}" title="{{.Title}}"></span>{{end}}
+      </div>
+      <div class="axis faint">
+        <span><span class="wide">{{len .Bars}} days ago</span><span class="narrow">30 days ago</span></span>
+        {{with .UptimeText}}<span>{{.}}</span>{{end}}
+        <span>Today</span>
+      </div>
+      {{end}}
+    </div>
+    {{end}}
+  </section>
+  {{else if not .Unavailable}}
+  <section class="card empty muted">No service is published yet.</section>
+  {{end}}
+
+  {{if .Meters}}
+  <h2>Server</h2>
+  <section class="card meters">
+    {{range .Meters}}
+    <div>
+      <div class="row faint"><span>{{.Label}}</span><span class="mono">{{.Value}}</span></div>
+      <svg class="meter" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true">
+        <rect class="track" width="100" height="4" rx="2"/>
+        <rect class="fill is-{{.Tone}}" width="{{.Width}}" height="4" rx="2"/>
+      </svg>
+    </div>
+    {{end}}
+  </section>
+  {{end}}
+
+  {{if .ShowIncidents}}
+  <h2>Incidents · last 14 days</h2>
+  <section class="card">
+    {{range .Incidents}}
+    <div class="incident">
+      <div class="row">
+        <span class="name">{{.Service}} {{if .Ongoing}}is not answering{{else}}did not answer{{end}}</span>
+        <span class="faint mono">{{.When}} · {{.Duration}}</span>
+      </div>
+      <p class="faint">{{.Note}}</p>
+    </div>
+    {{else}}
+    <p class="empty muted">No incident.</p>
+    {{end}}
+  </section>
+  {{end}}
+
+  <footer class="faint">
+    {{with .Updated}}Updated {{.}} · {{end}}refreshes every {{.RefreshSeconds}} seconds · powered by Quasar
+  </footer>
+</main>
+</body>
+</html>

@@ -29,6 +29,9 @@ func main() {
 	// key: a worker gets none of them, and the way to be sure of that is for
 	// this process never to have had them.
 	runWorkerMode()
+	// The status page, likewise: it reads the dashboard over HTTP and holds
+	// nothing else.
+	runStatusPageMode()
 
 	// Every line the dashboard logs from here on, its own and the standard
 	// log package's, in the one shape and without a timestamp of its own.
