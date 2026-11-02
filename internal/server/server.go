@@ -348,6 +348,7 @@ func (s *Server) routes() {
 	// the documents in full.
 	s.admin("GET /settings/status", s.handleStatusSettings)
 	s.admin("POST /settings/status", s.handleStatusSettingsSave)
+	s.admin("POST /settings/status/page", s.handleStatusPage)
 	s.admin("GET /settings/catalogs", s.handleCatalogs)
 	s.admin("POST /settings/catalogs", s.handleCatalogCreate)
 	s.admin("POST /settings/catalogs/fetch", s.handleCatalogFetch)

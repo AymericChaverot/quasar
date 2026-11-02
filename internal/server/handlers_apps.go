@@ -234,6 +234,9 @@ func (s *Server) validateNewApp(a *db.App) string {
 	if a.Subdomain == "admin" {
 		return "The subdomain \"admin\" is reserved for this dashboard."
 	}
+	if sub := s.statusPageSubdomain(); sub != "" && a.Subdomain == sub {
+		return "The subdomain \"" + sub + "\" is the status page's."
+	}
 	if taken, _ := db.SubdomainTaken(s.db, a.Subdomain); taken {
 		return "This subdomain is already used by another application."
 	}

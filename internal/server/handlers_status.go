@@ -1,14 +1,19 @@
 package server
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"quasar/internal/db"
+	"quasar/internal/event"
 )
 
 // The status settings: who may read the API, what it publishes, and which
@@ -46,6 +51,7 @@ func (s *Server) handleStatusSettings(w http.ResponseWriter, r *http.Request) {
 		"Apps":     rows,
 		"Endpoint": "https://admin." + s.cfg.Domain + "/api/v1/status",
 		"Domain":   s.cfg.Domain,
+		"Page":     s.statusPageView(r.Context(), cfg),
 	})
 }
 
@@ -164,4 +170,120 @@ func (s *Server) statusSummary() string {
 		line += " · page on " + cfg.Subdomain + "." + s.cfg.Domain
 	}
 	return line + " · " + count(int64(n), "application", "applications") + " published"
+}
+
+// StatusPageView is the page's card on the settings page.
+type StatusPageView struct {
+	Wanted    bool
+	Subdomain string
+	URL       string
+	State     string
+	// Stale is a page running an image from before the last update.
+	Stale bool
+}
+
+func (s *Server) statusPageView(ctx context.Context, cfg StatusConfig) StatusPageView {
+	v := StatusPageView{Wanted: cfg.Page, Subdomain: cfg.Subdomain, URL: "https://" + cfg.Subdomain + "." + s.cfg.Domain}
+	if s.dock != nil {
+		st := s.dock.StatusPageState(ctx)
+		v.State, v.Stale = st.State, st.State != "not deployed" && !st.Current
+	}
+	return v
+}
+
+// statusPageProblem is what is wrong with putting the page on a subdomain, or
+// nothing.
+func (s *Server) statusPageProblem(sub string) string {
+	switch {
+	case !subdomainRe.MatchString(sub):
+		return "A subdomain is lowercase letters, digits and hyphens."
+	case sub == "admin":
+		return "The subdomain \"admin\" is this dashboard's."
+	}
+	if taken, _ := db.SubdomainTaken(s.db, sub); taken {
+		return "An application already uses " + sub + "." + s.cfg.Domain + "."
+	}
+	return ""
+}
+
+// statusPageSubdomain is the subdomain the page holds, if it is deployed: an
+// application may not take it.
+func (s *Server) statusPageSubdomain() string {
+	if cfg := loadStatusConfig(s.db); cfg.Page {
+		return cfg.Subdomain
+	}
+	return ""
+}
+
+func (s *Server) handleStatusPage(w http.ResponseWriter, r *http.Request) {
+	back := func(n Notice) { s.redirectWith(w, r, "/settings/status#page", n) }
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	if r.FormValue("action") == "remove" {
+		s.dock.RemoveStatusPage(ctx)
+		// The key goes with the page: nothing else reads the status with it.
+		for k, v := range map[string]string{db.SettingStatusPage: "false", db.SettingStatusPageKey: ""} {
+			if err := db.SetSetting(s.db, k, v); err != nil {
+				back(errNotice("Status page not removed", "", err))
+				return
+			}
+		}
+		s.audit(r, "status.page.remove", "", "")
+		event.Info("status page", "removed", "by "+s.actor(r))
+		back(okNotice("Status page removed", "Its subdomain no longer answers."))
+		return
+	}
+
+	sub := strings.ToLower(strings.TrimSpace(r.FormValue("subdomain")))
+	if problem := s.statusPageProblem(sub); problem != "" {
+		back(warnNotice("Status page not deployed", problem))
+		return
+	}
+	key := db.GetSetting(s.db, db.SettingStatusPageKey)
+	if key == "" {
+		buf := make([]byte, 32)
+		if _, err := rand.Read(buf); err != nil {
+			back(errNotice("Status page not deployed", "", err))
+			return
+		}
+		key = hex.EncodeToString(buf)
+	}
+	for k, v := range map[string]string{db.SettingStatusSubdomain: sub, db.SettingStatusPageKey: key} {
+		if err := db.SetSetting(s.db, k, v); err != nil {
+			back(errNotice("Status page not deployed", "", err))
+			return
+		}
+	}
+	host := sub + "." + s.cfg.Domain
+	if err := s.dock.DeployStatusPage(ctx, host, s.cfg.EdgeAuthURL+"/api/v1/status", key); err != nil {
+		back(errNotice("Status page not deployed", "", err))
+		return
+	}
+	if err := db.SetSetting(s.db, db.SettingStatusPage, "true"); err != nil {
+		back(errNotice("Status page not recorded", "It runs, but will not be brought back after an update.", err))
+		return
+	}
+	s.audit(r, "status.page.deploy", "", host)
+	event.Info("status page", "deployed on "+host, "by "+s.actor(r))
+	back(okNotice("Status page deployed", "It answers on https://"+host+" once its certificate is issued, usually within a minute."))
+}
+
+// ReconcileStatusPage brings the status page back on the dashboard's image if
+// it is meant to be deployed: after an update the old page still runs the old
+// image, and after a host restart it may not run at all.
+func (s *Server) ReconcileStatusPage(ctx context.Context) {
+	cfg := loadStatusConfig(s.db)
+	if !cfg.Page || cfg.PageKey == "" || s.dock == nil {
+		return
+	}
+	if st := s.dock.StatusPageState(ctx); st.State == "running" && st.Current {
+		return
+	}
+	host := cfg.Subdomain + "." + s.cfg.Domain
+	if err := s.dock.DeployStatusPage(ctx, host, s.cfg.EdgeAuthURL+"/api/v1/status", cfg.PageKey); err != nil {
+		event.Error("status page", "not brought back on "+host, err.Error())
+		return
+	}
+	event.Info("status page", "brought back on "+host, "on the dashboard's image")
 }

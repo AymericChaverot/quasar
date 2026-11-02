@@ -143,6 +143,13 @@ func main() {
 	// loop that fires them belongs here rather than inside a request.
 	srv.StartStationHooks()
 	srv.StartHostChecks()
+	// A status page deployed before an update still runs the old image, and
+	// one deployed before a reboot may not run at all.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		srv.ReconcileStatusPage(ctx)
+	}()
 	seq.OK("background", "metrics and health checks", "backup schedule", "update checks", "station hooks", "server update checks")
 
 	// Bound before "ready" is said, so the line is only ever written by a

@@ -56,3 +56,22 @@ func TestTheStatusSettingsRefuseWhatTheyCannotPublish(t *testing.T) {
 		}
 	}
 }
+
+// The page may not take the dashboard's subdomain or an application's, and an
+// application may not take the page's once it is deployed.
+func TestTheStatusPageAndTheApplicationsKeepToTheirSubdomains(t *testing.T) {
+	s := statusTestServer(t)
+	for sub, ok := range map[string]bool{"status": true, "admin": false, "cloud": false, "Bad_Name": false, "": false} {
+		if got := s.statusPageProblem(sub) == ""; got != ok {
+			t.Errorf("page on %q allowed = %v, want %v", sub, got, ok)
+		}
+	}
+	app := &db.App{Name: "x", Subdomain: "status", DeployType: "image", ImageRef: "nginx"}
+	if problem := s.validateNewApp(app); problem != "" {
+		t.Fatalf("with no page deployed, status is free: %s", problem)
+	}
+	setStatus(t, s, map[string]string{db.SettingStatusPage: "true", db.SettingStatusSubdomain: "status"})
+	if problem := s.validateNewApp(app); !strings.Contains(problem, "status page") {
+		t.Errorf("an application took the deployed page's subdomain: %q", problem)
+	}
+}
