@@ -65,12 +65,14 @@ var (
 )
 
 // metricsRanges are the windows the picker offers, in the order it offers
-// them, and the first is the default. Every one of them has to fit inside
-// monitor.Retention — a chart of thirty days over seven days of samples is
+// them, and defaultRange is the one a page opens on. Every one of them has to
+// fit inside monitor.HistoryRetention — a chart of thirty days over seven days of samples is
 // seven days of line and three weeks of empty plot, which reads as an outage
 // rather than as a window nobody kept the data for. A test holds the two to
 // each other, because the retention window is a long way from here.
-var metricsRanges = []string{"24h", "7d"}
+var metricsRanges = []string{"1h", "24h", "7d", "30d"}
+
+const defaultRange = "24h"
 
 // metricsBuckets is how finely a window is cut, whichever window it is. Sixty
 // points is as much detail as this width of chart can show, and asking the
@@ -85,11 +87,11 @@ const metricsBuckets = 60
 func metricsWindow(r *http.Request) (spec string, window time.Duration) {
 	spec = r.URL.Query().Get("range")
 	if !slices.Contains(metricsRanges, spec) {
-		spec = metricsRanges[0]
+		spec = defaultRange
 	}
 	window, err := chart.ParseRange(spec)
 	if err != nil { // unreachable while the list above parses; harmless if it stops
-		return metricsRanges[0], 24 * time.Hour
+		return defaultRange, 24 * time.Hour
 	}
 	return spec, window
 }

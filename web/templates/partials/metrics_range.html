@@ -27,10 +27,16 @@
        after it and not any one control in it. */}}
   <span class="range-label">Last</span>
   <label class="chip chip-filter">
+    <input type="radio" name="range" value="1h">1h
+  </label>
+  <label class="chip chip-filter">
     <input type="radio" name="range" value="24h" checked>24h
   </label>
   <label class="chip chip-filter">
     <input type="radio" name="range" value="7d">7d
+  </label>
+  <label class="chip chip-filter">
+    <input type="radio" name="range" value="30d">30d
   </label>
 
   {{/* `with` and not `if`: a page that has not said what it can show renders
