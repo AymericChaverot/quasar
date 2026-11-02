@@ -244,6 +244,21 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
   </section>
 
   <section class="space-y-4">
+    <h2 class="h-label">Status</h2>
+    <a href="/settings/status" class="card nav-card">
+      <span class="cred-mark" aria-hidden="true">{{template "icon_activity"}}</span>
+      <span class="min-w-0 flex-1">
+        <span class="block text-sm font-medium">{{.StatusSummary}}</span>
+        <span class="help block mt-0!">
+          What people who cannot sign in may know about your applications: an API with only what you
+          choose, and optionally a status page on its own subdomain.
+        </span>
+      </span>
+      <span class="faint shrink-0" aria-hidden="true">→</span>
+    </a>
+  </section>
+
+  <section class="space-y-4">
     <h2 class="h-label">Stations</h2>
     <a href="/settings/stations" class="card nav-card">
       <span class="cred-mark" aria-hidden="true">{{template "icon_layers"}}</span>

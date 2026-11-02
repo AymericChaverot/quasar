@@ -346,6 +346,8 @@ func (s *Server) routes() {
 	// An operator's catalogue is a set of compose files this server will run,
 	// so writing one is an admin's business — including the read, which shows
 	// the documents in full.
+	s.admin("GET /settings/status", s.handleStatusSettings)
+	s.admin("POST /settings/status", s.handleStatusSettingsSave)
 	s.admin("GET /settings/catalogs", s.handleCatalogs)
 	s.admin("POST /settings/catalogs", s.handleCatalogCreate)
 	s.admin("POST /settings/catalogs/fetch", s.handleCatalogFetch)

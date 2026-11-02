@@ -1,0 +1,120 @@
+{{define "content"}}
+<div class="mb-8">
+  <a href="/settings" class="back-link">Settings</a>
+  <h1 class="page-title mt-2">Status</h1>
+  <p class="help max-w-3xl mt-2!">
+    What this server says about its applications to people who cannot sign in: whether they are up,
+    how they have been, and what went wrong. Nothing is published until you choose it here — no
+    application is listed by default, and an unlisted one is never named.
+  </p>
+</div>
+
+{{with .Status}}
+<form method="post" action="/settings/status" class="space-y-10">
+
+  <section class="space-y-4">
+    <h2 class="h-label">API</h2>
+    <div class="card space-y-4 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p class="text-sm font-medium">Who may read it</p>
+          <p class="help mt-0!">It returns only what is chosen below, as JSON.</p>
+        </div>
+        <div class="range-pick">
+          <label class="chip chip-filter"><input type="radio" name="mode" value="off"{{if eq .Mode "off"}} checked{{end}}>Nobody</label>
+          <label class="chip chip-filter"><input type="radio" name="mode" value="token"{{if eq .Mode "token"}} checked{{end}}>API token holders</label>
+          <label class="chip chip-filter"><input type="radio" name="mode" value="public"{{if eq .Mode "public"}} checked{{end}}>Anybody</label>
+        </div>
+      </div>
+      <code class="mono block break-all rounded p-2 text-xs" style="background: var(--surface-2)">GET {{$.Endpoint}}</code>
+      <label class="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="cors" {{if .CORS}}checked{{end}} class="mt-1">
+        <span>
+          Readable from other sites
+          <span class="help mt-0! block">Lets a page on another domain fetch it — your own site, a widget. Off, only this server's own status page and programs outside a browser can.</span>
+        </span>
+      </label>
+      <p class="help">The status page below reads it with a key of its own, so it keeps working with the API closed to everybody else.</p>
+    </div>
+  </section>
+
+  <div class="grid gap-4 md:grid-cols-2">
+    <section class="space-y-4">
+      <h2 class="h-label">Published</h2>
+      <div class="card space-y-3 p-4">
+        <label class="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="show_state" {{if .ShowState}}checked{{end}} class="mt-1">
+          <span>Current state<span class="help mt-0! block">Up or down, from the last health checks — or from the container, for an application without one.</span></span>
+        </label>
+        <label class="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="show_uptime" {{if .ShowUptime}}checked{{end}} class="mt-1">
+          <span>Uptime history<span class="help mt-0! block">The share of checks answered today and over 7, 30 and 90 days, and a bar a day.</span></span>
+        </label>
+        <label class="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="show_incidents" {{if .ShowIncidents}}checked{{end}} class="mt-1">
+          <span>Incidents<span class="help mt-0! block">The last 14 days of stretches an application did not answer, and whether it was restarted.</span></span>
+        </label>
+        <label class="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="show_server" {{if .ShowServer}}checked{{end}} class="mt-1">
+          <span>Server health<span class="help mt-0! block">CPU, memory and disk in percent — nothing about what runs on it.</span></span>
+        </label>
+      </div>
+    </section>
+
+    <section class="space-y-4">
+      <h2 class="h-label">Presentation</h2>
+      <div class="card space-y-3 p-4">
+        <div>
+          <label class="label mb-1!" for="status-title">Title</label>
+          <input id="status-title" name="title" type="text" value="{{.Title}}" maxlength="80" class="input">
+        </div>
+        <div>
+          <label class="label mb-1!" for="status-description">Description <span class="faint">(optional)</span></label>
+          <input id="status-description" name="description" type="text" value="{{.Description}}" maxlength="200" class="input">
+        </div>
+        <div>
+          <label class="label mb-1!" for="status-link">Link to your site <span class="faint">(optional)</span></label>
+          <input id="status-link" name="link" type="url" value="{{.Link}}" placeholder="https://example.com" class="input mono">
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="space-y-4">
+    <h2 class="h-label">Applications</h2>
+    {{if $.Apps}}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="pr-0! w-10"><span class="sr-only">Published</span></th>
+            <th>Application</th>
+            <th>Public name</th>
+            <th>Health check</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $.Apps}}
+          <tr>
+            <td class="pr-0!"><input type="checkbox" name="publish" value="{{.ID}}" {{if .Published}}checked{{end}} aria-label="Publish {{.Name}}"></td>
+            <td class="mono">{{.Name}}</td>
+            <td><input name="name_{{.ID}}" type="text" value="{{.PublicName}}" placeholder="{{.Name}}" maxlength="60" class="input py-1!" aria-label="Public name of {{.Name}}"></td>
+            <td>
+              {{if .HealthPath}}<span class="mono text-xs">{{.HealthPath}}</span>
+              {{else}}<span class="faint text-xs">none — state from the container, no history</span>{{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    <p class="help">An empty public name publishes the application under its own. Only the ticked ones are in the API, anywhere in it.</p>
+    {{else}}
+    <div class="card muted p-4 text-sm">No application yet.</div>
+    {{end}}
+  </section>
+
+  <div><button type="submit" class="btn btn-primary">Save</button></div>
+</form>
+{{end}}
+{{end}}
