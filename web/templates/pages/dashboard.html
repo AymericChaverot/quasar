@@ -23,7 +23,10 @@
 <section class="mb-10">
   <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
     <h2 class="h-label mb-0!">History</h2>
-    {{template "metrics_range" (dict "ID" "server-history" "URL" "/partials/metrics" "Include" "#server-history-show")}}
+    <div class="flex flex-wrap items-center gap-2">
+      {{template "metrics_range" (dict "ID" "server-history" "URL" "/partials/metrics" "Include" "#server-history-show")}}
+      <button type="button" id="top-consumers-open" class="chip chip-filter top-consumers-open">{{template "icon_layers"}}Top consumers</button>
+    </div>
   </div>
   <div class="card p-4">
     {{$p := pre . "metrics"}}
@@ -34,6 +37,30 @@
     {{template "server_toggles" (dict "ID" "server-history" "URL" "/partials/metrics" "Toggles" $.Toggles)}}
   </div>
 </section>
+
+{{/* Which applications the server goes to, over the window the history is
+     set to. Loaded when it opens, not with the page: it is a question asked
+     now and then, and answering it costs a query per application. */}}
+<dialog id="top-consumers" class="modal" aria-labelledby="top-consumers-title">
+  <div class="modal-head">
+    <h2 id="top-consumers-title" class="modal-title">Top consumers</h2>
+    <div class="flex items-center gap-2">
+      <form id="top-consumers-metric" class="range-pick"
+            hx-get="/partials/top-consumers" hx-target="#top-consumers-body" hx-swap="innerHTML" hx-trigger="change"
+            hx-include="#server-history-range">
+        <label class="chip chip-filter"><input type="radio" name="metric" value="mem" checked>Memory</label>
+        <label class="chip chip-filter"><input type="radio" name="metric" value="cpu">CPU</label>
+      </form>
+      <button type="button" id="top-consumers-close" class="modal-close" aria-label="Close">{{template "icon_x"}}</button>
+    </div>
+  </div>
+  <div id="top-consumers-body" class="modal-body"
+       hx-get="/partials/top-consumers" hx-trigger="quasar:open" hx-swap="innerHTML"
+       hx-include="#server-history-range, #top-consumers-metric">
+    <div class="h-48 animate-pulse"></div>
+  </div>
+</dialog>
+<script src="/static/js/top-consumers.js" defer></script>
 
 <section class="mb-10">
   <h2 class="h-label mb-3">Applications</h2>

@@ -540,6 +540,7 @@ func (s *Server) routes() {
 	// update, so only an admin's header polls for one.
 	s.admin("GET /partials/update-badge", s.handleUpdateBadgePartial)
 	s.viewer("GET /partials/metrics", s.handleServerMetricsPartial)
+	s.viewer("GET /partials/top-consumers", s.handleTopConsumersPartial)
 	s.viewer("GET /partials/apps/{id}/metrics", s.handleAppMetricsPartial)
 }
 

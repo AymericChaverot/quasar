@@ -1,0 +1,31 @@
+{{/* Which applications the server goes to: stacked over the window the
+     history is set to, and ranked as they stand now. */}}
+{{define "top_consumers"}}
+{{if .None}}
+<p class="muted py-10 text-center text-sm">No application has been sampled yet — the first figures appear a minute after one starts.</p>
+{{else}}
+<div class="top-consumers">
+  <div>
+    <p class="muted mb-2 text-sm">{{if eq .Metric "cpu"}}CPU{{else}}Memory{{end}} per application</p>
+    {{template "chart" .Chart}}
+  </div>
+  <div>
+    <p class="muted mb-3 text-sm">Now</p>
+    {{if .Ranking}}
+    <ul class="consumer-rank">
+      {{range .Ranking}}
+      <li>
+        <svg viewBox="0 0 8 8" class="chart-key" aria-hidden="true"><rect width="8" height="8" rx="2" fill="{{.Colour}}"/></svg>
+        <span class="truncate">{{.Name}}</span>
+        <span class="mono faint">{{.Value}}</span>
+        <span class="consumer-bar"><svg viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true"><rect width="{{printf "%.1f" .Share}}" height="4" rx="1" fill="{{.Colour}}"/></svg></span>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="faint text-sm">Nothing is running.</p>
+    {{end}}
+  </div>
+</div>
+{{end}}
+{{end}}

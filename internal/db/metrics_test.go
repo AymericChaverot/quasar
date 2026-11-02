@@ -112,3 +112,24 @@ func TestFoldedHoursReadLikeTheSamplesTheyReplaced(t *testing.T) {
 		t.Errorf("%d hours left after dropping everything older than now, want none", hours)
 	}
 }
+
+// Each application's newest sample, and none for one sampled too long ago.
+func TestLatestAppUsageIsEachApplicationsNewestSample(t *testing.T) {
+	database := openTestDB(t)
+	for _, row := range []struct {
+		app, ago string
+		cpu      float64
+	}{{"a", "-3 minutes", 10}, {"a", "-1 minutes", 20}, {"b", "-2 minutes", 5}, {"stale", "-2 hours", 50}} {
+		if _, err := database.Exec(`INSERT INTO app_metrics (app_id, ts, cpu, mem_mb) VALUES (?, datetime('now', ?), ?, ?)`,
+			row.app, row.ago, row.cpu, row.cpu*10); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := LatestAppUsage(database, time.Now().Add(-5*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got["a"].CPU != 20 || got["a"].MemMB != 200 || got["b"].CPU != 5 {
+		t.Errorf("latest = %+v; want a at 20%% and b at 5%%, nothing for the stale one", got)
+	}
+}

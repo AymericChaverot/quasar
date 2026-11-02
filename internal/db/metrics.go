@@ -282,3 +282,34 @@ func firstError(errs ...error) error {
 	}
 	return nil
 }
+
+// AppUsage is an application's most recent sample.
+type AppUsage struct {
+	CPU   float64 // percent
+	MemMB float64
+}
+
+// LatestAppUsage is each application's newest sample taken since a moment,
+// by application ID. An application with none — stopped, or sampled too long
+// ago to say anything about now — is not in it.
+func LatestAppUsage(db *sql.DB, since time.Time) (map[string]AppUsage, error) {
+	rows, err := db.Query(`SELECT m.app_id, m.cpu, m.mem_mb FROM app_metrics m
+		JOIN (SELECT app_id, MAX(ts) AS ts FROM app_metrics WHERE ts >= ? GROUP BY app_id) newest
+		ON newest.app_id = m.app_id AND newest.ts = m.ts`, since.UTC())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]AppUsage{}
+	for rows.Next() {
+		var (
+			id string
+			u  AppUsage
+		)
+		if err := rows.Scan(&id, &u.CPU, &u.MemMB); err != nil {
+			return nil, err
+		}
+		out[id] = u
+	}
+	return out, rows.Err()
+}

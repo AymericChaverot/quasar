@@ -157,6 +157,7 @@ func TestViewerCanReachTheReadSurface(t *testing.T) {
 		"GET /settings",
 		"GET /partials/apps",
 		"GET /partials/metrics",
+		"GET /partials/top-consumers",
 		"GET /partials/apps/{id}/stats",
 	} {
 		if got := s.guards[pattern]; got != accessSelf {

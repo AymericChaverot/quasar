@@ -557,6 +557,10 @@ func TestExecuteTemplates(t *testing.T) {
 			Rules:  []chart.Rule{{Value: 90, Label: "CPU alert"}},
 			Events: []chart.Event{{At: time.Now(), Label: "Deploy · blog", Kind: "deploy"}}})}},
 		{"server_history", ServerHistory{Nothing: true}},
+		{"top_consumers", TopConsumers{Metric: "mem", Chart: chart.BuildWith(chart.StackedArea, []chart.Series{
+			{Label: "blog", Colour: "var(--chart)", Points: []chart.Point{{At: time.Now().Add(-time.Minute), Value: 1}, {At: time.Now(), Value: 1.2}}},
+		}, " GB", chart.Options{}), Ranking: []Consumer{{Name: "blog", Colour: "var(--chart)", Value: "1.2 GB", Share: 100}}}},
+		{"top_consumers", TopConsumers{None: true}},
 		{"server_toggles", map[string]any{"ID": ServerPicker, "URL": "/partials/metrics",
 			"Toggles": picker(httptest.NewRequest("GET", "/", nil), ServerPicker, ServerToggles)}},
 		{"metrics", metricsCards([]db.MetricPoint{
