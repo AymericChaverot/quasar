@@ -671,13 +671,13 @@ input[type="checkbox"]:focus-visible {
 .fill-err  { background: var(--err); }
 .fill-info { background: var(--info); }
 
-/* The server's cards. The tick is outside the meter, which clips what it
-   holds, so it can stand a little proud of the bar it marks. */
+/* The server's cards. The tick sits over the meter, exactly its height, so it
+   marks the bar without standing out of it. */
 .health-meter { position: relative; }
 .health-threshold {
   position: absolute;
-  top: -0.1875rem;
-  bottom: -0.1875rem;
+  top: 0;
+  bottom: 0;
   width: 2px;
   margin-left: -1px;
   border-radius: 1px;
