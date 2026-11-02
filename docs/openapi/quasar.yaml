@@ -13,6 +13,8 @@ tags:
     description: List, inspect, deploy and restart applications.
   - name: Server
     description: Server usage.
+  - name: Status
+    description: The public status, with only what the operator chose to publish.
   - name: Webhooks
     description: Deploy without a token, from a secret URL.
 
@@ -181,6 +183,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/status:
+    get:
+      operationId: getStatus
+      summary: Get the status
+      description: |
+        The state, uptime and incidents of the applications published in Settings → Status, under their public names. An application that is not published appears nowhere in the answer.
+
+        Who may call it is set in the same place: nobody (the default), anyone with an API token of either role, or anybody without a token. A section turned off there is absent from the answer, not empty.
+
+        Answers are cached for 15 seconds.
+      tags: [Status]
+      security:
+        - {}
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The published status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        '401':
+          description: The status is set to token holders, and the token is missing or invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The status API is turned off.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /hooks/{id}/{secret}:
     post:
       operationId: deployWebhook
@@ -338,6 +374,115 @@ components:
         disk_total_gb:
           type: number
           example: 38.7
+
+    Status:
+      type: object
+      required: [title, updated_at, services]
+      properties:
+        title:
+          type: string
+          example: Example status
+        description:
+          type: string
+          description: Absent when not set.
+        link:
+          type: string
+          description: The operator's site. Absent when not set.
+          example: https://example.com
+        updated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [operational, partial_outage, major_outage]
+          description: Absent when the current state is not published.
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusService'
+        incidents:
+          type: array
+          description: The last 14 days, newest first. Absent when incidents are not published.
+          items:
+            $ref: '#/components/schemas/StatusIncident'
+        server:
+          type: object
+          description: The server's use, in percent. Absent unless published.
+          properties:
+            cpu:
+              type: number
+              example: 23.4
+            memory:
+              type: number
+              example: 61
+            disk:
+              type: number
+              example: 78.2
+
+    StatusService:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: The public name.
+          example: Cloud
+        status:
+          type: string
+          enum: [operational, down]
+          description: From the open incident and the container. Absent when the current state is not published.
+        uptime:
+          type: object
+          description: The share of health checks answered, in percent, cut to two decimals; null over a stretch with no check. Absent for an application without a health check, or when the history is not published.
+          properties:
+            today:
+              type: [number, 'null']
+              example: 100
+            7d:
+              type: [number, 'null']
+              example: 99.98
+            30d:
+              type: [number, 'null']
+              example: 99.94
+            90d:
+              type: [number, 'null']
+              example: 99.9
+        days:
+          type: array
+          description: The last 90 days, oldest first, with the same conditions as uptime.
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+                example: '2026-11-02'
+              up:
+                type: [number, 'null']
+                description: Null on a day with no check.
+                example: 99.97
+
+    StatusIncident:
+      type: object
+      required: [service, started_at, ended_at, duration_seconds, restarted]
+      properties:
+        service:
+          type: string
+          example: Cloud
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: [string, 'null']
+          format: date-time
+          description: Null while the incident is ongoing.
+        duration_seconds:
+          type: integer
+          description: Up to now while ongoing.
+          example: 1020
+        restarted:
+          type: boolean
+          description: Whether Quasar restarted the application during the incident.
 
     Error:
       type: object

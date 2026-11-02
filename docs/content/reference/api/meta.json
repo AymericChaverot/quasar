@@ -10,6 +10,8 @@
     "restart-app",
     "---Server---",
     "get-system",
+    "---Status---",
+    "get-status",
     "---Webhooks---",
     "deploy-webhook"
   ]
