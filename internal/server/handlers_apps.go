@@ -289,7 +289,7 @@ func (s *Server) validateNewApp(a *db.App) string {
 // bind, and stops — with the reason in a log nobody is watching, since the
 // dashboard would have shown the deploy as done.
 func (s *Server) portConflict(a *db.App) string {
-	wanted := docker.PublishedPorts(a.ComposeYAML, docker.EnvMap(a.EnvContent))
+	wanted := docker.HostPortsIn(a.ComposeYAML, docker.EnvMap(a.EnvContent))
 	if len(wanted) == 0 {
 		return ""
 	}
@@ -297,19 +297,17 @@ func (s *Server) portConflict(a *db.App) string {
 	if err != nil {
 		return ""
 	}
-	held := map[int]string{}
 	for _, other := range apps {
-		if other.ID == a.ID || other.DeployType != "compose" {
+		if other.ID == a.ID {
 			continue
 		}
-		for _, p := range docker.PublishedPorts(other.ComposeYAML, docker.EnvMap(other.EnvContent)) {
-			held[p] = other.Name
-		}
-	}
-	for _, p := range wanted {
-		if name, ok := held[p]; ok {
-			return fmt.Sprintf("Port %d is already published by %q. Two containers cannot bind the same host port — "+
-				"give this one a different port, in the compose file or in the variable it reads it from.", p, name)
+		for _, held := range s.dock.HostPortsFor(other) {
+			for _, p := range wanted {
+				if p.Clashes(held) {
+					return fmt.Sprintf("Port %s/%s is already published by %q. Two containers cannot bind the same host port — "+
+						"give this one a different port, in the compose file or in the variable it reads it from.", p.Ports(), p.Proto, other.Name)
+				}
+			}
 		}
 	}
 	return ""

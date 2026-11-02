@@ -273,6 +273,8 @@ type composeService struct {
 // syntaxes compose accepts.
 type composePort struct {
 	hostLo, hostHi int    // the host ports it binds, 0 when it binds none
+	hostIP         string // the address it binds them on, "" for every one
+	proto          string // "tcp" or "udp"
 	container      string // the container port, as written
 	text           string // the entry as written, for the report
 }
@@ -397,19 +399,37 @@ func parsePortEntry(n *yaml.Node, env map[string]string) composePort {
 	switch n.Kind {
 	case yaml.ScalarNode:
 		s := resolveVars(n.Value, env)
+		proto := "tcp"
 		if i := strings.IndexByte(s, '/'); i >= 0 {
-			s = s[:i]
+			s, proto = s[:i], strings.ToLower(strings.TrimSpace(s[i+1:]))
+		}
+		// An IPv6 address is written in brackets, and holds colons of its own.
+		ip := ""
+		if strings.HasPrefix(s, "[") {
+			if end := strings.Index(s, "]:"); end > 0 {
+				ip, s = s[1:end], s[end+2:]
+			}
 		}
 		parts := strings.Split(s, ":")
-		p := composePort{container: parts[len(parts)-1], text: n.Value}
+		p := composePort{container: parts[len(parts)-1], text: n.Value, proto: proto}
 		// One part is a container port compose publishes on some host port it
 		// picks itself, which can never be 80 — hence only two parts or more.
 		if len(parts) >= 2 {
 			p.hostLo, p.hostHi = publishedRange(parts[len(parts)-2])
 		}
+		if len(parts) >= 3 {
+			ip = parts[0]
+		}
+		p.hostIP = ip
 		return p
 	case yaml.MappingNode:
-		p, written := composePort{}, ""
+		p, written := composePort{proto: "tcp"}, ""
+		if v := mapValue(n, "protocol"); v != nil && v.Value != "" {
+			p.proto = strings.ToLower(resolveVars(v.Value, env))
+		}
+		if v := mapValue(n, "host_ip"); v != nil {
+			p.hostIP = resolveVars(v.Value, env)
+		}
 		if t := mapValue(n, "target"); t != nil {
 			written = t.Value
 			p.container = resolveVars(t.Value, env)
