@@ -44,7 +44,7 @@ func TestRetentionIsSavedAndApplied(t *testing.T) {
 	if db.LogRetentionDays(s.db) != 2 || db.AuditRetentionDays(s.db) != 90 {
 		t.Errorf("stored %d and %d days", db.LogRetentionDays(s.db), db.AuditRetentionDays(s.db))
 	}
-	if n, _ := db.CountLogs(s.db, "", ""); n != 1 {
+	if n, _ := db.CountLogs(s.db, db.LogQuery{}); n != 1 {
 		t.Errorf("%d lines left after shortening the window to two days, want the fresh one", n)
 	}
 	if entries, _ := db.ListAudit(s.db, "settings.retention", 5); len(entries) != 1 {
@@ -64,7 +64,7 @@ func TestPurgesEmptyLogsAndAudit(t *testing.T) {
 	}
 
 	s.handlePurgeLogs(httptest.NewRecorder(), retentionRequest(signed, "/settings/logs/purge", nil))
-	if n, _ := db.CountLogs(s.db, "", ""); n != 0 {
+	if n, _ := db.CountLogs(s.db, db.LogQuery{}); n != 0 {
 		t.Errorf("%d lines left after deleting all logs", n)
 	}
 

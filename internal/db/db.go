@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -204,6 +205,21 @@ CREATE TABLE IF NOT EXISTS app_logs (
 CREATE INDEX IF NOT EXISTS idx_app_logs_app_ts ON app_logs(app_id, ts);
 -- Every application at once, newest first: the Logs page with no filter.
 CREATE INDEX IF NOT EXISTS idx_app_logs_ts ON app_logs(ts);
+-- The words of every stored line, for the Logs page to search by. It holds no
+-- copy of the text, only the index: the lines are read from app_logs. Words
+-- rather than every three letters, which made the database nearly three times
+-- the size; a piece of a word is still found by reading the lines (Exact).
+-- contentless_delete lets a line leave the index by its id alone, which is all
+-- the trigger below has, and makes removing one the index never held harmless.
+CREATE VIRTUAL TABLE IF NOT EXISTS app_logs_fts USING fts5(
+	line, content='', contentless_delete=1, tokenize='unicode61 remove_diacritics 2'
+);
+CREATE TRIGGER IF NOT EXISTS app_logs_fts_insert AFTER INSERT ON app_logs BEGIN
+	INSERT INTO app_logs_fts(rowid, line) VALUES (new.id, new.line);
+END;
+CREATE TRIGGER IF NOT EXISTS app_logs_fts_delete AFTER DELETE ON app_logs BEGIN
+	DELETE FROM app_logs_fts WHERE rowid = old.id;
+END;
 
 CREATE TABLE IF NOT EXISTS registries (
 	id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -438,9 +454,20 @@ func Open(path string) (*sql.DB, error) {
 	}
 	db.SetMaxOpenConns(maxConns)
 	db.SetMaxIdleConns(maxConns)
+	// Before the schema creates the search index, so that it can tell an
+	// index it is about to create on stored lines from one that exists.
+	toIndex, err := logsToIndex(db)
+	if err != nil {
+		log.Printf("db: preparing the log search index: %v", err)
+	}
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close() // the schema error is the one worth returning
 		return nil, err
+	}
+	if toIndex > 0 {
+		if err := SetSetting(db, settingLogIndexBackfill, strconv.FormatInt(toIndex, 10)); err != nil {
+			log.Printf("db: preparing the log search index: %v", err)
+		}
 	}
 	for _, m := range migrations {
 		// A migration that has already run is the expected answer on every

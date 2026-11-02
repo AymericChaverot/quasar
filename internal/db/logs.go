@@ -2,13 +2,15 @@ package db
 
 import (
 	"database/sql"
-	"strings"
 	"time"
 )
 
 // LogLine is one persisted line of container output, joined with the app's
 // current name so cross-app search results are readable without extra lookups.
 type LogLine struct {
+	// ID is the line's place in storage, which is how the lines around it
+	// are found.
+	ID      int64
 	AppID   string
 	AppName string
 	// AppColor is the application's colour on the Logs page.
@@ -64,22 +66,17 @@ func AppendLogs(database *sql.DB, appID string, entries []LogEntry) error {
 	return tx.Commit()
 }
 
-// SearchLogs returns persisted log lines, newest first, optionally scoped to
-// one app and/or filtered by a substring match. An empty appID searches
-// across every app; an empty query returns the most recent lines unfiltered.
-// offset skips that many of the newest matches, which is how the Logs page
-// reaches older ones a page at a time.
+// SearchLogs returns the stored lines q matches, newest first. offset skips
+// that many of the newest matches, which is how the Logs page reaches older
+// ones a page at a time.
 //
 // The page is found first, by its rowids alone, and only then are its lines
 // read: skipping to page 300 walks 30,000 index entries, not 30,000 lines of
-// text joined to their application. And only the filters given are written
-// into the query: a condition that holds when its parameter is empty is one
-// SQLite cannot answer from an index, and it read and sorted every stored
-// line for each page.
-func SearchLogs(database *sql.DB, appID, query string, limit, offset int) ([]LogLine, error) {
-	where, args := logFilter(appID, query)
+// text joined to their application.
+func SearchLogs(database *sql.DB, q LogQuery, limit, offset int) ([]LogLine, error) {
+	where, args := q.where(logIndexReady(database))
 	rows, err := database.Query(`
-		SELECT app_logs.app_id, apps.name, apps.log_color, app_logs.ts, app_logs.line
+		SELECT app_logs.id, app_logs.app_id, apps.name, apps.log_color, app_logs.ts, app_logs.line
 		FROM app_logs
 		JOIN apps ON apps.id = app_logs.app_id
 		WHERE app_logs.rowid IN (
@@ -90,16 +87,52 @@ func SearchLogs(database *sql.DB, appID, query string, limit, offset int) ([]Log
 	if err != nil {
 		return nil, err
 	}
+	return scanLogLines(rows)
+}
+
+func scanLogLines(rows *sql.Rows) ([]LogLine, error) {
 	defer rows.Close()
 	var out []LogLine
 	for rows.Next() {
 		var l LogLine
-		if err := rows.Scan(&l.AppID, &l.AppName, &l.AppColor, &l.TS, &l.Line); err != nil {
+		if err := rows.Scan(&l.ID, &l.AppID, &l.AppName, &l.AppColor, &l.TS, &l.Line); err != nil {
 			return nil, err
 		}
 		out = append(out, l)
 	}
 	return out, rows.Err()
+}
+
+// LogContext is the line id and the lines its application wrote just before
+// and just after it, oldest first: what was going on around an error. The
+// line itself is among them; nil when it is no longer stored.
+func LogContext(database *sql.DB, id int64, around int) ([]LogLine, error) {
+	var app string
+	var ts time.Time
+	if err := database.QueryRow("SELECT app_id, ts FROM app_logs WHERE id = ?", id).Scan(&app, &ts); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	// Two reads of the (app_id, ts) index, one each way from the line. Lines
+	// from one moment share a timestamp, and the id orders them, as it does
+	// everywhere else on the page.
+	rows, err := database.Query(`
+		SELECT * FROM (
+			SELECT l.id, l.app_id, a.name, a.log_color, l.ts, l.line FROM app_logs l JOIN apps a ON a.id = l.app_id
+			WHERE l.app_id = ? AND (l.ts < ? OR (l.ts = ? AND l.id < ?))
+			ORDER BY l.ts DESC, l.id DESC LIMIT ?)
+		UNION ALL
+		SELECT * FROM (
+			SELECT l.id, l.app_id, a.name, a.log_color, l.ts, l.line FROM app_logs l JOIN apps a ON a.id = l.app_id
+			WHERE l.app_id = ? AND (l.ts > ? OR (l.ts = ? AND l.id >= ?))
+			ORDER BY l.ts, l.id LIMIT ?)
+		ORDER BY 5, 1`, app, ts, ts, id, around, app, ts, ts, id, around+1)
+	if err != nil {
+		return nil, err
+	}
+	return scanLogLines(rows)
 }
 
 // DeleteAppLogs removes an app's persisted log history; called when the app
@@ -150,29 +183,9 @@ func PruneLogs(database *sql.DB) error {
 
 // CountLogs is how many lines SearchLogs would find with no limit: what the
 // Logs page needs to say how many pages there are.
-func CountLogs(database *sql.DB, appID, query string) (int, error) {
-	where, args := logFilter(appID, query)
+func CountLogs(database *sql.DB, q LogQuery) (int, error) {
+	where, args := q.where(logIndexReady(database))
 	var n int
 	err := database.QueryRow(`SELECT COUNT(*) FROM app_logs`+where, args...).Scan(&n)
 	return n, err
-}
-
-// logFilter is the WHERE clause for the filters given, and nothing for the
-// ones left empty, so that a search scoped to one application reads that
-// application's index.
-func logFilter(appID, query string) (string, []any) {
-	var conds []string
-	var args []any
-	if appID != "" {
-		conds = append(conds, "app_id = ?")
-		args = append(args, appID)
-	}
-	if query != "" {
-		conds = append(conds, `line LIKE ? ESCAPE '\'`)
-		args = append(args, containsPattern(query))
-	}
-	if len(conds) == 0 {
-		return "", nil
-	}
-	return " WHERE " + strings.Join(conds, " AND "), args
 }

@@ -17,17 +17,81 @@ import (
 // logPageSize is how many lines the Logs page shows at a time.
 const logPageSize = 100
 
+// logContextLines is how many lines are shown on each side of one whose
+// context is asked for.
+const logContextLines = 15
+
+// logPeriods are the spans the Logs page can be narrowed to, as the address
+// names them.
+var logPeriods = map[string]time.Duration{
+	"1h":  time.Hour,
+	"24h": 24 * time.Hour,
+	"7d":  7 * 24 * time.Hour,
+}
+
+// logSearch is a search of the Logs page, as its address carries it.
+type logSearch struct {
+	App    string
+	Text   string
+	Exact  bool
+	Since  string // a key of logPeriods, "" for every line
+	Errors bool
+}
+
+func logSearchFrom(r *http.Request) logSearch {
+	q := r.URL.Query()
+	s := logSearch{App: q.Get("app"), Text: q.Get("q"), Exact: q.Get("exact") == "1", Errors: q.Get("errors") == "1"}
+	if _, ok := logPeriods[q.Get("since")]; ok {
+		s.Since = q.Get("since")
+	}
+	return s
+}
+
+// values is the search as the address writes it, leaving out what is not set.
+func (s logSearch) values() url.Values {
+	v := url.Values{}
+	set := func(k, val string) {
+		if val != "" {
+			v.Set(k, val)
+		}
+	}
+	set("app", s.App)
+	set("q", s.Text)
+	set("since", s.Since)
+	if s.Exact {
+		v.Set("exact", "1")
+	}
+	if s.Errors {
+		v.Set("errors", "1")
+	}
+	return v
+}
+
+// query is the search for the database, its period counted back from now.
+func (s logSearch) query() db.LogQuery {
+	q := db.LogQuery{App: s.App, Text: s.Text, Exact: s.Exact, Errors: s.Errors}
+	if d, ok := logPeriods[s.Since]; ok {
+		q.Since = time.Now().Add(-d)
+	}
+	return q
+}
+
+// key is what a count of the search is kept under.
+func (s logSearch) key() string { return s.values().Encode() }
+
 // handleLogsPage renders the cross-app log search page.
 func (s *Server) handleLogsPage(w http.ResponseWriter, r *http.Request) {
 	apps, _ := db.ListApps(s.db, s.keyring)
-	app, q, page := r.URL.Query().Get("app"), r.URL.Query().Get("q"), pageOf(r)
-	results := "/partials/logs?" + url.Values{"app": {app}, "q": {q}, "page": {strconv.Itoa(page)}}.Encode()
+	search, page := logSearchFrom(r), pageOf(r)
+	v := search.values()
+	v.Set("page", strconv.Itoa(page))
+	results := "/partials/logs?" + v.Encode()
 	s.render(w, r, "logs", map[string]any{
-		"Title": "Logs",
-		"Apps":  apps,
-		"App":   app,
-		"Query": q,
-		"Page":  page,
+		"Title":   "Logs",
+		"Apps":    apps,
+		"Search":  search,
+		"Page":    page,
+		"Results": results,
 		// The page of lines, drawn with the page rather than after it: a
 		// search over every stored line that is slow to answer is the one
 		// case left to arrive on its own.
@@ -41,11 +105,12 @@ func (s *Server) handleLogsPage(w http.ResponseWriter, r *http.Request) {
 type LogLineView struct {
 	db.LogLine
 	HTML template.HTML
+	// Focus is the line the context around it was asked for.
+	Focus bool
 }
 
 // handleLogsSearchPartial runs a search over persisted log history, across
-// every app or scoped to one, optionally filtered by a substring, a page at a
-// time.
+// every app or scoped to one, a page at a time.
 //
 // Only the page on screen is read. How many pages there are takes counting
 // every match — a whole table, for a search — so the page does not wait for
@@ -54,21 +119,21 @@ type LogLineView struct {
 // When there is no older page the total is already known, and a recent count
 // of the same search is reused, so most pages need no counting at all.
 func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	app, q := query.Get("app"), query.Get("q")
+	search := logSearchFrom(r)
+	query := search.values()
 	page := pageOf(r)
 	// One line more than a page, to know whether there is a page after it.
-	lines, err := db.SearchLogs(s.db, app, q, logPageSize+1, (page-1)*logPageSize)
+	lines, err := db.SearchLogs(s.db, search.query(), logPageSize+1, (page-1)*logPageSize)
 	if err == nil && len(lines) == 0 && page > 1 {
 		// A page past the end — typed in, or left behind by lines that aged
 		// out — is the last one, which is the one case that counts first.
-		total, cerr := s.countLogs(app, q)
+		total, cerr := s.countLogs(search)
 		if cerr != nil {
 			internalError(w, r, cerr)
 			return
 		}
 		page = pageCount(total, logPageSize)
-		lines, err = db.SearchLogs(s.db, app, q, logPageSize+1, (page-1)*logPageSize)
+		lines, err = db.SearchLogs(s.db, search.query(), logPageSize+1, (page-1)*logPageSize)
 	}
 	if err != nil {
 		internalError(w, r, err)
@@ -78,11 +143,11 @@ func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request)
 	lines = lines[:min(len(lines), logPageSize)]
 
 	var pager Pager
-	switch total, known := s.logCounts.get(logCountKey(app, q)); {
+	switch total, known := s.logCounts.get(search.key()); {
 	case !more:
 		// The last page: everything before it was full.
 		total = (page-1)*logPageSize + len(lines)
-		s.logCounts.set(logCountKey(app, q), total)
+		s.logCounts.set(search.key(), total)
 		pager = pagerFor("/logs", query, page, pageCount(total, logPageSize))
 	case known:
 		// A count from moments ago; lines have been written since, so it is
@@ -92,9 +157,10 @@ func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request)
 		pager = provisionalPager("/logs", query, page)
 		pager.Pending = pageURL("/partials/logs/pager", query, page)
 	}
+	marks := markPattern(search.query().Highlights(), search.Exact)
 	views := make([]LogLineView, 0, len(lines))
 	for _, l := range lines {
-		views = append(views, LogLineView{LogLine: l, HTML: renderLogLine(l.Line)})
+		views = append(views, LogLineView{LogLine: l, HTML: renderLogLineMarked(l.Line, marks)})
 	}
 	if r.Header.Get("HX-Request") != "" {
 		followURL(w, r, "log-search", pageURL("/logs", query, page))
@@ -106,36 +172,58 @@ func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// handleLogsContextPartial is the lines an application wrote around one of
+// its lines: what was going on when an error was logged. The line is marked
+// as the search marked it, so it is found again among the others.
+func (s *Server) handleLogsContextPartial(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "no such line", http.StatusNotFound)
+		return
+	}
+	lines, err := db.LogContext(s.db, id, logContextLines)
+	if err != nil {
+		internalError(w, r, err)
+		return
+	}
+	search := logSearchFrom(r)
+	marks := markPattern(search.query().Highlights(), search.Exact)
+	views := make([]LogLineView, 0, len(lines))
+	for _, l := range lines {
+		views = append(views, LogLineView{LogLine: l, HTML: renderLogLineMarked(l.Line, marks), Focus: l.ID == id})
+	}
+	s.renderPartial(w, "logs_context", map[string]any{"ID": id, "Lines": views})
+}
+
 // handleLogsPagerPartial is the full pager for a page of the Logs page, which
 // fetches it once it is on screen: counting the matches is what it costs.
 func (s *Server) handleLogsPagerPartial(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	total, err := s.countLogs(query.Get("app"), query.Get("q"))
+	search := logSearchFrom(r)
+	total, err := s.countLogs(search)
 	if err != nil {
 		internalError(w, r, err)
 		return
 	}
 	page := pageOf(r)
+	query := search.values()
 	pager := pagerFor("/logs", query, page, max(pageCount(total, logPageSize), page))
 	s.renderPartial(w, "logs_pager", pager.withPartial("/partials/logs", query, "#log-results"))
 }
 
 // countLogs is how many lines a search matches, from a count made moments ago
 // if there is one.
-func (s *Server) countLogs(app, q string) (int, error) {
-	key := logCountKey(app, q)
+func (s *Server) countLogs(search logSearch) (int, error) {
+	key := search.key()
 	if n, ok := s.logCounts.get(key); ok {
 		return n, nil
 	}
-	n, err := db.CountLogs(s.db, app, q)
+	n, err := db.CountLogs(s.db, search.query())
 	if err != nil {
 		return 0, err
 	}
 	s.logCounts.set(key, n)
 	return n, nil
 }
-
-func logCountKey(app, q string) string { return app + "\x00" + q }
 
 // countFresh is how long a count is reused. Long enough to step through a
 // few pages of one search without counting it again; short enough that the

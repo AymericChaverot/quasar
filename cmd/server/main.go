@@ -150,6 +150,19 @@ func main() {
 		defer cancel()
 		srv.ReconcileStatusPage(ctx)
 	}()
+	// The log lines stored before the search index existed, added to it in
+	// the background: on a full install that is a minute's work, and the Logs
+	// page searches the lines themselves until it is done.
+	go func() {
+		start := time.Now()
+		n, err := db.BackfillLogIndex(database, 20*time.Millisecond)
+		switch {
+		case err != nil:
+			event.Error("logs", "indexing stored lines for search", err.Error())
+		case n > 0:
+			event.Info("logs", fmt.Sprintf("indexed %s for search", plural(int(n), "stored line")), "in "+event.Duration(time.Since(start)))
+		}
+	}()
 	seq.OK("background", "metrics and health checks", "backup schedule", "update checks", "station hooks", "server update checks")
 
 	// Bound before "ready" is said, so the line is only ever written by a

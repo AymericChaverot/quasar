@@ -209,3 +209,30 @@ func TestLineOpenMarksDrawnLines(t *testing.T) {
 		}
 	}
 }
+
+// A search's words are marked where the index found them: a word where a word
+// starts with it, a phrase across the punctuation between its words, and an
+// exact search wherever its text is.
+func TestMarkPatternMarksWhatTheSearchFound(t *testing.T) {
+	cases := []struct {
+		terms []string
+		exact bool
+		line  string
+		want  string
+	}{
+		{[]string{"refus"}, false, "Connection refused, unrefusable", "Connection <mark>refus</mark>ed, unrefusable"},
+		{[]string{"user_id=42"}, false, "got user id 42 and user_id=42", "got <mark>user id 42</mark> and <mark>user_id=42</mark>"},
+		{[]string{"->"}, false, "a -> b", "a <mark>-&gt;</mark> b"},
+		{[]string{"efuse"}, true, "refused", "r<mark>efuse</mark>d"},
+		{[]string{"<b>"}, true, "x <b> y", "x <mark>&lt;b&gt;</mark> y"},
+	}
+	for _, tc := range cases {
+		got := string(renderLogLineMarked(tc.line, markPattern(tc.terms, tc.exact)))
+		if got != tc.want {
+			t.Errorf("%v in %q: %s, want %s", tc.terms, tc.line, got, tc.want)
+		}
+	}
+	if markPattern(nil, false) != nil {
+		t.Error("nothing to mark gave a pattern")
+	}
+}

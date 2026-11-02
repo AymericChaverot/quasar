@@ -429,6 +429,7 @@ func (s *Server) routes() {
 	s.viewer("GET /partials/audit", s.handleAuditPartial)
 	s.viewer("GET /partials/logs", s.handleLogsSearchPartial)
 	s.viewer("GET /partials/logs/pager", s.handleLogsPagerPartial)
+	s.viewer("GET /partials/logs/context/{id}", s.handleLogsContextPartial)
 
 	s.viewer("GET /system", s.handleSystem)
 	s.viewer("GET /system/containers/{name}", s.handleSystemContainerDetail)

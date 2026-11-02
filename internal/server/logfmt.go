@@ -75,7 +75,13 @@ func renderLogEntry(ts time.Time, line string) template.HTML {
 // It is the only place log text becomes markup, so it is also the only place
 // that has to escape it: every caller hands it bytes straight off a container's
 // stdout, which is attacker-controlled for any app a user chose to deploy.
-func renderLogLine(line string) template.HTML {
+func renderLogLine(line string) template.HTML { return renderLogLineMarked(line, nil) }
+
+// renderLogLineMarked is renderLogLine with what marks matches wrapped in
+// <mark>: the words a search found the line by. A match is marked inside each
+// run of text of one colour, so a word the program coloured halfway through
+// is marked in two pieces rather than not at all.
+func renderLogLineMarked(line string, marks *regexp.Regexp) template.HTML {
 	line = strings.ToValidUTF8(line, "�")
 	// Carriage returns from progress-bar output would otherwise leave a stray
 	// glyph; a lone \r means "redraw this line", and the last draw is the one
@@ -97,11 +103,11 @@ func renderLogLine(line string) template.HTML {
 		}
 		if attr := style.attr(); attr != "" {
 			b.WriteString("<span " + attr + ">")
-			b.WriteString(html.EscapeString(text))
+			writeMarked(&b, text, marks)
 			b.WriteString("</span>")
 			return
 		}
-		b.WriteString(html.EscapeString(text))
+		writeMarked(&b, text, marks)
 	}
 
 	last := 0
@@ -125,6 +131,60 @@ func renderLogLine(line string) template.HTML {
 		return template.HTML(`<span class="` + class + `">` + out + `</span>`)
 	}
 	return template.HTML(out)
+}
+
+// writeMarked escapes text into b, each match of marks inside a <mark>.
+func writeMarked(b *strings.Builder, text string, marks *regexp.Regexp) {
+	if marks == nil {
+		b.WriteString(html.EscapeString(text))
+		return
+	}
+	last := 0
+	for _, m := range marks.FindAllStringIndex(text, -1) {
+		if m[1] == m[0] {
+			continue
+		}
+		b.WriteString(html.EscapeString(text[last:m[0]]))
+		b.WriteString("<mark>" + html.EscapeString(text[m[0]:m[1]]) + "</mark>")
+		last = m[1]
+	}
+	b.WriteString(html.EscapeString(text[last:]))
+}
+
+// wordsRe splits a search term into the words the index sees in it.
+var wordsRe = regexp.MustCompile(`[\pL\pN]+`)
+
+// markPattern is what to mark in the lines a search found: each term the way
+// the index matched it. A word is marked where a word starts with it, a phrase
+// as its words in order with anything but letters between them — which is how
+// "user_id=42" matched "user id 42" — and an exact search wherever its text is.
+// Nil when there is nothing to mark.
+func markPattern(terms []string, exact bool) *regexp.Regexp {
+	var alts []string
+	for _, t := range terms {
+		if exact {
+			alts = append(alts, regexp.QuoteMeta(t))
+			continue
+		}
+		words := wordsRe.FindAllString(t, -1)
+		if len(words) == 0 {
+			// Punctuation alone, found by reading the lines: marked as it is.
+			alts = append(alts, regexp.QuoteMeta(t))
+			continue
+		}
+		for i, w := range words {
+			words[i] = regexp.QuoteMeta(w)
+		}
+		alts = append(alts, `\b`+strings.Join(words, `[^\pL\pN]+`))
+	}
+	if len(alts) == 0 {
+		return nil
+	}
+	re, err := regexp.Compile("(?i)" + strings.Join(alts, "|"))
+	if err != nil {
+		return nil
+	}
+	return re
 }
 
 // detectLevel returns the CSS class for a plain line's severity, or "" when it

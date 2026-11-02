@@ -9,19 +9,19 @@
       {{range .Apps}}
       {{/* A select option holds text and nothing else, so the colour comes as a
            dot character, and the option is drawn in it. */}}
-      <option value="{{.ID}}" style="color: {{.LogColor}}" {{if eq $.App .ID}}selected{{end}}>● {{.Name}}</option>
+      <option value="{{.ID}}" style="color: {{.LogColor}}" {{if eq $.Search.App .ID}}selected{{end}}>● {{.Name}}</option>
       {{end}}
     </select>
   </div>
   <div class="min-w-64 flex-1">
     <label for="q" class="label mb-1!">Search</label>
-    <input id="q" name="q" type="text" value="{{.Query}}" placeholder="error, exception, ..." class="input mono">
+    <input id="q" name="q" type="text" value="{{.Search.Text}}" placeholder="error, exception, ..." class="input mono">
   </div>
   <button type="submit" class="btn-primary">Search</button>
 </form>
 
 {{$p := pre . "results"}}
-<div id="log-results"{{if not $p}} hx-get="/partials/logs?app={{.App | urlquery}}&q={{.Query | urlquery}}&page={{.Page}}" hx-trigger="load" hx-swap="innerHTML"{{end}}>
+<div id="log-results"{{if not $p}} hx-get="{{.Results}}" hx-trigger="load" hx-swap="innerHTML"{{end}}>
   {{if $p}}{{$p}}{{else}}<div class="card h-20 animate-pulse"></div>{{end}}
 </div>
 {{end}}

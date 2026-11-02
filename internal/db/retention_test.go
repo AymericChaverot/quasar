@@ -102,7 +102,7 @@ func TestPurgeLogs(t *testing.T) {
 	if n, err := PurgeLogs(d); err != nil || n != 2 {
 		t.Errorf("purged %d (%v), want 2", n, err)
 	}
-	if n, _ := CountLogs(d, "", ""); n != 0 {
+	if n, _ := CountLogs(d, LogQuery{}); n != 0 {
 		t.Errorf("%d lines left", n)
 	}
 }

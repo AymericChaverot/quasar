@@ -17,7 +17,7 @@ import (
 
 // retentionData is what the Settings page shows of it.
 func (s *Server) retentionData() map[string]any {
-	logs, _ := db.CountLogs(s.db, "", "")
+	logs, _ := db.CountLogs(s.db, db.LogQuery{})
 	audits, _ := db.CountAudit(s.db, "")
 	return map[string]any{
 		"LogDays":      db.LogRetentionDays(s.db),
