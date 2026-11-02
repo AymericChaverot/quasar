@@ -56,6 +56,10 @@ const (
 	// samples themselves run to.
 	seriesRetention = 365 * 24 * time.Hour
 	failThreshold   = 3 // consecutive health failures before auto-restart
+	// incidentThreshold is how many checks in a row have to fail for the
+	// public status to report an incident: one is a timeout, two is a minute
+	// of an application not answering.
+	incidentThreshold = 2
 
 	logRescanInterval = stateInterval
 	logFlushInterval  = 2 * time.Second
@@ -158,6 +162,9 @@ func checkHealth(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring
 		}
 		for _, a := range apps {
 			if a.HealthPath == "" {
+				// Nothing will close an incident on an application nobody
+				// checks any more, so its removed check closes it.
+				logIncident(db.CloseIncident(database, a.ID), a.ID)
 				continue
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -171,14 +178,8 @@ func checkHealth(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring
 				continue // nothing to aim at (compose app with no labelled web service)
 			}
 
-			ok := probe(url)
-			if err := db.RecordHealth(database, a.ID, ok); err != nil {
-				log.Printf("monitor: recording the health of %s: %v", a.ID, err)
-			}
-			if ok {
-				continue
-			}
-			if fails := db.ConsecutiveHealthFailures(database, a.ID); fails == failThreshold {
+			fails := recordCheck(database, a.ID, probe(url))
+			if fails == failThreshold {
 				ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 				err := dock.Restart(ctx, a)
 				cancel()
@@ -188,6 +189,7 @@ func checkHealth(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring
 					notify.Send(database, fmt.Sprintf("Quasar: %s failed %d health checks and could NOT be restarted: %v", a.Name, fails, err))
 				} else {
 					event.Warning("health", a.Name, checks, "restarted")
+					logIncident(db.MarkIncidentRestarted(database, a.ID), a.ID)
 					if err := db.RecordChartEvent(database, db.EventRestart, a.ID, "Auto-restart · "+a.Name); err != nil {
 						log.Printf("monitor: marking the restart of %s: %v", a.ID, err)
 					}
@@ -443,5 +445,30 @@ func runScheduledTasks(database *sql.DB, dock *docker.Client, keyring *secrets.K
 				notify.Send(database, fmt.Sprintf("Quasar: scheduled task failed on %s: %s (%v)", a.Name, t.Command, err))
 			}
 		}
+	}
+}
+
+// recordCheck stores one check's answer, opens or closes the application's
+// incident to match, and returns how many checks in a row have now failed.
+func recordCheck(database *sql.DB, appID string, ok bool) int {
+	if err := db.RecordHealth(database, appID, ok); err != nil {
+		log.Printf("monitor: recording the health of %s: %v", appID, err)
+	}
+	if ok {
+		logIncident(db.CloseIncident(database, appID), appID)
+		return 0
+	}
+	fails := db.ConsecutiveHealthFailures(database, appID)
+	if fails >= incidentThreshold {
+		logIncident(db.OpenIncident(database, appID), appID)
+	}
+	return fails
+}
+
+// logIncident says what went wrong recording an incident, which is otherwise
+// only noticed as a status that does not move.
+func logIncident(err error, appID string) {
+	if err != nil {
+		log.Printf("monitor: recording an incident of %s: %v", appID, err)
 	}
 }
