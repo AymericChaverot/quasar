@@ -38,6 +38,12 @@ const (
 	// plot, which reads as an outage rather than as a window nobody kept.
 	Retention = 7 * 24 * time.Hour
 
+	// HistoryRetention is how long the server's and the applications' samples
+	// are kept once folded into hours: a month, so a chart can show one. A
+	// month of hours is a few hundred rows a series, far less than the week of
+	// samples before it.
+	HistoryRetention = 30 * 24 * time.Hour
+
 	// seriesRetention is how long a station's own series are kept once folded
 	// into hours. Longer than everything else because they cost so much less
 	// once they are: a year of hourly rows for eight series is a few hundred
@@ -227,7 +233,11 @@ func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyri
 		}
 		if time.Since(lastPrune) > time.Hour {
 			if err := db.PruneTimeSeries(database, time.Now().Add(-Retention)); err != nil {
-				log.Printf("monitor: trimming the time series: %v", err)
+				log.Printf("monitor: trimming the health checks: %v", err)
+			}
+			if err := db.FoldMetrics(database,
+				time.Now().Add(-Retention), time.Now().Add(-HistoryRetention)); err != nil {
+				log.Printf("monitor: folding the server and application samples: %v", err)
 			}
 			// A station's series are folded rather than dropped: the same
 			// seven days at full resolution, then one row an hour for a year.

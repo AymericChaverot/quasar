@@ -125,11 +125,13 @@ func TestAWindowInAnotherZoneStillFindsTheSamples(t *testing.T) {
 
 	// And the sweep does not take an hour of samples with it because the clock
 	// it was handed reads ahead of them.
-	if err := PruneTimeSeries(database, time.Now().In(east).Add(-7*24*time.Hour)); err != nil {
+	week := time.Now().In(east).Add(-7 * 24 * time.Hour)
+	if err := FoldMetrics(database, week, week); err != nil {
 		t.Fatal(err)
 	}
-	if pts, _ := AppMetrics(database, "app1", since, time.Minute); len(pts) != 1 {
-		t.Error("a fresh sample was pruned by a window expressed in another zone")
+	var raw int
+	if err := database.QueryRow("SELECT COUNT(*) FROM app_metrics").Scan(&raw); err != nil || raw != 1 {
+		t.Errorf("a fresh sample was folded by a window expressed in another zone (%d left, %v)", raw, err)
 	}
 }
 

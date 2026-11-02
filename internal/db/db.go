@@ -91,6 +91,39 @@ CREATE TABLE IF NOT EXISTS app_metrics (
 );
 CREATE INDEX IF NOT EXISTS idx_app_metrics ON app_metrics(app_id, ts);
 
+-- The two tables above once their samples are a week old: one row an hour,
+-- keeping the least and the most beside the mean for the same reason the
+-- stations' hourly series do. A month of the server is seven hundred rows here
+-- against forty thousand samples.
+CREATE TABLE IF NOT EXISTS metrics_hourly (
+	hour     DATETIME NOT NULL PRIMARY KEY,
+	cpu      REAL NOT NULL,
+	cpu_min  REAL NOT NULL,
+	cpu_max  REAL NOT NULL,
+	mem      REAL NOT NULL,
+	mem_min  REAL NOT NULL,
+	mem_max  REAL NOT NULL,
+	disk     REAL NOT NULL,
+	load1    REAL NOT NULL,
+	swap_gb  REAL NOT NULL,
+	mem_gb   REAL NOT NULL,
+	disk_gb  REAL NOT NULL,
+	samples  INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS app_metrics_hourly (
+	app_id      TEXT NOT NULL,
+	hour        DATETIME NOT NULL,
+	cpu         REAL NOT NULL,
+	cpu_min     REAL NOT NULL,
+	cpu_max     REAL NOT NULL,
+	mem_mb      REAL NOT NULL,
+	mem_mb_min  REAL NOT NULL,
+	mem_mb_max  REAL NOT NULL,
+	samples     INTEGER NOT NULL,
+	PRIMARY KEY (app_id, hour)
+);
+
 CREATE TABLE IF NOT EXISTS deployments (
 	id          INTEGER PRIMARY KEY AUTOINCREMENT,
 	app_id      TEXT NOT NULL,

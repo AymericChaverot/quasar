@@ -89,22 +89,98 @@ func RecordAppMetric(db *sql.DB, appID string, cpu, memMB float64) error {
 // The bucket's own timestamp is its start, computed from the epoch rather than
 // taken from a row in it, which keeps the points evenly spaced whatever the
 // samples inside them happened to land on.
+//
+// Each reads the samples and the hours they were folded into as one table: a
+// sample is an hour of one, and an hour is weighted by how many samples it
+// stood for, so a bucket that straddles the fold averages the same as it did
+// before it.
 
 func ServerMetrics(db *sql.DB, since time.Time, bucket time.Duration) ([]MetricPoint, error) {
-	secs := bucketSeconds(bucket)
-	return queryPoints(db, `SELECT CAST(strftime('%s', ts) / ? AS INTEGER) * ?, AVG(cpu), AVG(mem), AVG(disk),
-			MIN(cpu), MAX(cpu), MIN(mem), MAX(mem)
-		FROM metrics WHERE ts >= ? GROUP BY 1 ORDER BY 1`, secs, secs, since.UTC())
+	secs, from := bucketSeconds(bucket), since.UTC()
+	return queryPoints(db, `SELECT CAST(strftime('%s', ts) / ? AS INTEGER) * ?,
+			SUM(cpu * n) / SUM(n), SUM(mem * n) / SUM(n), SUM(disk * n) / SUM(n),
+			MIN(cpu_min), MAX(cpu_max), MIN(mem_min), MAX(mem_max)
+		FROM (
+			SELECT ts, cpu, cpu AS cpu_min, cpu AS cpu_max, mem, mem AS mem_min, mem AS mem_max, disk, 1 AS n
+			FROM metrics WHERE ts >= ?
+			UNION ALL
+			SELECT hour, cpu, cpu_min, cpu_max, mem, mem_min, mem_max, disk, samples
+			FROM metrics_hourly WHERE hour >= ?
+		) GROUP BY 1 ORDER BY 1`, secs, secs, from, from)
 }
 
 func AppMetrics(db *sql.DB, appID string, since time.Time, bucket time.Duration) ([]MetricPoint, error) {
 	// The literal zero keeps one scanner for both windows. An application's own
 	// disk use is not sampled a minute at a time — it is a walk of a directory
 	// tree, not a counter — so there is nothing to average here.
-	secs := bucketSeconds(bucket)
-	return queryPoints(db, `SELECT CAST(strftime('%s', ts) / ? AS INTEGER) * ?, AVG(cpu), AVG(mem_mb), 0,
-			MIN(cpu), MAX(cpu), MIN(mem_mb), MAX(mem_mb)
-		FROM app_metrics WHERE app_id = ? AND ts >= ? GROUP BY 1 ORDER BY 1`, secs, secs, appID, since.UTC())
+	secs, from := bucketSeconds(bucket), since.UTC()
+	return queryPoints(db, `SELECT CAST(strftime('%s', ts) / ? AS INTEGER) * ?,
+			SUM(cpu * n) / SUM(n), SUM(mem * n) / SUM(n), 0,
+			MIN(cpu_min), MAX(cpu_max), MIN(mem_min), MAX(mem_max)
+		FROM (
+			SELECT ts, cpu, cpu AS cpu_min, cpu AS cpu_max, mem_mb AS mem, mem_mb AS mem_min, mem_mb AS mem_max, 1 AS n
+			FROM app_metrics WHERE app_id = ? AND ts >= ?
+			UNION ALL
+			SELECT hour, cpu, cpu_min, cpu_max, mem_mb, mem_mb_min, mem_mb_max, samples
+			FROM app_metrics_hourly WHERE app_id = ? AND hour >= ?
+		) GROUP BY 1 ORDER BY 1`, secs, secs, appID, from, appID, from)
+}
+
+// FoldMetrics turns the server's and the applications' samples taken before
+// foldBefore into one row an hour, and drops the hours from before dropBefore.
+//
+// Like FoldStationSeries, an hour folded a second time — a sample that landed
+// in an hour already folded, which happens at the edge of the window — is
+// merged into the row rather than replacing it, weighted by how many samples
+// each side stands for.
+func FoldMetrics(db *sql.DB, foldBefore, dropBefore time.Time) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // the commit below is what matters; a rollback after it is a no-op
+
+	cut, drop := foldBefore.UTC(), dropBefore.UTC()
+	weighted := func(col string) string {
+		return col + " = (" + col + " * samples + excluded." + col + " * excluded.samples) / (samples + excluded.samples)"
+	}
+	steps := []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO metrics_hourly
+			(hour, cpu, cpu_min, cpu_max, mem, mem_min, mem_max, disk, load1, swap_gb, mem_gb, disk_gb, samples)
+		SELECT strftime('%Y-%m-%d %H:00:00', ts), AVG(cpu), MIN(cpu), MAX(cpu), AVG(mem), MIN(mem), MAX(mem),
+			AVG(disk), AVG(load1), AVG(swap_gb), AVG(mem_gb), AVG(disk_gb), COUNT(*)
+		FROM metrics WHERE ts < ? GROUP BY 1
+		ON CONFLICT (hour) DO UPDATE SET
+			` + weighted("cpu") + `, ` + weighted("mem") + `, ` + weighted("disk") + `,
+			` + weighted("load1") + `, ` + weighted("swap_gb") + `,
+			` + weighted("mem_gb") + `, ` + weighted("disk_gb") + `,
+			cpu_min = MIN(cpu_min, excluded.cpu_min), cpu_max = MAX(cpu_max, excluded.cpu_max),
+			mem_min = MIN(mem_min, excluded.mem_min), mem_max = MAX(mem_max, excluded.mem_max),
+			samples = samples + excluded.samples`, []any{cut}},
+		{`DELETE FROM metrics WHERE ts < ?`, []any{cut}},
+		{`INSERT INTO app_metrics_hourly
+			(app_id, hour, cpu, cpu_min, cpu_max, mem_mb, mem_mb_min, mem_mb_max, samples)
+		SELECT app_id, strftime('%Y-%m-%d %H:00:00', ts), AVG(cpu), MIN(cpu), MAX(cpu),
+			AVG(mem_mb), MIN(mem_mb), MAX(mem_mb), COUNT(*)
+		FROM app_metrics WHERE ts < ? GROUP BY 1, 2
+		ON CONFLICT (app_id, hour) DO UPDATE SET
+			` + weighted("cpu") + `, ` + weighted("mem_mb") + `,
+			cpu_min = MIN(cpu_min, excluded.cpu_min), cpu_max = MAX(cpu_max, excluded.cpu_max),
+			mem_mb_min = MIN(mem_mb_min, excluded.mem_mb_min), mem_mb_max = MAX(mem_mb_max, excluded.mem_mb_max),
+			samples = samples + excluded.samples`, []any{cut}},
+		{`DELETE FROM app_metrics WHERE ts < ?`, []any{cut}},
+		{`DELETE FROM metrics_hourly WHERE hour < ?`, []any{drop}},
+		{`DELETE FROM app_metrics_hourly WHERE hour < ?`, []any{drop}},
+	}
+	for _, st := range steps {
+		if _, err := tx.Exec(st.query, st.args...); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // bucketSeconds is the width of one bucket, in the unit the query divides by.
@@ -139,21 +215,16 @@ func queryPoints(db *sql.DB, query string, args ...any) ([]MetricPoint, error) {
 	return out, rows.Err()
 }
 
-// PruneTimeSeries drops samples older than the retention window, reporting the
-// first table it could not trim: one locked database fails all three the same
-// way, and three copies of that in the log say nothing the first did not.
+// PruneTimeSeries drops health probes older than the retention window.
 //
-// A station's own series are not here. They are not dropped when they age out,
+// The server's and the applications' samples are not here: they are folded
+// into hours rather than dropped, and that is FoldMetrics' job. A station's own
+// series are not here either. They are not dropped when they age out,
 // they are folded into hours first, and that is FoldStationSeries' job. Nor
 // are stored log lines, which are kept as long as the operator set: see
 // PruneRetained.
 func PruneTimeSeries(db *sql.DB, olderThan time.Time) error {
-	cut := olderThan.UTC()
-	return firstError(
-		exec(db, "DELETE FROM metrics WHERE ts < ?", cut),
-		exec(db, "DELETE FROM app_metrics WHERE ts < ?", cut),
-		exec(db, "DELETE FROM health_history WHERE ts < ?", cut),
-	)
+	return exec(db, "DELETE FROM health_history WHERE ts < ?", olderThan.UTC())
 }
 
 // Reclaim gives the disk back the space deleted rows left behind, returning
@@ -188,6 +259,7 @@ func Reclaim(db *sql.DB) int64 {
 func DeleteAppTimeSeries(db *sql.DB, appID string) error {
 	return firstError(
 		exec(db, "DELETE FROM app_metrics WHERE app_id = ?", appID),
+		exec(db, "DELETE FROM app_metrics_hourly WHERE app_id = ?", appID),
 		exec(db, "DELETE FROM health_history WHERE app_id = ?", appID),
 		exec(db, "DELETE FROM app_sizes WHERE app_id = ?", appID),
 	)

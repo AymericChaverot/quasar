@@ -45,3 +45,70 @@ func TestABucketKeepsItsLowestAndHighestSample(t *testing.T) {
 		t.Errorf("bucket = %+v, want an average of 40 between 10 and 90, memory 5 to 45", p)
 	}
 }
+
+// Samples a week old become one row an hour, and a chart reading across the
+// fold sees the same averages and extremes it did before it.
+func TestFoldedHoursReadLikeTheSamplesTheyReplaced(t *testing.T) {
+	database := openTestDB(t)
+	hour := time.Now().UTC().Add(-8 * 24 * time.Hour).Truncate(time.Hour)
+	at := func(m int) string { return hour.Add(time.Duration(m) * time.Minute).Format("2006-01-02 15:04:05") }
+	for i, cpu := range []float64{10, 90, 20} {
+		if _, err := database.Exec(`INSERT INTO metrics (ts, cpu, mem, disk, disk_gb) VALUES (?, ?, 40, 70, 56)`, at(i*10), cpu); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := database.Exec(`INSERT INTO app_metrics (app_id, ts, cpu, mem_mb) VALUES ('a', ?, ?, ?)`, at(i*10), cpu, cpu*10); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// One fresh sample, which has to stay a sample.
+	if err := RecordServerMetric(database, ServerSample{CPU: 5}); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := ServerMetrics(database, hour.Add(-time.Hour), time.Hour)
+
+	if err := FoldMetrics(database, time.Now().Add(-7*24*time.Hour), time.Now().Add(-30*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	var raw, hours, appHours int
+	database.QueryRow(`SELECT COUNT(*) FROM metrics`).Scan(&raw)
+	database.QueryRow(`SELECT COUNT(*) FROM metrics_hourly`).Scan(&hours)
+	database.QueryRow(`SELECT COUNT(*) FROM app_metrics_hourly`).Scan(&appHours)
+	if raw != 1 || hours != 1 || appHours != 1 {
+		t.Fatalf("after the fold: %d samples, %d server hours, %d app hours; want 1, 1, 1", raw, hours, appHours)
+	}
+
+	after, err := ServerMetrics(database, hour.Add(-time.Hour), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) || after[0] != before[0] {
+		t.Errorf("the folded hour reads %+v, the samples read %+v", after, before)
+	}
+	app, _ := AppMetrics(database, "a", hour.Add(-time.Hour), time.Hour)
+	if len(app) != 1 || app[0].V1 != 40 || app[0].Lo1 != 10 || app[0].Hi1 != 90 || app[0].Hi2 != 900 {
+		t.Errorf("the application's folded hour reads %+v", app)
+	}
+
+	// Folding into an hour already folded merges, weighted by samples.
+	if _, err := database.Exec(`INSERT INTO metrics (ts, cpu, mem, disk) VALUES (?, 100, 40, 70)`, at(50)); err != nil {
+		t.Fatal(err)
+	}
+	if err := FoldMetrics(database, time.Now().Add(-7*24*time.Hour), time.Now().Add(-30*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	var cpu, hi float64
+	var n int
+	database.QueryRow(`SELECT cpu, cpu_max, samples FROM metrics_hourly`).Scan(&cpu, &hi, &n)
+	if cpu != 55 || hi != 100 || n != 4 {
+		t.Errorf("merged hour: cpu %v max %v over %d samples; want 55, 100, 4", cpu, hi, n)
+	}
+
+	// And hours past the longer window go.
+	if err := FoldMetrics(database, time.Now(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	database.QueryRow(`SELECT COUNT(*) FROM metrics_hourly`).Scan(&hours)
+	if hours != 0 {
+		t.Errorf("%d hours left after dropping everything older than now, want none", hours)
+	}
+}
