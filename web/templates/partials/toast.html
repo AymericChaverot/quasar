@@ -43,5 +43,10 @@
 <template id="toast-request-failed">
   {{template "toast" (dict "Kind" "err" "ID" "request-failed" "Title" "Request failed" "Text" "-")}}
 </template>
+{{/* What copy.js says once an address is on the clipboard, from somewhere
+     with no button of its own to turn green: the palette. */}}
+<template id="toast-copied">
+  {{template "toast" (dict "Kind" "ok" "Title" "Copied" "Text" "-")}}
+</template>
 <script src="/static/js/toasts.js" defer></script>
 {{end}}

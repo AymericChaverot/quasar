@@ -33,6 +33,11 @@ type PaletteApp struct {
 	State string `json:"state"`
 	// Git, Compose say which words the redeploy and update questions use.
 	DeployType string `json:"deployType"`
+	// Address is where a stack that publishes a port of its own is reached
+	// — a game server, a database — for the palette to copy; Proto is the
+	// protocol it speaks.
+	Address string `json:"address,omitempty"`
+	Proto   string `json:"proto,omitempty"`
 }
 
 // PalettePage is a page, or a section of one.
@@ -139,9 +144,11 @@ func (s *Server) handlePalette(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, v := range s.appViews(r, apps) {
-		idx.Apps = append(idx.Apps, PaletteApp{
-			ID: v.ID, Name: v.Name, Host: v.Host(), State: v.Status.State, DeployType: v.DeployType,
-		})
+		app := PaletteApp{ID: v.ID, Name: v.Name, Host: v.Host(), State: v.Status.State, DeployType: v.DeployType}
+		if ports := v.PublicPorts(); len(ports) > 0 {
+			app.Address, app.Proto = ports[0].Dial, ports[0].Proto
+		}
+		idx.Apps = append(idx.Apps, app)
 	}
 
 	idx.Pages, idx.Actions, idx.Themes = paletteChoices(admin, db.CountEnabledStations(s.db) > 0, themeFrom(r))

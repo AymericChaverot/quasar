@@ -62,6 +62,7 @@
     bell: S + '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
     audit: S + '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>',
     server: S + '<rect x="3" y="4" width="18" height="7" rx="1"/><rect x="3" y="13" width="18" height="7" rx="1"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>',
+    copy: S + '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
     archive: S + '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></svg>',
   };
 
@@ -101,6 +102,9 @@
   function appActions(a) {
     var base = "/apps/" + encodeURIComponent(a.id);
     var out = [];
+    // First for a game server or a database: there is no page to open, and the
+    // address is what somebody came for.
+    if (a.address) out.push({ icon: "copy", title: "Copy address", within: a.address + " · " + a.proto.toUpperCase(), copy: a.address });
     if (a.host) out.push({ key: "open:" + a.id, icon: "open", title: "Open " + a.host, within: "new tab", href: "https://" + a.host, newTab: true });
     out.push({ key: "app:" + a.id, icon: "overview", title: "Overview", href: base });
     out.push({ key: "app-logs:" + a.id, icon: "logs", title: "Logs", href: base + "#logs" });
@@ -333,6 +337,10 @@
     if (!it) return;
     remember(it);
     close();
+    if (it.copy) {
+      if (window.quasarCopy) window.quasarCopy(it.copy);
+      return;
+    }
     if (it.href) {
       if (it.newTab) window.open(it.href, "_blank", "noopener");
       else location.href = it.href;
