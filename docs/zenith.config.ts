@@ -20,6 +20,8 @@ export default defineConfig({
   og: { logo: { src: './theme/og-logo.svg' } },
   // The site publishes these pages on every tag, so a broken link stops the build.
   linkValidation: 'error',
+  // Same for a diagram Mermaid can't draw: fail rather than ship its source.
+  mermaid: { fallback: 'error' },
   openapi: {
     quasar: './openapi/quasar.yaml',
   },
