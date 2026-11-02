@@ -46,6 +46,8 @@ func FoldHealth(db *sql.DB, foldBefore, dropBefore time.Time) error {
 		ON CONFLICT (app_id, day) DO UPDATE SET ok = ok + excluded.ok, total = total + excluded.total`, cut},
 		{`DELETE FROM health_history WHERE ts < ?`, cut},
 		{`DELETE FROM health_daily WHERE day < ?`, dropBefore.UTC().Format(time.DateOnly)},
+		// An incident is kept as long as the days it happened on.
+		{`DELETE FROM incidents WHERE ended_at < ?`, dropBefore.UTC()},
 	} {
 		if _, err := tx.Exec(st.query, st.arg); err != nil {
 			return err

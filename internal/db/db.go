@@ -85,6 +85,22 @@ CREATE TABLE IF NOT EXISTS health_daily (
 	PRIMARY KEY (app_id, day)
 );
 
+-- The applications the public status names, and under what name: see status.go.
+CREATE TABLE IF NOT EXISTS status_apps (
+	app_id TEXT PRIMARY KEY,
+	name   TEXT NOT NULL
+);
+
+-- Stretches an application did not answer its health check.
+CREATE TABLE IF NOT EXISTS incidents (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	app_id     TEXT NOT NULL,
+	started_at DATETIME NOT NULL,
+	ended_at   DATETIME,
+	restarted  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_incidents_app ON incidents(app_id, ended_at);
+
 CREATE TABLE IF NOT EXISTS metrics (
 	ts   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	cpu  REAL NOT NULL,
