@@ -15,7 +15,8 @@
      rather than a control. */}}
 {{define "metrics_range"}}
 <form id="{{.ID}}-range" class="range-pick"
-      hx-get="{{.URL}}" hx-target="#{{.ID}}-cards" hx-swap="innerHTML" hx-trigger="change">
+      hx-get="{{.URL}}" hx-target="#{{.ID}}-cards" hx-swap="innerHTML" hx-trigger="change"
+      {{- with .Include}} hx-include="{{.}}"{{end}}>
   {{/* Says the request came from the picker. An unticked checkbox sends
        nothing at all, so without this a request asking for none of them and a
        request from something that is not this form arrive identically — and the

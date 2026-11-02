@@ -14,6 +14,7 @@ import (
 	"quasar/internal/backup"
 	"quasar/internal/catalog"
 	"quasar/internal/certs"
+	"quasar/internal/chart"
 	"quasar/internal/db"
 	"quasar/internal/docker"
 	"quasar/internal/hostupdate"
@@ -547,6 +548,17 @@ func TestExecuteTemplates(t *testing.T) {
 		{"tasks", map[string]any{"AppID": "abcd1234", "Tasks": []*db.Task(nil)}},
 		{"metrics_range", map[string]any{"ID": ServerPicker, "URL": "/partials/metrics",
 			"Measurements": picker(httptest.NewRequest("GET", "/", nil), ServerPicker, ServerMeasurements)}},
+		// The server's one chart with everything on it, and with nothing.
+		{"server_history", ServerHistory{Chart: chart.BuildWith("line", []chart.Series{{
+			Label: "CPU", Colour: "var(--chart)", Band: true, Points: []chart.Point{
+				{At: time.Now().Add(-time.Minute), Value: 20, Lo: 10, Hi: 40},
+				{At: time.Now(), Value: 25, Lo: 15, Hi: 90},
+			}}}, "%", chart.Options{FixedMax: 100, Wide: true, Height: serverChartHeight,
+			Rules:  []chart.Rule{{Value: 90, Label: "CPU alert"}},
+			Events: []chart.Event{{At: time.Now(), Label: "Deploy · blog", Kind: "deploy"}}})}},
+		{"server_history", ServerHistory{Nothing: true}},
+		{"server_toggles", map[string]any{"ID": ServerPicker, "URL": "/partials/metrics",
+			"Toggles": picker(httptest.NewRequest("GET", "/", nil), ServerPicker, ServerToggles)}},
 		{"metrics", metricsCards([]db.MetricPoint{
 			{TS: time.Now().Add(-2 * time.Minute), V1: 10, V2: 40, V3: 71},
 			{TS: time.Now().Add(-time.Minute), V1: 25, V2: 42, V3: 71},

@@ -43,20 +43,31 @@ type Measurement struct {
 	Unit  string
 	Max   float64 // 0 for a scale worked out from the window
 	Value func(db.MetricPoint) float64
+
+	// Colour is what the server's chart draws it in, and the swatch on its
+	// toggle; empty for what is not a series.
+	Colour string
+	// Range reads the bucket's least and most, for the band behind the line.
+	Range func(db.MetricPoint) (lo, hi float64)
 }
 
 // ServerMeasurements and AppMeasurements are what each page can draw, in the
 // order the picker offers them and the cards are laid out.
 var (
 	ServerMeasurements = []Measurement{
-		{Key: "cpu", Name: "CPU", Unit: "%", Max: 100, Value: func(p db.MetricPoint) float64 { return p.V1 }},
-		{Key: "memory", Name: "Memory", Unit: "%", Max: 100, Value: func(p db.MetricPoint) float64 { return p.V2 }},
+		{Key: "cpu", Name: "CPU", Unit: "%", Max: 100, Colour: "var(--chart)",
+			Value: func(p db.MetricPoint) float64 { return p.V1 },
+			Range: func(p db.MetricPoint) (float64, float64) { return p.Lo1, p.Hi1 }},
+		{Key: "memory", Name: "Memory", Unit: "%", Max: 100, Colour: "var(--chart-memory)",
+			Value: func(p db.MetricPoint) float64 { return p.V2 },
+			Range: func(p db.MetricPoint) (float64, float64) { return p.Lo2, p.Hi2 }},
 		// Sampled beside the other two since the first release and drawn
 		// nowhere until now. It is the one of the three that moves slowly and
 		// only ever in one direction, which is why a week of it is worth more
 		// than a live figure: a disk that will be full on Thursday looks no
 		// different today from one that will not.
-		{Key: "disk", Name: "Disk", Unit: "%", Max: 100, Value: func(p db.MetricPoint) float64 { return p.V3 }},
+		{Key: "disk", Name: "Disk", Unit: "%", Max: 100, Colour: "var(--chart-disk)",
+			Value: func(p db.MetricPoint) float64 { return p.V3 }},
 	}
 	AppMeasurements = []Measurement{
 		{Key: "cpu", Name: "CPU", Unit: "%", Value: func(p db.MetricPoint) float64 { return p.V1 }},
@@ -202,18 +213,6 @@ func metricsCard(wide bool, label, unit string, pts []db.MetricPoint, sel func(d
 	return c
 }
 
-func (s *Server) handleServerMetricsPartial(w http.ResponseWriter, r *http.Request) {
-	spec, window := metricsWindow(r)
-	want := chosen(r, ServerPicker, ServerMeasurements)
-	s.remember(w, r, ServerPicker, want)
-	if len(want) == 0 {
-		s.renderPartial(w, "metrics", nil)
-		return
-	}
-	pts, _ := db.ServerMetrics(s.db, time.Now().Add(-window), window/metricsBuckets)
-	s.renderPartial(w, "metrics", metricsCards(pts, want, spec))
-}
-
 func (s *Server) handleAppMetricsPartial(w http.ResponseWriter, r *http.Request) {
 	a := s.getApp(w, r)
 	if a == nil {
@@ -259,7 +258,7 @@ func (s *Server) handleAppStorageHistoryPartial(w http.ResponseWriter, r *http.R
 // The pickers, named. A page and the partial behind it have to agree on which
 // selection is being remembered, and this is where they agree.
 const (
-	ServerPicker  = "server-metrics"
+	ServerPicker  = "server-history"
 	AppPicker     = "app-metrics"
 	StoragePicker = "app-storage"
 )

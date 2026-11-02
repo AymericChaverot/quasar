@@ -68,6 +68,8 @@
      put a large khaki wash next to the amber "disk nearly full" meter, and the
      card started reading as a warning instead of as data. */
   --chart: #38bdf8; /* series color, validated against the dark surface */
+  --chart-memory: #a78bfa; /* the server chart's memory and disk, apart from --chart and the alert colours */
+  --chart-disk: #f472b6;
   --radius: 4px;
   --radius-badge: 9999px;
   --border-w: 1px;
@@ -100,6 +102,8 @@
   --err: #ff4040;
   --info: #33ffff;
   --chart: #00a3a3; /* series color, validated against pure black */
+  --chart-memory: #9d8cff; /* the server chart's memory and disk, apart from --chart and the alert colours */
+  --chart-disk: #ff66cc;
   --radius: 0;
   --radius-badge: 0;
   --border-w: 2px;
@@ -132,6 +136,8 @@
   --err: #ff2e4d;
   --info: #25e0f5;
   --chart: #ff4d12; /* series color, validated against the near-black surface */
+  --chart-memory: #25e0f5; /* the server chart's memory and disk, apart from --chart and the alert colours */
+  --chart-disk: #c084fc;
   --radius: 0;
   --radius-badge: 0;
   --border-w: 1px;
@@ -161,6 +167,8 @@
   --err: #bf616a;
   --info: #81a1c1;
   --chart: #88c0d0; /* series color, validated against the slate surface */
+  --chart-memory: #b48ead; /* the server chart's memory and disk, apart from --chart and the alert colours */
+  --chart-disk: #d08770;
   --radius: 6px;
   --radius-badge: 9999px;
   --border-w: 1px;
@@ -192,6 +200,8 @@
   --err: #ff4d6d;
   --info: #4dd6ff;
   --chart: #ff2d95; /* series color, validated against the violet surface */
+  --chart-memory: #4dd6ff; /* the server chart's memory and disk, apart from --chart and the alert colours */
+  --chart-disk: #b388ff;
   --radius: 6px;
   --radius-badge: 9999px;
   --border-w: 1px;
@@ -221,6 +231,8 @@
   --err: #dc2626;
   --info: #0284c7;
   --chart: #0284c7; /* series color, validated against white */
+  --chart-memory: #7c3aed; /* the server chart's memory and disk, apart from --chart and the alert colours */
+  --chart-disk: #db2777;
   --radius: 6px;
   --radius-badge: 9999px;
   --border-w: 1px;
@@ -252,6 +264,8 @@
   --err: #dc322f;
   --info: #2aa198;
   --chart: #268bd2; /* series color, validated against the warm paper surface */
+  --chart-memory: #6c71c4; /* the server chart's memory and disk, apart from --chart and the alert colours */
+  --chart-disk: #d33682;
   --radius: 4px;
   --radius-badge: 9999px;
   --border-w: 1px;

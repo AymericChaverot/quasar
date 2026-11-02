@@ -1,0 +1,32 @@
+{{/* The server's history: one chart of every measurement turned on. */}}
+{{define "server_history"}}
+{{if .Nothing}}
+{{/* Every measurement turned off. Said rather than drawn as nothing, so it
+     cannot be mistaken for a chart that failed to load. */}}
+<p class="muted py-10 text-center text-sm">Nothing selected — turn on a measurement below to chart it.</p>
+{{else}}
+{{template "chart" .Chart}}
+{{end}}
+{{end}}
+
+{{/* What can be turned on and off under the server's chart: the measurements,
+     each with the colour it is drawn in, then what is drawn around them.
+
+     A form of its own, outside the chart it controls: the chart is replaced on
+     every poll, and controls inside it would lose the focus with it. The poll
+     and the window picker include this form, and this form includes the
+     picker, so every request carries both. */}}
+{{define "server_toggles"}}
+<form id="{{.ID}}-show" class="chart-toggles"
+      hx-get="{{.URL}}" hx-target="#{{.ID}}-cards" hx-swap="innerHTML" hx-trigger="change"
+      hx-include="#{{.ID}}-range">
+  <input type="hidden" name="picker" value="1">
+  {{range .Toggles}}
+  {{if and (not .Colour) (eq .Key "range")}}<span class="chart-toggles-gap" aria-hidden="true"></span>{{end}}
+  <label class="chip chip-filter chart-toggle">
+    <input type="checkbox" name="show" value="{{.Key}}"{{if .Checked}} checked{{end}}>
+    <svg viewBox="0 0 8 8" class="chart-key" aria-hidden="true"><rect width="8" height="8" rx="2" fill="{{if .Colour}}{{.Colour}}{{else if eq .Key "alerts"}}var(--err){{else}}var(--text-faint){{end}}"/></svg>{{.Name}}
+  </label>
+  {{end}}
+</form>
+{{end}}
