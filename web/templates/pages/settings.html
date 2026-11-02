@@ -3,7 +3,7 @@
 
 <div class="space-y-10">
 
-  <section class="space-y-4">
+  <section id="appearance" class="space-y-4">
     <h2 class="h-label">Appearance</h2>
     <form method="post" action="/theme" class="card space-y-4 p-4">
       {{/* Each choice carries a small picture of the dashboard drawn in its own
@@ -37,7 +37,7 @@
     </form>
   </section>
 
-  <section class="space-y-4">
+  <section id="account" class="space-y-4">
     <h2 class="h-label">Account</h2>
     <form method="post" action="/settings/password" class="card space-y-4 p-4">
       <p class="muted text-sm">Signed in as <span class="mono">{{.Username}}</span></p>
@@ -60,7 +60,7 @@
     </form>
   </section>
 
-  <section class="space-y-4">
+  <section id="two-factor" class="space-y-4">
     <h2 class="h-label">Two-factor authentication</h2>
     <div class="card space-y-4 p-4">
       {{if .TOTPSetup}}
@@ -97,7 +97,7 @@
   </section>
 
   {{if .IsAdmin}}
-  <section class="space-y-4">
+  <section id="users" class="space-y-4">
     <h2 class="h-label">Users</h2>
     <div class="card space-y-4 p-4">
       <ul class="user-list">
@@ -160,7 +160,7 @@
     </div>
   </section>
 
-  <section class="space-y-4">
+  <section id="tokens" class="space-y-4">
     <h2 class="h-label">API tokens</h2>
     <div class="card space-y-4 p-4">
       {{if .NewToken}}
@@ -223,7 +223,7 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
     </div>
   </section>
 
-  <section class="space-y-4">
+  <section id="catalogues" class="space-y-4">
     <h2 class="h-label">Catalogues</h2>
     <a href="/settings/catalogs" class="card nav-card">
       <span class="cred-mark" aria-hidden="true">{{template "icon_grid"}}</span>
@@ -243,7 +243,7 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
     </a>
   </section>
 
-  <section class="space-y-4">
+  <section id="status" class="space-y-4">
     <h2 class="h-label">Status</h2>
     <a href="/settings/status" class="card nav-card">
       <span class="cred-mark" aria-hidden="true">{{template "icon_activity"}}</span>
@@ -258,7 +258,7 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
     </a>
   </section>
 
-  <section class="space-y-4">
+  <section id="stations" class="space-y-4">
     <h2 class="h-label">Stations</h2>
     <a href="/settings/stations" class="card nav-card">
       <span class="cred-mark" aria-hidden="true">{{template "icon_layers"}}</span>
@@ -279,7 +279,7 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
     </a>
   </section>
 
-  <section class="space-y-4">
+  <section id="git" class="space-y-4">
     <h2 class="h-label">Git credentials</h2>
     <a href="/settings/git" class="card nav-card">
       <span class="cred-mark" aria-hidden="true">{{template "icon_key"}}</span>
@@ -300,7 +300,7 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
     </a>
   </section>
 
-  <section class="space-y-4">
+  <section id="registries" class="space-y-4">
     <h2 class="h-label">Image registries</h2>
     <div class="card space-y-4 p-4">
       {{if .Registries}}
@@ -327,7 +327,7 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
     </div>
   </section>
 
-  <section class="space-y-4">
+  <section id="integrations" class="space-y-4">
     <h2 class="h-label">Integrations</h2>
     <form method="post" action="/settings/integrations" class="card space-y-4 p-4">
       <div>
@@ -499,7 +499,7 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
     {{end}}
   </section>
 
-  <section class="space-y-4">
+  <section id="sessions" class="space-y-4">
     <h2 class="h-label">Sessions</h2>
     <div class="card flex items-center justify-between p-4">
       <p class="muted text-sm">Invalidate every active session, including this one.</p>
@@ -510,7 +510,7 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
   </section>
   {{end}}
 
-  <section class="space-y-4">
+  <section id="platform" class="space-y-4">
     <h2 class="h-label">Platform</h2>
     <div class="card p-4">
       <dl class="grid grid-cols-[7rem_minmax(0,1fr)] gap-y-2 text-sm sm:grid-cols-[10rem_minmax(0,1fr)] [&_dd]:[overflow-wrap:anywhere]">

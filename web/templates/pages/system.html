@@ -8,7 +8,7 @@
        nothing at all on an install that is up to date. */}}
   {{if .IsAdmin}}{{template "system_stack" .}}{{end}}
 
-  <section class="space-y-4">
+  <section id="update" class="space-y-4">
     <h2 class="h-label">Software update</h2>
     {{template "update_card" .}}
   </section>
@@ -17,7 +17,7 @@
        row because its model name is a sentence, while a memory or disk figure
        is three characters and would leave a card of that width mostly empty. */}}
   {{with .Hardware}}
-  <section class="space-y-4">
+  <section id="hardware" class="space-y-4">
     <h2 class="h-label">Hardware</h2>
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <div class="card p-4 sm:col-span-2">
@@ -54,7 +54,7 @@
        slowest of them — Docker's disk report — is never waited for past a
        moment, and arrives on its own once the page is on screen. None of them
        is polled: nothing here changes on its own. */}}
-  <section class="space-y-4">
+  <section id="environment" class="space-y-4">
     <h2 class="h-label">Environment</h2>
     {{/* outerHTML, unlike the three below: the partial brings its own wrapper
          so that it can poll itself while a Traefik update is running — so a
@@ -69,7 +69,7 @@
     {{end}}
   </section>
 
-  <section class="space-y-4">
+  <section id="certificates" class="space-y-4">
     <h2 class="h-label">TLS certificates</h2>
     {{$p := pre . "certs"}}
     <div hx-get="/partials/system/certs"{{if not $p}} hx-trigger="load"{{end}} hx-swap="innerHTML">
@@ -77,7 +77,7 @@
     </div>
   </section>
 
-  <section class="space-y-4">
+  <section id="storage" class="space-y-4">
     <h2 class="h-label">Docker storage</h2>
     {{$p := pre . "storage"}}
     <div hx-get="/partials/system/storage"{{if not $p}} hx-trigger="load"{{end}} hx-swap="innerHTML">
@@ -97,7 +97,7 @@
        look inside one before agreeing to lose it. Admin-only, like the explorer
        it leads into. */}}
   {{if .IsAdmin}}
-  <section class="space-y-4">
+  <section id="volumes" class="space-y-4">
     <h2 class="h-label">Volumes</h2>
     {{$p := pre . "volumes"}}
     <div hx-get="/partials/system/volumes"{{if not $p}} hx-trigger="load"{{end}} hx-swap="innerHTML">
@@ -106,7 +106,7 @@
   </section>
   {{end}}
 
-  <section class="space-y-4">
+  <section id="app-storage" class="space-y-4">
     <h2 class="h-label">Application storage</h2>
     {{$p := pre . "sizes"}}
     <div hx-get="/partials/system/app-sizes"{{if not $p}} hx-trigger="load"{{end}} hx-swap="innerHTML">
