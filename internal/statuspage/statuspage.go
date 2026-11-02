@@ -9,7 +9,9 @@ package statuspage
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -91,6 +93,9 @@ type Handler struct {
 	client *http.Client
 	page   *template.Template
 	css    []byte
+	// cssURL carries a digest of the sheet, so a release that changes it is
+	// fetched again rather than served from an hour of cache.
+	cssURL string
 
 	mu  sync.Mutex
 	at  time.Time
@@ -101,7 +106,9 @@ type Handler struct {
 // New prepares a handler.
 func New(cfg Config) *Handler {
 	css, _ := files.ReadFile("page.css")
+	sum := sha256.Sum256(css)
 	return &Handler{
+		cssURL: "/page.css?v=" + hex.EncodeToString(sum[:6]),
 		cfg:    cfg,
 		client: &http.Client{Timeout: 5 * time.Second},
 		page:   template.Must(template.New("page.html").ParseFS(files, "page.html")),
@@ -122,7 +129,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	case "/page.css":
 		header.Set("Content-Type", "text/css; charset=utf-8")
-		header.Set("Cache-Control", "public, max-age=3600")
+		header.Set("Cache-Control", "public, max-age=31536000, immutable")
 		_, _ = w.Write(h.css)
 	case "/":
 		h.servePage(w, r)
@@ -134,6 +141,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) servePage(w http.ResponseWriter, r *http.Request) {
 	doc, err := h.status(r.Context())
 	view := buildView(doc, err, time.Now())
+	view.CSS = h.cssURL
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	if doc == nil {

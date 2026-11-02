@@ -20,6 +20,9 @@ type View struct {
 	ShowIncidents bool
 	Incidents     []IncidentView
 
+	// CSS is the sheet's address.
+	CSS string
+
 	Updated        string
 	RefreshSeconds int
 }

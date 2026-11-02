@@ -80,12 +80,25 @@ h2 {
 }
 .bar { border-radius: 2px; background: var(--tone); }
 .bar.is-none { background: var(--empty); }
-.bar:hover { opacity: 0.7; }
+.bar:hover { box-shadow: 0 0 0 1px var(--text); }
+/* A day says what it was on hover, centred over its bar except at the ends,
+   where it would run off the card. CSS alone: the page runs no script. */
+.bar { position: relative; }
+.bar:hover::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  z-index: 10; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text); font-size: 0.75rem; white-space: nowrap;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15); pointer-events: none;
+}
+.bar:nth-child(-n + 15):hover::after { left: 0; transform: none; }
+.bar:nth-last-child(-n + 15):hover::after { left: auto; right: 0; transform: none; }
 .axis { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; }
 .narrow { display: none; }
 @media (max-width: 640px) {
   main { padding-top: 32px; }
   .bar:nth-child(-n + 60) { display: none; }
+  .bar:nth-child(n + 61):nth-child(-n + 68):hover::after { left: 0; transform: none; }
   .wide { display: none; }
   .narrow { display: inline; }
 }

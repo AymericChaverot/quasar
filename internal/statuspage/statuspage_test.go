@@ -36,7 +36,7 @@ func TestThePageShowsTheStatusItReads(t *testing.T) {
 		t.Fatalf("page answered %d", rec.Code)
 	}
 	for _, want := range []string{
-		"<title>Example</title>", `href="https://example.com"`, "Some services are down",
+		"<title>Example</title>", `href="/page.css?v=`, `href="https://example.com"`, "Some services are down",
 		"&lt;b&gt;Photos&lt;/b&gt;", "99.24% over 2 days", `class="bar is-none"`, `class="bar is-warn"`,
 		"Cloud did not answer", "1 Nov · 14:02 → 14:19 UTC · 17 min", "Restarted automatically.",
 		`class="fill is-err" width="88"`,

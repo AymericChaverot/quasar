@@ -6,7 +6,7 @@
 <meta http-equiv="refresh" content="{{.RefreshSeconds}}">
 <meta name="robots" content="noindex">
 <title>{{.Title}}</title>
-<link rel="stylesheet" href="/page.css">
+<link rel="stylesheet" href="{{.CSS}}">
 </head>
 <body>
 <main>
@@ -36,7 +36,7 @@
       </div>
       {{if .Bars}}
       <div class="bars" role="img" aria-label="{{.Name}}: a bar a day over the last {{len .Bars}} days">
-        {{range .Bars}}<span class="bar is-{{.Tone}}" title="{{.Title}}"></span>{{end}}
+        {{range .Bars}}<span class="bar is-{{.Tone}}" data-tip="{{.Title}}"></span>{{end}}
       </div>
       <div class="axis faint">
         <span><span class="wide">{{len .Bars}} days ago</span><span class="narrow">30 days ago</span></span>
