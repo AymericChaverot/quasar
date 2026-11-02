@@ -24,9 +24,9 @@ What the catalogue does for you:
 
 Some services don't speak HTTP: game servers (Minecraft, Valheim…) and databases.
 
-Traefik only routes HTTP on ports 80 and 443, so these services **publish their own port** on the server. Connect to them with the **server's IP address and that port**, not with the subdomain.
+Traefik only routes HTTP on ports 80 and 443, so these services **publish their own port** on the server. Connect to them with a name that points at the server and that port: the application's page shows the address, such as `valheim.example.com:2456`, with a button to copy it. It is also in the dashboard's list, and in the [command palette](/getting-started/first-steps/#get-around-quickly) under **Copy address**.
 
-Two such servers can't use the same host port. Quasar refuses the second one and names the application already using the port.
+Two such servers can't use the same port over the same protocol. Quasar refuses the second one and names the application already using the port. The same number over TCP and UDP, or on two different addresses, is fine.
 
 ## Adding your own entries
 

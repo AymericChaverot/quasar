@@ -36,8 +36,10 @@ YAML anchors and merge keys (`&anchor`, `<<: *defaults`) are supported.
 
 Host ports other than 80 and 443 are **kept**: a stack may need to expose a database or a game server on purpose.
 
+The **Connect** section, first on the application's Overview, lists them: the address to connect to, the protocol, the service that publishes it, and how far it reaches. A port bound to `127.0.0.1` is reachable from the server only, and is left out of the dashboard's list.
+
 :::warning
-Those ports are reached directly, without Traefik. TLS, password protection, rate limits and address lists don't apply to them. The **Routing** section lists them.
+Those ports are reached directly, without Traefik. TLS, password protection, rate limits and address lists don't apply to them. If your hosting provider puts a firewall in front of the server, open them there as well. If the domain goes through a proxy such as Cloudflare, give the application's subdomain a **DNS only** record: the proxy only carries web traffic.
 :::
 
 ## Files with their own Traefik labels
