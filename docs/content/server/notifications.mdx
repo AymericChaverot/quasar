@@ -3,7 +3,7 @@ title: Notifications
 description: Get alerted by webhook, push notification or email.
 ---
 
-Set up notifications in **Settings → Integrations**. Every configured channel receives every message.
+Set up notifications in **Settings → Integrations**. Every configured channel receives every message, and every message is also kept in the dashboard, behind the [bell](#the-bell), even when no channel is set up.
 
 ## Channels
 
@@ -26,6 +26,7 @@ After any change, click **Send test**. A broken webhook looks exactly like a qui
 - A backup fails, or its offsite upload fails.
 - The server crosses a usage threshold (see below), and when it goes back under.
 - A new Quasar version is available.
+- [Updates](/server/updates/) are waiting on the server.
 - A [station](/stations/permissions/#notify) sends a message.
 
 ## Usage alerts
@@ -39,3 +40,16 @@ You are notified once when a threshold is crossed, and once when usage goes back
 The outcome of what you do in the dashboard shows as a notification in the top-right corner of the page: green when it worked, in the accent colour when something has started, orange for a warning, red when it failed. Successes close after a few seconds, warnings a little later, and errors stay until you close them. A notification stays on screen when you move to another page, and its timer pauses while the pointer is on it.
 
 Long actions run in the background: a [cleanup](/server/disk/#cleaning-up), a [backup or a restore](/server/backups/), a deployment, a [server update](/server/updates/). You can leave the page; when it ends, a notification says how it went on whichever page you are on. Only the person who started it sees it.
+
+## The bell
+
+The bell in the header keeps what notifications said once they are gone:
+
+- every alert listed [above](#what-triggers-a-notification), for everybody who signs in;
+- how the long actions you started ended, for you only.
+
+Its number counts what arrived since you last opened it. Opening it marks everything as read; what was new stays marked with a dot until you open it again. Click a notification to go to the page it is about.
+
+The tabs show **All**, only the **Alerts**, or only yours (**Mine**). **See all** opens the **Notifications** page, which lists the whole history and filters it by kind: errors, warnings, info, successes.
+
+Notifications are kept 30 days.
