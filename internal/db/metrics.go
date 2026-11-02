@@ -39,6 +39,11 @@ type MetricPoint struct {
 	V1 float64 // cpu %
 	V2 float64 // mem % (server) or mem MB (app)
 	V3 float64 // disk % (server only)
+
+	// Lo and Hi are the lowest and highest samples of V1 and V2 in the bucket.
+	// An average over a bucket of hours flattens a ten-minute spike into a
+	// bump; these are what keep it on the chart.
+	Lo1, Hi1, Lo2, Hi2 float64
 }
 
 // ServerSample is one reading of the server, as the monitor stores it.
@@ -87,7 +92,8 @@ func RecordAppMetric(db *sql.DB, appID string, cpu, memMB float64) error {
 
 func ServerMetrics(db *sql.DB, since time.Time, bucket time.Duration) ([]MetricPoint, error) {
 	secs := bucketSeconds(bucket)
-	return queryPoints(db, `SELECT CAST(strftime('%s', ts) / ? AS INTEGER) * ?, AVG(cpu), AVG(mem), AVG(disk)
+	return queryPoints(db, `SELECT CAST(strftime('%s', ts) / ? AS INTEGER) * ?, AVG(cpu), AVG(mem), AVG(disk),
+			MIN(cpu), MAX(cpu), MIN(mem), MAX(mem)
 		FROM metrics WHERE ts >= ? GROUP BY 1 ORDER BY 1`, secs, secs, since.UTC())
 }
 
@@ -96,7 +102,8 @@ func AppMetrics(db *sql.DB, appID string, since time.Time, bucket time.Duration)
 	// disk use is not sampled a minute at a time — it is a walk of a directory
 	// tree, not a counter — so there is nothing to average here.
 	secs := bucketSeconds(bucket)
-	return queryPoints(db, `SELECT CAST(strftime('%s', ts) / ? AS INTEGER) * ?, AVG(cpu), AVG(mem_mb), 0
+	return queryPoints(db, `SELECT CAST(strftime('%s', ts) / ? AS INTEGER) * ?, AVG(cpu), AVG(mem_mb), 0,
+			MIN(cpu), MAX(cpu), MIN(mem_mb), MAX(mem_mb)
 		FROM app_metrics WHERE app_id = ? AND ts >= ? GROUP BY 1 ORDER BY 1`, secs, secs, appID, since.UTC())
 }
 
@@ -123,7 +130,7 @@ func queryPoints(db *sql.DB, query string, args ...any) ([]MetricPoint, error) {
 			p     MetricPoint
 			epoch int64
 		)
-		if err := rows.Scan(&epoch, &p.V1, &p.V2, &p.V3); err != nil {
+		if err := rows.Scan(&epoch, &p.V1, &p.V2, &p.V3, &p.Lo1, &p.Hi1, &p.Lo2, &p.Hi2); err != nil {
 			return nil, err
 		}
 		p.TS = time.Unix(epoch, 0).UTC()

@@ -1,6 +1,9 @@
 package db
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // The figures beside the percentages are what the server's cards read a change
 // in gigabytes from, so they have to come back as they went in.
@@ -17,5 +20,28 @@ func TestAServerSampleKeepsItsLoadSwapAndGigabytes(t *testing.T) {
 	}
 	if out != in {
 		t.Errorf("stored %+v, read back %+v", in, out)
+	}
+}
+
+// A bucket keeps its lowest and highest sample beside its average, so a spike
+// inside it is still there to draw.
+func TestABucketKeepsItsLowestAndHighestSample(t *testing.T) {
+	database := openTestDB(t)
+	for _, cpu := range []float64{10, 90, 20} {
+		if _, err := database.Exec(`INSERT INTO metrics (ts, cpu, mem, disk) VALUES (datetime('now', '-30 seconds'), ?, ?, 50)`,
+			cpu, cpu/2); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pts, err := ServerMetrics(database, time.Now().Add(-time.Hour), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pts) != 1 {
+		t.Fatalf("got %d buckets, want 1", len(pts))
+	}
+	p := pts[0]
+	if p.V1 != 40 || p.Lo1 != 10 || p.Hi1 != 90 || p.Lo2 != 5 || p.Hi2 != 45 {
+		t.Errorf("bucket = %+v, want an average of 40 between 10 and 90, memory 5 to 45", p)
 	}
 }
