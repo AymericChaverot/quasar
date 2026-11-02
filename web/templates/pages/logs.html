@@ -1,23 +1,57 @@
 {{define "content"}}
 <h1 class="page-title mb-8">Logs</h1>
 
-<form id="log-search" class="mb-6 flex flex-wrap items-end field-row gap-4" hx-get="/partials/logs" hx-target="#log-results" hx-swap="innerHTML">
-  <div>
-    <label for="app" class="label mb-1!">Application</label>
-    <select id="app" name="app" class="input">
-      <option value="">All applications</option>
-      {{range .Apps}}
-      {{/* A select option holds text and nothing else, so the colour comes as a
-           dot character, and the option is drawn in it. */}}
-      <option value="{{.ID}}" style="color: {{.LogColor}}" {{if eq $.Search.App .ID}}selected{{end}}>● {{.Name}}</option>
+{{/* The filters under the search box search as soon as they change; the box
+     and the application wait for Search, or Enter, as they always did. */}}
+<form id="log-search" class="mb-6" hx-get="/partials/logs" hx-target="#log-results" hx-swap="innerHTML"
+      hx-trigger="submit, change from:find .log-filters">
+  <div class="flex flex-wrap items-end field-row gap-4">
+    <div>
+      <label for="app" class="label mb-1!">Application</label>
+      <select id="app" name="app" class="input">
+        <option value="">All applications</option>
+        {{range .Apps}}
+        {{/* A select option holds text and nothing else, so the colour comes as a
+             dot character, and the option is drawn in it. */}}
+        <option value="{{.ID}}" style="color: {{.LogColor}}" {{if eq $.Search.App .ID}}selected{{end}}>● {{.Name}}</option>
+        {{end}}
+      </select>
+    </div>
+    <div class="log-query min-w-64 flex-1">
+      <label for="q" class="label mb-1!">Search</label>
+      <input id="q" name="q" type="text" value="{{.Search.Text}}" placeholder="error, &quot;connection refused&quot;, timeout -healthcheck" class="input mono">
+      {{/* What the box understands, a click away. A details element rather
+           than a script: it opens and closes on its own. */}}
+      <details class="log-help">
+        <summary aria-label="Search syntax" title="Search syntax">?</summary>
+        <div class="log-help-pop">
+          <table>
+            <tr><td>refused timeout</td><td>both words</td></tr>
+            <tr><td>refus</td><td>words starting with it</td></tr>
+            <tr><td>"connection refused"</td><td>these words, in this order</td></tr>
+            <tr><td>refused OR timeout</td><td>either</td></tr>
+            <tr><td>-healthcheck</td><td>without this word</td></tr>
+          </table>
+          <p>Words are matched, not pieces of them: tick <b>Exact text</b> to find a piece of text anywhere, as typed.</p>
+        </div>
+      </details>
+    </div>
+    <button type="submit" class="btn-primary">Search</button>
+  </div>
+
+  <div class="log-filters">
+    {{/* The same chips as the history ranges on the dashboard. */}}
+    <div class="range-pick" role="radiogroup" aria-label="Period">
+      {{range .Periods}}
+      <label class="chip chip-filter"><input type="radio" name="since" value="{{.Value}}" {{if eq $.Search.Since .Value}}checked{{end}}>{{.Label}}</label>
       {{end}}
-    </select>
+    </div>
+    <label class="log-errors">
+      <input type="checkbox" name="errors" value="1" class="sr-only" {{if .Search.Errors}}checked{{end}}>
+      {{template "icon_alert_triangle"}}Errors only
+    </label>
+    <label class="log-exact"><input type="checkbox" name="exact" value="1" {{if .Search.Exact}}checked{{end}}> Exact text</label>
   </div>
-  <div class="min-w-64 flex-1">
-    <label for="q" class="label mb-1!">Search</label>
-    <input id="q" name="q" type="text" value="{{.Search.Text}}" placeholder="error, exception, ..." class="input mono">
-  </div>
-  <button type="submit" class="btn-primary">Search</button>
 </form>
 
 {{$p := pre . "results"}}

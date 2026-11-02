@@ -104,9 +104,10 @@ func scanLogLines(rows *sql.Rows) ([]LogLine, error) {
 }
 
 // LogContext is the line id and the lines its application wrote just before
-// and just after it, oldest first: what was going on around an error. The
-// line itself is among them; nil when it is no longer stored.
-func LogContext(database *sql.DB, id int64, around int) ([]LogLine, error) {
+// and just after it — before of them and after of them — oldest first: what
+// was going on around an error. The line itself is among them; nil when it is
+// no longer stored.
+func LogContext(database *sql.DB, id int64, before, after int) ([]LogLine, error) {
 	var app string
 	var ts time.Time
 	if err := database.QueryRow("SELECT app_id, ts FROM app_logs WHERE id = ?", id).Scan(&app, &ts); err != nil {
@@ -128,7 +129,7 @@ func LogContext(database *sql.DB, id int64, around int) ([]LogLine, error) {
 			SELECT l.id, l.app_id, a.name, a.log_color, l.ts, l.line FROM app_logs l JOIN apps a ON a.id = l.app_id
 			WHERE l.app_id = ? AND (l.ts > ? OR (l.ts = ? AND l.id >= ?))
 			ORDER BY l.ts, l.id LIMIT ?)
-		ORDER BY 5, 1`, app, ts, ts, id, around, app, ts, ts, id, around+1)
+		ORDER BY 5, 1`, app, ts, ts, id, before, app, ts, ts, id, after+1)
 	if err != nil {
 		return nil, err
 	}

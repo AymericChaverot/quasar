@@ -200,7 +200,7 @@ func TestLogContextIsTheLinesAroundOne(t *testing.T) {
 
 	var id int64
 	d.QueryRow("SELECT id FROM app_logs WHERE line = 'e'").Scan(&id)
-	lines, err := LogContext(d, id, 2)
+	lines, err := LogContext(d, id, 2, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func TestLogContextIsTheLinesAroundOne(t *testing.T) {
 	if got != "cdefg" {
 		t.Errorf("context = %q, want cdefg", got)
 	}
-	if lines, err := LogContext(d, 999999, 2); err != nil || lines != nil {
+	if lines, err := LogContext(d, 999999, 2, 2); err != nil || lines != nil {
 		t.Errorf("a line no longer stored gave %v, %v", lines, err)
 	}
 }

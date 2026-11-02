@@ -1,8 +1,9 @@
 {{define "logs_results"}}
 {{if .Lines}}
+{{template "logs_count" .Total}}
 <div class="table-wrap">
-  <table>
-    <thead><tr><th>Time</th><th>Application</th><th><div class="log-head">Line {{template "log_toggles"}}</div></th></tr></thead>
+  <table class="log-table">
+    <thead><tr><th>Time</th><th>Application</th><th><div class="log-head">Line {{template "log_toggles"}}</div></th><th><span class="sr-only">Context</span></th></tr></thead>
     <tbody>
       {{range .Lines}}
       <tr>
@@ -13,17 +14,31 @@
         {{/* Pre-rendered: the stored line still carries whatever escape
              sequences the container wrote, and reads here as it does live. */}}
         <td class="log-cell mono break-all text-xs">{{.HTML}}</td>
+        {{/* The lines around this one, opened in the row under it by
+             logs-context.js; the search goes along, to be marked there too. */}}
+        <td class="log-ctx-cell">
+          <button type="button" class="log-ctx-btn" aria-expanded="false"
+                  data-log-context="/partials/logs/context/{{.ID}}?{{$.Query}}">Context</button>
+        </td>
       </tr>
+      <tr class="log-ctx-row" hidden><td colspan="4"></td></tr>
       {{end}}
     </tbody>
   </table>
 </div>
 {{template "logs_pager" .Pager}}
 {{else}}
+{{template "logs_count" -1}}
 <div class="empty p-6 text-center">
   <p class="muted text-sm">No matching log lines.</p>
 </div>
 {{end}}
+{{end}}
+
+{{/* How many lines the search found, above them; empty until they are
+     counted, which the full pager does and then says here. */}}
+{{define "logs_count"}}
+<p id="log-count" class="log-count">{{if ge . 0}}{{if eq . 1}}1 line{{else}}{{.}} lines{{end}}{{end}}</p>
 {{end}}
 
 {{/* The pager under a page of logs. Drawn before the search was counted, it
@@ -36,4 +51,38 @@
   {{template "pager" .}}
 </div>
 {{end}}
+{{end}}
+
+{{/* The full pager, and the count it was made from put above the lines. */}}
+{{define "logs_pager_counted"}}
+{{template "logs_pager" .Pager}}
+<div hx-swap-oob="outerHTML:#log-count">{{template "logs_count" .Total}}</div>
+{{end}}
+
+{{/* The lines an application wrote around one of its lines. Earlier and Later
+     ask for more on their side, and the box replaces itself with the answer. */}}
+{{define "logs_context"}}
+<div class="log-ctx">
+  {{if .Lines}}
+  <div class="log-ctx-head">
+    <span>{{.AppName}} · the lines around this one</span>
+    <a href="/apps/{{.App}}#logs" class="link">Open in the application's logs</a>
+  </div>
+  {{with .Earlier}}
+  <button type="button" class="log-ctx-more" hx-get="/partials/logs/context/{{$.ID}}?{{$.Query}}&before={{.}}&after={{$.After}}"
+          hx-target="closest .log-ctx" hx-swap="outerHTML">↑ Earlier</button>
+  {{end}}
+  {{range .Lines}}
+  <div class="log-ctx-line{{if .Focus}} is-focus{{end}}">
+    <time datetime="{{.TS.UTC.Format "2006-01-02T15:04:05Z07:00"}}">{{.TS.Format "15:04:05"}}</time><span>{{.HTML}}</span>
+  </div>
+  {{end}}
+  {{with .Later}}
+  <button type="button" class="log-ctx-more" hx-get="/partials/logs/context/{{$.ID}}?{{$.Query}}&before={{$.Before}}&after={{.}}"
+          hx-target="closest .log-ctx" hx-swap="outerHTML">↓ Later</button>
+  {{end}}
+  {{else}}
+  <p class="muted p-3 text-sm">This line is no longer stored.</p>
+  {{end}}
+</div>
 {{end}}

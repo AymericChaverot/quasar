@@ -3642,6 +3642,256 @@
   .log-pane > .log-art:has(+ .log-art) .log-ts {
     visibility: hidden;
   }
+  .log-query {
+    position: relative;
+  }
+  .log-query .input {
+    padding-right: 2.5rem;
+  }
+  .log-help {
+    position: absolute;
+    right: 0.375rem;
+    bottom: 0.375rem;
+  }
+  .log-help > summary {
+    display: grid;
+    place-items: center;
+    width: 1.625rem;
+    height: 1.625rem;
+    list-style: none;
+    border: var(--border-w) solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+  .log-help > summary::-webkit-details-marker {
+    display: none;
+  }
+  .log-help > summary:hover, .log-help[open] > summary {
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+  .log-help-pop {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.5rem);
+    z-index: 20;
+    width: min(22rem, calc(100vw - 2rem));
+    padding: 0.75rem 0.875rem;
+    border: var(--border-w) solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    box-shadow: 0 20px 40px -15px rgb(0 0 0 / 0.6);
+    font-size: 0.78125rem;
+  }
+  .log-help-pop table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .log-help-pop td {
+    padding: 0.25rem 0;
+    vertical-align: top;
+    color: var(--text-muted);
+  }
+  .log-help-pop td:first-child {
+    padding-right: 0.875rem;
+    font-family: var(--font-mono);
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .log-help-pop p {
+    margin-top: 0.5rem;
+    color: var(--text-muted);
+  }
+  .log-help-pop b {
+    color: var(--text);
+    font-weight: 500;
+  }
+  .log-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.625rem 0.875rem;
+    margin-top: 0.75rem;
+  }
+  .log-errors {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.6875rem;
+    border: var(--border-w) solid var(--border);
+    border-radius: 999px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .log-errors .ico {
+    width: 0.8125rem;
+    height: 0.8125rem;
+  }
+  .log-errors:hover {
+    color: var(--text);
+  }
+  .log-errors:has(input:checked) {
+    border-color: var(--err);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in srgb, var(--err) 55%, transparent);
+    }
+    background: var(--err);
+    @supports (color: color-mix(in lab, red, red)) {
+      background: color-mix(in srgb, var(--err) 8%, transparent);
+    }
+    color: var(--err);
+  }
+  .log-errors:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .log-exact {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .log-count {
+    min-height: 1rem;
+    margin-bottom: 0.5rem;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-faint);
+  }
+  .log-cell mark, .log-ctx mark {
+    background: var(--accent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background: color-mix(in srgb, var(--accent) 28%, transparent);
+    }
+    color: inherit;
+    border-radius: 2px;
+  }
+  .log-table .log-cell {
+    background: var(--log-bg);
+    @supports (color: color-mix(in lab, red, red)) {
+      background: color-mix(in srgb, var(--log-bg) 80%, transparent);
+    }
+  }
+  .log-table tr:hover .log-cell {
+    background: var(--log-bg);
+    @supports (color: color-mix(in lab, red, red)) {
+      background: color-mix(in srgb, var(--log-bg) 80%, var(--text) 8%);
+    }
+  }
+  .log-ctx-cell {
+    width: 1%;
+    text-align: right;
+  }
+  .log-ctx-btn {
+    visibility: hidden;
+    padding: 0.0625rem 0.4375rem;
+    border: var(--border-w) solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .log-table tr:hover .log-ctx-btn, .log-ctx-btn:focus-visible, .log-ctx-btn.is-on {
+    visibility: visible;
+  }
+  .log-ctx-btn:hover {
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+  .log-ctx-btn.is-on {
+    color: var(--accent);
+    border-color: var(--accent);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    }
+  }
+  @media (hover: none) {
+    .log-ctx-btn {
+      visibility: visible;
+    }
+  }
+  .table-wrap tbody tr.log-ctx-row {
+    border-top: 0;
+  }
+  .table-wrap tbody tr.log-ctx-row:hover {
+    background: none;
+  }
+  .table-wrap td:has(> .log-ctx) {
+    padding: 0 0.75rem 0.75rem;
+  }
+  .log-ctx {
+    border: var(--border-w) solid var(--border);
+    border-radius: var(--radius);
+    background: var(--log-bg);
+    @supports (color: color-mix(in lab, red, red)) {
+      background: color-mix(in srgb, var(--log-bg) 80%, transparent);
+    }
+    overflow: hidden;
+  }
+  .log-ctx-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    border-bottom: var(--border-w) solid var(--border);
+    background: var(--surface-2);
+    font-size: 0.71875rem;
+    color: var(--text-faint);
+  }
+  .log-ctx-line {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 0.125rem 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    color: #d4d4d8;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  [data-theme="terminal"] .log-ctx-line {
+    color: var(--text);
+  }
+  .log-ctx-line:hover {
+    background: var(--text);
+    @supports (color: color-mix(in lab, red, red)) {
+      background: color-mix(in srgb, var(--text) 6%, transparent);
+    }
+  }
+  .log-ctx-line time {
+    color: var(--text-faint);
+  }
+  .log-ctx-line.is-focus {
+    background: var(--accent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  .log-ctx-more {
+    display: block;
+    width: 100%;
+    padding: 0.25rem;
+    border: 0;
+    background: none;
+    font-size: 0.6875rem;
+    color: var(--text-faint);
+    cursor: pointer;
+  }
+  .log-ctx-more:hover {
+    color: var(--accent);
+  }
   [data-theme="terminal"] body {
     text-shadow: 0 0 6px var(--text);
     @supports (color: color-mix(in lab, red, red)) {

@@ -133,3 +133,37 @@ func TestTheLastPageOfLogsKnowsTheTotal(t *testing.T) {
 		t.Errorf("a page past the end did not land on the last: %s", w.Header().Get("HX-Replace-Url"))
 	}
 }
+
+// What a search found is marked in the lines, and each line offers the lines
+// around it, which come back with it singled out and the search marked there
+// too — and with Earlier and Later while there is more on either side.
+func TestLogsSearchMarksAndOffersContext(t *testing.T) {
+	s := logHistory(t, 40)
+
+	page := searchLogs(s, "/partials/logs?app=a1&q=0020").Body.String()
+	if !strings.Contains(page, "line-<mark>0020</mark>") {
+		t.Errorf("the match is not marked: %s", page)
+	}
+	if !strings.Contains(page, `data-log-context="/partials/logs/context/`) || !strings.Contains(page, "1 line") {
+		t.Errorf("no context to open, or no count: %s", page)
+	}
+
+	var id int64
+	if err := s.db.QueryRow("SELECT id FROM app_logs WHERE line = 'line-0020'").Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest("GET", fmt.Sprintf("/partials/logs/context/%d?q=0020&before=3&after=3", id), nil)
+	r.SetPathValue("id", fmt.Sprint(id))
+	w := httptest.NewRecorder()
+	s.handleLogsContextPartial(w, r)
+	body := w.Body.String()
+	if w.Code != 200 || strings.Count(body, `class="log-ctx-line`) != 7 || !strings.Contains(body, `is-focus`) {
+		t.Fatalf("context: %d %s", w.Code, body)
+	}
+	if !strings.Contains(body, "line-<mark>0020</mark>") || strings.Contains(body, "line-0016") || strings.Contains(body, "line-0024") {
+		t.Errorf("the context is not the three lines each side, marked: %s", body)
+	}
+	if !strings.Contains(body, "before=18&after=3") || !strings.Contains(body, "before=3&after=18") {
+		t.Errorf("Earlier and Later do not ask for more on their side: %s", body)
+	}
+}

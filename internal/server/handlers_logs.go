@@ -18,8 +18,18 @@ import (
 const logPageSize = 100
 
 // logContextLines is how many lines are shown on each side of one whose
-// context is asked for.
+// context is asked for, and how many more each press of Earlier or Later adds.
 const logContextLines = 15
+
+// logContextMax is the most lines asked for on one side, however many times
+// Earlier is pressed: past that, the application's own Logs tab is the place.
+const logContextMax = 300
+
+// LogPeriod is one of the spans on the page's period switch.
+type LogPeriod struct{ Value, Label string }
+
+// logPeriodChoices are the period switch, in its order. "" is every line.
+var logPeriodChoices = []LogPeriod{{"1h", "Last hour"}, {"24h", "24 h"}, {"7d", "7 days"}, {"", "All"}}
 
 // logPeriods are the spans the Logs page can be narrowed to, as the address
 // names them.
@@ -90,6 +100,7 @@ func (s *Server) handleLogsPage(w http.ResponseWriter, r *http.Request) {
 		"Title":   "Logs",
 		"Apps":    apps,
 		"Search":  search,
+		"Periods": logPeriodChoices,
 		"Page":    page,
 		"Results": results,
 		// The page of lines, drawn with the page rather than after it: a
@@ -143,7 +154,9 @@ func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request)
 	lines = lines[:min(len(lines), logPageSize)]
 
 	var pager Pager
-	switch total, known := s.logCounts.get(search.key()); {
+	// Total is how many lines the search matches, -1 until it is counted.
+	total, known := s.logCounts.get(search.key())
+	switch {
 	case !more:
 		// The last page: everything before it was full.
 		total = (page-1)*logPageSize + len(lines)
@@ -154,6 +167,7 @@ func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request)
 		// never allowed to say this page is the last.
 		pager = pagerFor("/logs", query, page, max(pageCount(total, logPageSize), page+1))
 	default:
+		total = -1
 		pager = provisionalPager("/logs", query, page)
 		pager.Pending = pageURL("/partials/logs/pager", query, page)
 	}
@@ -168,6 +182,8 @@ func (s *Server) handleLogsSearchPartial(w http.ResponseWriter, r *http.Request)
 	s.renderPartial(w, "logs_results", map[string]any{
 		"Lines": views,
 		"Page":  page,
+		"Total": total,
+		"Query": query.Encode(),
 		"Pager": pager.withPartial("/partials/logs", query, "#log-results"),
 	})
 }
@@ -181,7 +197,15 @@ func (s *Server) handleLogsContextPartial(w http.ResponseWriter, r *http.Request
 		http.Error(w, "no such line", http.StatusNotFound)
 		return
 	}
-	lines, err := db.LogContext(s.db, id, logContextLines)
+	side := func(name string) int {
+		n, err := strconv.Atoi(r.URL.Query().Get(name))
+		if err != nil || n < 0 {
+			return logContextLines
+		}
+		return min(n, logContextMax)
+	}
+	before, after := side("before"), side("after")
+	lines, err := db.LogContext(s.db, id, before, after)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -192,7 +216,25 @@ func (s *Server) handleLogsContextPartial(w http.ResponseWriter, r *http.Request
 	for _, l := range lines {
 		views = append(views, LogLineView{LogLine: l, HTML: renderLogLineMarked(l.Line, marks), Focus: l.ID == id})
 	}
-	s.renderPartial(w, "logs_context", map[string]any{"ID": id, "Lines": views})
+	// Earlier and Later are offered while there may be more on their side:
+	// a side that came back short has reached the first or last line stored.
+	gotBefore, gotAfter := 0, 0
+	for i, v := range views {
+		if v.Focus {
+			gotBefore, gotAfter = i, len(views)-i-1
+		}
+	}
+	data := map[string]any{"ID": id, "Lines": views, "Query": search.values().Encode(), "Before": before, "After": after}
+	if gotBefore == before && before < logContextMax {
+		data["Earlier"] = min(before+logContextLines, logContextMax)
+	}
+	if gotAfter == after && after < logContextMax {
+		data["Later"] = min(after+logContextLines, logContextMax)
+	}
+	if len(views) > 0 {
+		data["App"], data["AppName"] = views[0].AppID, views[0].AppName
+	}
+	s.renderPartial(w, "logs_context", data)
 }
 
 // handleLogsPagerPartial is the full pager for a page of the Logs page, which
@@ -207,7 +249,10 @@ func (s *Server) handleLogsPagerPartial(w http.ResponseWriter, r *http.Request) 
 	page := pageOf(r)
 	query := search.values()
 	pager := pagerFor("/logs", query, page, max(pageCount(total, logPageSize), page))
-	s.renderPartial(w, "logs_pager", pager.withPartial("/partials/logs", query, "#log-results"))
+	s.renderPartial(w, "logs_pager_counted", map[string]any{
+		"Pager": pager.withPartial("/partials/logs", query, "#log-results"),
+		"Total": total,
+	})
 }
 
 // countLogs is how many lines a search matches, from a count made moments ago
