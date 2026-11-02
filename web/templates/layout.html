@@ -46,6 +46,7 @@
            its own margin instead, which leaves with it. */}}
       <div class="flex items-center">
         {{if .Update}}{{template "update_badge" .Update}}{{end}}
+        {{if .HasBell}}{{template "bell" .Bell}}{{end}}
         <form method="post" action="/logout" class="flex items-center">
           <button class="btn-signout" aria-label="Sign out">{{template "icon_logout"}}<span class="signout-label">Sign out</span></button>
         </form>
@@ -102,6 +103,7 @@
        every application page carry charts of their own now, and three copies
        of the same tag is three places to forget one. */}}
   <script src="/static/js/chart.js" defer></script>
+  <script src="/static/js/bell.js" defer></script>
 </body>
 </html>
 {{end}}

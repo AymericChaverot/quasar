@@ -1,0 +1,35 @@
+{{define "content"}}
+{{with .N}}
+<div class="mb-6">
+  <h1 class="page-title">Notifications</h1>
+  <p class="help max-w-3xl mt-2!">
+    Every alert this server raised — the same ones sent to the webhook, ntfy or email, and kept here even
+    when none is set up — and how the long jobs you started ended. Kept 30 days.
+  </p>
+</div>
+
+<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+  <div class="range-pick" role="group" aria-label="Show">
+    {{range .Origins}}
+    <a href="{{.Href}}" class="chip chip-filter{{if .On}} is-on{{end}}"{{if .On}} aria-current="true"{{end}}>
+      {{.Label}}<span class="faint mono ml-1.5 text-[0.6875rem]">{{.Count}}</span>
+    </a>
+    {{end}}
+  </div>
+  <div class="range-pick" role="group" aria-label="Kind">
+    {{range .KindsOf}}
+    <a href="{{.Href}}" class="chip chip-filter{{if .On}} is-on{{end}}"{{if .On}} aria-current="true"{{end}}>{{.Label}}</a>
+    {{end}}
+  </div>
+</div>
+
+{{if .Days}}
+<div class="card notif-page">{{template "notification_days" .Days}}</div>
+{{else}}
+<div class="card muted p-6 text-center text-sm">
+  {{if or .Origin .Kinds .Unread}}Nothing matches these filters.{{else}}Nothing to report yet.{{end}}
+</div>
+{{end}}
+{{if .Counts.Unread}}<span hidden hx-post="/notifications/seen" hx-vals='{"upto": "{{.Newest}}"}' hx-trigger="load" hx-swap="none"></span>{{end}}
+{{end}}
+{{end}}

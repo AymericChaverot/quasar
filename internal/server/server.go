@@ -552,6 +552,10 @@ func (s *Server) routes() {
 	// Admin-only like the button it refreshes: only an admin is offered the
 	// update, so only an admin's header polls for one.
 	s.admin("GET /partials/update-badge", s.handleUpdateBadgePartial)
+	s.viewer("GET /partials/bell-count", s.handleBellCount)
+	s.viewer("GET /partials/bell", s.handleBellPanel)
+	s.viewer("POST /notifications/seen", s.handleNotificationsSeen)
+	s.viewer("GET /notifications", s.handleNotifications)
 	s.viewer("GET /partials/metrics", s.handleServerMetricsPartial)
 	s.viewer("GET /partials/top-consumers", s.handleTopConsumersPartial)
 	s.viewer("GET /partials/apps/{id}/metrics", s.handleAppMetricsPartial)
@@ -632,6 +636,10 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, dat
 	}
 	if !hideNav {
 		data["Notices"] = s.pendingNotices(r)
+		if user, _, _, _ := s.currentUser(r); user != 0 {
+			data["HasBell"] = true
+			data["Bell"] = db.UnreadNotifications(s.db, user)
+		}
 	}
 	if err := execute(w, t, "layout", data); err != nil {
 		log.Printf("render %s: %v", page, err)

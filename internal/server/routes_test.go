@@ -20,6 +20,7 @@ var selfServiceRoutes = map[string]bool{
 	"POST /settings/2fa/begin":   true, // own second factor
 	"POST /settings/2fa/enable":  true,
 	"POST /settings/2fa/disable": true,
+	"POST /notifications/seen":   true, // own read mark
 	// A browser asking whether another site may read the status; it changes
 	// nothing and answers only what the operator allowed.
 	"OPTIONS /api/v1/status": true,

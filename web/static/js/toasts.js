@@ -199,6 +199,9 @@
     const src = new EventSource(box.dataset.stream);
     src.addEventListener("notice", (e) => {
       if (e.data) box.insertAdjacentHTML("beforeend", e.data);
+      // The end of a job is kept in the notifications too: the bell's
+      // number has one more.
+      document.body.dispatchEvent(new Event("quasar:bell"));
     });
   }
 })();

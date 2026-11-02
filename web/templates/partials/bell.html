@@ -1,0 +1,75 @@
+{{/* The header's bell: what toasts said and are gone. Its number is what came
+     since the panel was last opened, and opening it reads them all — the
+     panel still marks those that were new, until it is drawn again. bell.js
+     opens and closes it; the panel is fetched each time it opens, so it is
+     never a stale list kept in the page. */}}
+{{define "bell"}}
+<div class="bell" data-bell>
+  <button type="button" class="bell-button" aria-haspopup="true" aria-expanded="false" aria-controls="bell-panel"
+          aria-label="Notifications" title="Notifications">
+    {{template "icon_bell"}}{{template "bell_count" .}}
+  </button>
+  <div id="bell-panel" class="bell-panel" role="region" aria-label="Notifications" hidden></div>
+</div>
+{{end}}
+
+{{/* The number alone, asked again every minute — an alert is everybody's and
+     reaches nobody's stream — and whenever a toast arrives or the panel has
+     been read. Empty, it takes no room. */}}
+{{define "bell_count"}}
+<span id="bell-count" class="bell-count" hx-get="/partials/bell-count" hx-trigger="every 60s, quasar:bell from:body"
+      hx-swap="outerHTML">{{if gt . 99}}99+{{else if .}}{{.}}{{end}}</span>
+{{end}}
+
+{{define "bell_panel"}}
+<div class="bell-head">
+  <span class="bell-heading">Notifications</span>
+  <a href="/notifications" class="bell-all">See all</a>
+</div>
+<div class="bell-tabs" role="tablist">
+  {{range .Origins}}
+  <button type="button" role="tab" aria-selected="{{.On}}" class="bell-tab{{if .On}} is-on{{end}}"
+          hx-get="{{.Href}}" hx-target="#bell-panel" hx-swap="innerHTML">
+    {{.Label}}<span class="bell-tab-count">{{.Count}}</span>
+  </button>
+  {{end}}
+</div>
+<div class="bell-list">
+  {{template "notification_days" .Days}}
+  {{if not .Days}}
+  <div class="bell-empty">
+    <p>Nothing to report.</p>
+    <p class="faint text-xs mt-1">Alerts, and how the long jobs you start end, show up here.</p>
+  </div>
+  {{end}}
+</div>
+<div class="bell-foot faint">Kept 30 days</div>
+{{if .Counts.Unread}}<span hidden hx-post="/notifications/seen" hx-vals='{"upto": "{{.Newest}}"}' hx-trigger="load" hx-swap="none"></span>{{end}}
+{{end}}
+
+{{define "notification_days"}}
+{{range .}}
+<p class="notif-day">{{.Label}}</p>
+{{range .Items}}{{template "notification" .}}{{end}}
+{{end}}
+{{end}}
+
+{{/* One notification: drawn as its toast was, in small — the kind's colour
+     and symbol, the title, what it means, and what a program said. It leads to
+     the page it is about, when there is one. */}}
+{{define "notification"}}
+{{if .Link}}<a href="{{.Link}}"{{else}}<div{{end}} class="notif notif-{{.Kind}}{{if .Unread}} is-unread{{end}}">
+  <span class="notif-mark" aria-hidden="true">
+    {{- if eq .Kind "ok"}}{{template "icon_check_circle"}}
+    {{- else if eq .Kind "info"}}{{template "icon_info_circle"}}
+    {{- else if eq .Kind "warn"}}{{template "icon_alert_triangle"}}
+    {{- else}}{{template "icon_x_circle"}}{{end -}}
+  </span>
+  <span class="notif-body">
+    <span class="notif-title">{{.Title}}{{if .Mine}}<span class="notif-tag">You started it</span>{{end}}{{if .Unread}}<span class="sr-only"> (new)</span>{{end}}</span>
+    {{with .Text}}<span class="notif-text">{{.}}</span>{{end}}
+    {{with .Detail}}<span class="notif-detail mono">{{.}}</span>{{end}}
+  </span>
+  <time class="notif-time" title="{{.Full}}">{{.Time}}</time>
+{{if .Link}}</a>{{else}}</div>{{end}}
+{{end}}
