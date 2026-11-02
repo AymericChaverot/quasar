@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"quasar/internal/db"
 	"quasar/internal/vps"
@@ -169,5 +170,24 @@ func TestThresholdFallsBackOnGarbage(t *testing.T) {
 	}
 	if got := threshold(database, db.SettingAlertDisk, AlertDefaultDisk); got != AlertDefaultDisk {
 		t.Errorf("threshold = %v, want the %v default", got, AlertDefaultDisk)
+	}
+}
+
+// An alert and its recovery are marked on the server's chart, once each.
+func TestAnAlertAndItsRecoveryAreMarkedOnTheChart(t *testing.T) {
+	database, sink := newAlertHarness(t)
+	al := newAlerter()
+	al.check(database, vps.Stats{DiskPercent: 91})
+	al.check(database, vps.Stats{DiskPercent: 95})
+	al.check(database, vps.Stats{DiskPercent: 40})
+	sink.taken()
+
+	events, err := db.ChartEvents(database, time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 2 || events[0].Kind != db.EventAlert || events[1].Kind != db.EventRecover ||
+		events[0].Label != "Disk over 85%" {
+		t.Errorf("chart events = %+v; want the disk alert, then its recovery", events)
 	}
 }

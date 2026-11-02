@@ -111,6 +111,18 @@ CREATE TABLE IF NOT EXISTS metrics_hourly (
 	samples  INTEGER NOT NULL
 );
 
+-- What happened on the server that a chart of it should show: an application
+-- restarted by its health check, a resource crossing its alert threshold and
+-- coming back. Deployments are not here, they have their own table, which
+-- ChartEvents reads beside this one.
+CREATE TABLE IF NOT EXISTS chart_events (
+	ts     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	kind   TEXT NOT NULL,
+	app_id TEXT NOT NULL DEFAULT '',
+	label  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chart_events_ts ON chart_events(ts);
+
 CREATE TABLE IF NOT EXISTS app_metrics_hourly (
 	app_id      TEXT NOT NULL,
 	hour        DATETIME NOT NULL,

@@ -3,6 +3,7 @@ package monitor
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 
@@ -82,6 +83,7 @@ func (al *alerter) evaluate(database *sql.DB, g gauge) {
 			al.firing[g.name] = true
 			notify.Send(database, fmt.Sprintf("Quasar: %s at %s, over the %.0f%% threshold",
 				g.name, g.detail, limit))
+			mark(database, db.EventAlert, fmt.Sprintf("%s over %.0f%%", g.name, limit))
 		}
 	case g.value < limit-alertHysteresis:
 		al.over[g.name] = 0
@@ -89,10 +91,20 @@ func (al *alerter) evaluate(database *sql.DB, g gauge) {
 			al.firing[g.name] = false
 			notify.Send(database, fmt.Sprintf("Quasar: %s back to %s, under the %.0f%% threshold",
 				g.name, g.detail, limit))
+			mark(database, db.EventRecover, fmt.Sprintf("%s back under %.0f%%", g.name, limit))
 		}
 	default:
 		// In the hysteresis band: no longer climbing, not yet recovered.
 		al.over[g.name] = 0
+	}
+}
+
+// mark puts an alert on the server's chart. A failure is logged and nothing
+// more: the notification has gone, and a line missing from a chart is not
+// worth holding it up.
+func mark(database *sql.DB, kind, label string) {
+	if err := db.RecordChartEvent(database, kind, "", label); err != nil {
+		log.Printf("monitor: marking %q on the chart: %v", label, err)
 	}
 }
 

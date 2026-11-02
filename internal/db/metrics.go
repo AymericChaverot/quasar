@@ -174,6 +174,8 @@ func FoldMetrics(db *sql.DB, foldBefore, dropBefore time.Time) error {
 		{`DELETE FROM app_metrics WHERE ts < ?`, []any{cut}},
 		{`DELETE FROM metrics_hourly WHERE hour < ?`, []any{drop}},
 		{`DELETE FROM app_metrics_hourly WHERE hour < ?`, []any{drop}},
+		// The events go with the history they were marked on.
+		{`DELETE FROM chart_events WHERE ts < ?`, []any{drop}},
 	}
 	for _, st := range steps {
 		if _, err := tx.Exec(st.query, st.args...); err != nil {

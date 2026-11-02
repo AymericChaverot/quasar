@@ -183,6 +183,9 @@ func checkHealth(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring
 					notify.Send(database, fmt.Sprintf("Quasar: %s failed %d health checks and could NOT be restarted: %v", a.Name, fails, err))
 				} else {
 					event.Warning("health", a.Name, checks, "restarted")
+					if err := db.RecordChartEvent(database, db.EventRestart, a.ID, "Auto-restart · "+a.Name); err != nil {
+						log.Printf("monitor: marking the restart of %s: %v", a.ID, err)
+					}
 					notify.Send(database, fmt.Sprintf("Quasar: %s failed %d health checks — container restarted automatically", a.Name, fails))
 				}
 			}
