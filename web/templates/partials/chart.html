@@ -58,7 +58,7 @@
       {{range .Cursor.Series}}
       <li>
         <svg viewBox="0 0 8 8" class="chart-key" aria-hidden="true"><rect width="8" height="8" rx="2" fill="{{.Colour}}"/></svg>
-        {{if $v.Legend}}<span class="chart-name">{{.Label}}</span>{{end}}
+        {{if or $v.Legend (gt (len $v.Cursor.Series) 1)}}<span class="chart-name">{{.Label}}</span>{{end}}
         <span class="chart-value mono"></span>
       </li>
       {{end}}

@@ -331,3 +331,19 @@ func TestManyEventsAreDrawnWithoutLabels(t *testing.T) {
 		}
 	}
 }
+
+// Two events too close to write both out: the first keeps its label, the
+// second its tooltip.
+func TestEventsTooCloseTogetherAreNotBothLabelled(t *testing.T) {
+	t0 := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	pts := []Point{{At: t0, Value: 1}, {At: t0.Add(30 * 24 * time.Hour), Value: 2}}
+	v := BuildWith("line", []Series{{Points: pts}}, "", Options{Wide: true, Events: []Event{
+		{At: t0.Add(10 * 24 * time.Hour), Label: "over"},
+		{At: t0.Add(10*24*time.Hour + 20*time.Minute), Label: "back under"},
+		{At: t0.Add(20 * 24 * time.Hour), Label: "later"},
+	}})
+	got := []bool{v.Marks[0].ShowLabel, v.Marks[1].ShowLabel, v.Marks[2].ShowLabel}
+	if !got[0] || got[1] || !got[2] {
+		t.Errorf("labelled = %v; want the first and the last, not the one beside the first", got)
+	}
+}

@@ -103,7 +103,10 @@ type Options struct {
 	// FixedMax pins the top of the scale; zero works it out from the data.
 	FixedMax float64
 	// Wide draws the chart across a whole row. See chartWide.
-	Wide   bool
+	Wide bool
+	// Height replaces the usual height of the viewBox, for a chart that is the
+	// one thing in its section and can afford the room. Zero is the usual.
+	Height float64
 	Rules  []Rule
 	Events []Event
 }
@@ -251,8 +254,14 @@ type Mark struct {
 	Anchor    string
 }
 
-// maxLabelledMarks is how many events a chart writes out in full.
-const maxLabelledMarks = 3
+// maxLabelledMarks is how many events a chart writes out in full, and
+// markLabelRoom how far apart two have to be, in viewBox units, for both
+// labels to be written: two events minutes apart on a chart of a month would
+// print one over the other, and the second keeps its tooltip instead.
+const (
+	maxLabelledMarks = 3
+	markLabelRoom    = 160.0
+)
 
 // Bar is one bar, in viewBox units.
 type Bar struct {
@@ -292,11 +301,14 @@ func BuildWide(kind string, series []Series, unit string, fixedMax float64) View
 // BuildWith positions a set of series with everything else a chart may carry:
 // rules across it and events marked on it.
 func BuildWith(kind string, series []Series, unit string, o Options) View {
-	w, fixedMax := chartW, o.FixedMax
+	w, h, fixedMax := chartW, chartH, o.FixedMax
 	if o.Wide {
 		w = chartWide
 	}
-	v := View{Kind: kind, W: w, H: chartH, Legend: len(series) > 1}
+	if o.Height > 0 {
+		h = o.Height
+	}
+	v := View{Kind: kind, W: w, H: h, Legend: len(series) > 1}
 
 	from, to, ok := span(series)
 	if !ok {
@@ -313,7 +325,7 @@ func BuildWith(kind string, series []Series, unit string, o Options) View {
 		top = niceTop(peak(kind, series))
 	}
 
-	v.Grid = grid(top, unit)
+	v.Grid = grid(top, unit, h)
 	v.Times = times(w, from, to)
 
 	// Bars are drawn from their centres, so the ends of the window need half a
@@ -331,7 +343,7 @@ func BuildWith(kind string, series []Series, unit string, o Options) View {
 
 	// Where a value sits vertically, and where a moment sits horizontally.
 	y := func(value float64) float64 {
-		return chartPadT + (chartH-chartPadT-chartPadB)*(1-clamp(value/top))
+		return chartPadT + (h-chartPadT-chartPadB)*(1-clamp(value/top))
 	}
 	x := func(at time.Time) float64 {
 		left, right := chartPadL+inset, w-chartPadR-inset
@@ -352,7 +364,7 @@ func BuildWith(kind string, series []Series, unit string, o Options) View {
 	cols, at := columns(series), momentLabel(from, to)
 	v.Cursor = Cursor{
 		Left: chartPadL, Right: w - chartPadR,
-		Top: chartPadT, Bottom: chartH - chartPadB,
+		Top: chartPadT, Bottom: h - chartPadB,
 	}
 	column := make(map[time.Time]int, len(cols))
 	for i, when := range cols {
@@ -416,7 +428,7 @@ func BuildWith(kind string, series []Series, unit string, o Options) View {
 				p.Band = strings.TrimSpace(band.String())
 			}
 			if kind == "area" && len(s.Points) > 0 {
-				floor := chartH - chartPadB
+				floor := h - chartPadB
 				p.Area = fmt.Sprintf("%.1f,%.1f %s %.1f,%.1f",
 					x(s.Points[0].At), floor, p.Line, x(s.Points[len(s.Points)-1].At), floor)
 			}
@@ -457,18 +469,30 @@ func cmpFloat(a, b float64) int {
 	return 0
 }
 
-// marks positions the events inside the window the chart covers.
+// marks positions the events inside the window the chart covers. One newer
+// than the last point — something that happened since the last sample, which
+// is the one most worth seeing — is drawn at the right-hand edge rather than
+// left off; whoever asked for events asked for the window they wanted.
 func marks(in []Event, from, to time.Time, x func(time.Time) float64, w float64) []Mark {
 	var out []Mark
 	for _, e := range in {
-		if e.At.Before(from) || e.At.After(to) {
+		if e.At.Before(from) {
 			continue
 		}
-		out = append(out, Mark{X: x(e.At), Label: e.Label, Kind: e.Kind})
+		at := e.At
+		if at.After(to) {
+			at = to
+		}
+		out = append(out, Mark{X: x(at), Label: e.Label, Kind: e.Kind})
 	}
+	slices.SortFunc(out, func(a, b Mark) int { return cmpFloat(a.X, b.X) })
 	show := len(out) <= maxLabelledMarks
+	last := math.Inf(-1)
 	for i := range out {
-		out[i].ShowLabel = show
+		out[i].ShowLabel = show && out[i].X-last >= markLabelRoom
+		if out[i].ShowLabel {
+			last = out[i].X
+		}
 		out[i].Anchor = "start"
 		if out[i].X > w*0.75 { // past three quarters of the way, written leftwards
 			out[i].Anchor = "end"
@@ -582,7 +606,7 @@ func longest(series []Series) int {
 // Only the top one carries the unit. Repeating " online" down the side says
 // nothing the first one did not and crowds the plot, and the top label is the
 // one somebody reads to learn what the scale is measuring.
-func grid(top float64, unit string) []Grid {
+func grid(top float64, unit string, h float64) []Grid {
 	out := make([]Grid, 0, chartGridLines)
 	for i := range chartGridLines {
 		share := float64(i) / float64(chartGridLines-1)
@@ -591,7 +615,7 @@ func grid(top float64, unit string) []Grid {
 			label = amount(top*share, unit)
 		}
 		out = append(out, Grid{
-			Y:     chartPadT + (chartH-chartPadT-chartPadB)*(1-share),
+			Y:     chartPadT + (h-chartPadT-chartPadB)*(1-share),
 			Label: label,
 		})
 	}
