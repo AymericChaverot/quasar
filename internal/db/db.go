@@ -101,6 +101,24 @@ CREATE TABLE IF NOT EXISTS incidents (
 );
 CREATE INDEX IF NOT EXISTS idx_incidents_app ON incidents(app_id, ended_at);
 
+CREATE TABLE IF NOT EXISTS notifications (
+	id      INTEGER PRIMARY KEY AUTOINCREMENT,
+	ts      INTEGER NOT NULL,
+	user_id INTEGER NOT NULL DEFAULT 0,
+	kind    TEXT NOT NULL,
+	title   TEXT NOT NULL,
+	text    TEXT NOT NULL DEFAULT '',
+	detail  TEXT NOT NULL DEFAULT '',
+	link    TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, id);
+CREATE INDEX IF NOT EXISTS idx_notifications_ts ON notifications(ts);
+
+CREATE TABLE IF NOT EXISTS notifications_seen (
+	user_id INTEGER PRIMARY KEY,
+	last_id INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS metrics (
 	ts   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	cpu  REAL NOT NULL,

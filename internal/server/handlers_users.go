@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"quasar/internal/auth"
+	"quasar/internal/db"
 	"quasar/internal/event"
 )
 
@@ -76,6 +77,9 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 	if err := auth.DeleteUser(s.db, id); err != nil {
 		s.redirectSettings(w, r, errNotice("User not deleted", "", err))
 		return
+	}
+	if err := db.DeleteUserNotifications(s.db, id); err != nil {
+		event.Warning("users", "forgetting the notifications of "+target, err.Error())
 	}
 	s.audit(r, "user.delete", target, "")
 	event.Info("users", fmt.Sprintf("%q deleted", target), "by "+s.actor(r))
