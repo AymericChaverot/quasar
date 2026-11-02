@@ -86,7 +86,7 @@
       <button type="button" id="confirm-ok" class="btn-primary">Confirm</button>
     </div>
   </dialog>
-  {{if not .HideNav}}{{template "toasts" .Notices}}{{end}}
+  {{if not .HideNav}}{{template "toasts" .Notices}}{{template "palette"}}{{end}}
   <script src="/static/js/confirm.js" defer></script>
   {{/* After confirm.js, so a request held for its question is not shown as
        working while the question is still up. */}}
@@ -104,6 +104,7 @@
        of the same tag is three places to forget one. */}}
   <script src="/static/js/chart.js" defer></script>
   <script src="/static/js/bell.js" defer></script>
+  <script src="/static/js/palette.js" defer></script>
 </body>
 </html>
 {{end}}

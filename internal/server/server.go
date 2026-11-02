@@ -556,6 +556,7 @@ func (s *Server) routes() {
 	s.viewer("GET /partials/bell", s.handleBellPanel)
 	s.viewer("POST /notifications/seen", s.handleNotificationsSeen)
 	s.viewer("GET /notifications", s.handleNotifications)
+	s.viewer("GET /palette", s.handlePalette)
 	s.viewer("GET /partials/metrics", s.handleServerMetricsPartial)
 	s.viewer("GET /partials/top-consumers", s.handleTopConsumersPartial)
 	s.viewer("GET /partials/apps/{id}/metrics", s.handleAppMetricsPartial)

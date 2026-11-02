@@ -1,0 +1,24 @@
+{{/* The command palette, and the one hint that it exists: a small key cap in
+     the bottom-left corner, out of the way of everything, that opens it too.
+     palette.js fills the list; the dialog is drawn empty with the page. */}}
+{{define "palette"}}
+<button type="button" class="palette-hint" data-palette-open aria-label="Search or jump to (Ctrl+K)">
+  {{template "icon_search"}}<span class="palette-hint-keys"><kbd data-palette-mod>Ctrl</kbd><kbd>K</kbd></span>
+</button>
+<dialog id="palette" class="palette" aria-label="Search or jump to">
+  <div class="palette-input">
+    {{template "icon_search"}}
+    <span class="palette-scope" hidden></span>
+    <input type="text" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list"
+           autocomplete="off" spellcheck="false" placeholder="Search applications, pages, actions…">
+    <kbd>Esc</kbd>
+  </div>
+  <div id="palette-list" class="palette-list" role="listbox"></div>
+  <div class="palette-foot">
+    <span><kbd>↑</kbd><kbd>↓</kbd> choose</span>
+    <span><kbd>↵</kbd> open</span>
+    <span><kbd>Tab</kbd> an application's actions</span>
+    <span><kbd>Esc</kbd> close</span>
+  </div>
+</dialog>
+{{end}}
