@@ -325,7 +325,11 @@ func TestExecuteTemplates(t *testing.T) {
 		{"update_badge", map[string]any{"IsAdmin": true, "UpdateAvail": true, "Latest": "v1.1.0"}},
 		{"update_badge", map[string]any{"IsAdmin": true, "UpdateAvail": false, "Latest": "v1.1.0"}},
 		{"update_badge", map[string]any{"IsAdmin": false, "UpdateAvail": true, "Latest": "v1.1.0"}},
-		{"system_stats", vps.Stats{CPUPercent: 42.5, MemPercent: 61, MemUsedGB: 1.2, MemTotalGB: 2, DiskPercent: 90, DiskUsedGB: 18, DiskTotalGB: 20}},
+		{"system_stats", []HealthCard{
+			{Key: "cpu", Label: "CPU", Percent: 42.5, Threshold: 90, Tone: "ok", Delta: "4.1%", DeltaUp: true},
+			{Key: "memory", Label: "Memory", Percent: 61, Tone: "warn", Delta: "0.2 GB"},
+			{Key: "disk", Label: "Disk", Percent: 90, Threshold: 85, Tone: "err"},
+		}},
 
 		// The four sections the System page now fetches once it is on screen.
 		// Everything the page used to be tested for lives here.

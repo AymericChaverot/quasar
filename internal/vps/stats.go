@@ -4,6 +4,7 @@
 package vps
 
 import (
+	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/load"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -17,6 +18,9 @@ type Stats struct {
 	DiskPercent float64
 	DiskUsedGB  float64
 	DiskTotalGB float64
+
+	// CPUs is how many logical CPUs the load is shared between.
+	CPUs int
 
 	// Load1 is the one-minute load average: how many processes wanted a CPU,
 	// which says what a percentage cannot — whether the machine is queueing.
@@ -45,6 +49,10 @@ func Collect(hostRoot string) (Stats, error) {
 		s.DiskPercent = du.UsedPercent
 		s.DiskUsedGB = float64(du.Used) / (1 << 30)
 		s.DiskTotalGB = float64(du.Total) / (1 << 30)
+	}
+
+	if n, err := cpu.Counts(true); err == nil {
+		s.CPUs = n
 	}
 
 	if avg, err := load.Avg(); err == nil {

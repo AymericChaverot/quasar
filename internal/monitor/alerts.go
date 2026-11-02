@@ -99,6 +99,14 @@ func (al *alerter) evaluate(database *sql.DB, g gauge) {
 	}
 }
 
+// Thresholds are the alert levels in force, in percent; zero is an alert the
+// operator turned off. The server's cards draw them where the alerts fire.
+func Thresholds(database *sql.DB) (cpu, mem, disk float64) {
+	return threshold(database, db.SettingAlertCPU, AlertDefaultCPU),
+		threshold(database, db.SettingAlertMem, AlertDefaultMem),
+		threshold(database, db.SettingAlertDisk, AlertDefaultDisk)
+}
+
 // mark puts an alert on the server's chart. A failure is logged and nothing
 // more: the notification has gone, and a line missing from a chart is not
 // worth holding it up.

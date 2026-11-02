@@ -2092,6 +2092,41 @@
   .fill-info {
     background: var(--info);
   }
+  .health-meter {
+    position: relative;
+  }
+  .health-threshold {
+    position: absolute;
+    top: -0.1875rem;
+    bottom: -0.1875rem;
+    width: 2px;
+    margin-left: -1px;
+    border-radius: 1px;
+    background: var(--err);
+    opacity: 0.7;
+  }
+  .health-now {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+  .health-delta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.125rem;
+    font-size: 0.75rem;
+  }
+  .health-delta .ico {
+    width: 0.75rem;
+    height: 0.75rem;
+    align-self: center;
+  }
+  .health-delta.is-up {
+    color: var(--warn);
+  }
+  .health-delta.is-down {
+    color: var(--ok);
+  }
   .env-row {
     display: flex;
     flex-wrap: wrap;

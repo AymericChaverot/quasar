@@ -7,13 +7,7 @@ import (
 	"quasar/internal/certs"
 	"quasar/internal/db"
 	"quasar/internal/docker"
-	"quasar/internal/vps"
 )
-
-func (s *Server) handleSystemPartial(w http.ResponseWriter, r *http.Request) {
-	stats, _ := vps.Collect(s.cfg.HostRootPath)
-	s.renderPartial(w, "system_stats", stats)
-}
 
 func (s *Server) handleAppsPartial(w http.ResponseWriter, r *http.Request) {
 	apps, err := db.ListApps(s.db, s.keyring)
