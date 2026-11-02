@@ -1,6 +1,7 @@
 package chart
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -276,5 +277,57 @@ func TestAStackedCursorFollowsTheBands(t *testing.T) {
 	}
 	if *first != v.Plots[0].Bars[0].Y || *second != v.Plots[1].Bars[0].Y {
 		t.Error("the marks are not on the tops of the bars they belong to")
+	}
+}
+
+// A band runs along the highs and back along the lows; rules and events land
+// where their values and moments are, and a series can name its own colour.
+func TestABandRulesAndEventsArePositioned(t *testing.T) {
+	t0 := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	pts := []Point{
+		{At: t0, Value: 20, Lo: 10, Hi: 30},
+		{At: t0.Add(time.Hour), Value: 40, Lo: 30, Hi: 90},
+	}
+	v := BuildWith("line", []Series{{Label: "CPU", Points: pts, Colour: "var(--chart)", Band: true}}, "%",
+		Options{FixedMax: 100, Wide: true,
+			Rules: []Rule{{Value: 90, Label: "CPU alert"}, {Value: 85, Label: "disk alert"}},
+			Events: []Event{
+				{At: t0.Add(30 * time.Minute), Label: "Deploy · blog", Kind: "deploy"},
+				{At: t0.Add(-time.Hour), Label: "before the window"},
+			}})
+
+	p := v.Plots[0]
+	if p.Colour != "var(--chart)" {
+		t.Errorf("colour = %q", p.Colour)
+	}
+	if got := strings.Count(p.Band, ","); got != 4 {
+		t.Fatalf("band %q has %d points, want 4", p.Band, got)
+	}
+	// Highs first, left to right, then lows right to left.
+	yHi0 := chartPadT + (chartH-chartPadT-chartPadB)*(1-0.30)
+	if !strings.HasPrefix(p.Band, fmt.Sprintf("%.1f,%.1f", chartPadL, yHi0)) {
+		t.Errorf("band starts %q, want the first high", p.Band)
+	}
+	if len(v.Rules) != 2 || v.Rules[0].Label != "CPU alert" || v.Rules[1].LabelY <= v.Rules[1].Y {
+		t.Errorf("rules = %+v; the lower label should move under its line rather than over the other", v.Rules)
+	}
+	if len(v.Marks) != 1 || !v.Marks[0].ShowLabel || v.Marks[0].X <= chartPadL || v.Marks[0].X >= chartWide-chartPadR {
+		t.Errorf("marks = %+v; want the one event inside the window, labelled", v.Marks)
+	}
+}
+
+// Past a handful, events are drawn without their labels, which would overlap.
+func TestManyEventsAreDrawnWithoutLabels(t *testing.T) {
+	t0 := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	pts := []Point{{At: t0, Value: 1}, {At: t0.Add(10 * time.Hour), Value: 2}}
+	var evs []Event
+	for i := range maxLabelledMarks + 1 {
+		evs = append(evs, Event{At: t0.Add(time.Duration(i+1) * time.Hour), Label: "e"})
+	}
+	v := BuildWith("line", []Series{{Points: pts}}, "", Options{Events: evs})
+	for _, m := range v.Marks {
+		if m.ShowLabel {
+			t.Fatalf("mark labelled among %d of them: %+v", len(v.Marks), m)
+		}
 	}
 }

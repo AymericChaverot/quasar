@@ -59,10 +59,12 @@ func ParseRange(spec string) (time.Duration, error) {
 	return time.Duration(n) * unit, nil
 }
 
-// Point is one sample: when, and how much.
+// Point is one sample: when, and how much. Lo and Hi are the least and the
+// most it stood for, read by a series drawn with a band.
 type Point struct {
-	At    time.Time
-	Value float64
+	At     time.Time
+	Value  float64
+	Lo, Hi float64
 }
 
 // Series is one line, or one set of bars, with the name it goes in the legend
@@ -70,6 +72,40 @@ type Point struct {
 type Series struct {
 	Label  string
 	Points []Point
+
+	// Colour is what to draw it in, as CSS. Empty takes the next of the
+	// station's chart colours, which is what a station's own charts want; the
+	// dashboard's charts name their own, so CPU is the same colour whichever
+	// other measurements are drawn beside it.
+	Colour string
+
+	// Band shades the range between each point's Lo and Hi behind the line:
+	// the spikes an average over a bucket would flatten.
+	Band bool
+}
+
+// Rule is a horizontal line across the plot at a value, such as the level an
+// alert fires at, and what it is.
+type Rule struct {
+	Value float64
+	Label string
+}
+
+// Event is a moment the chart marks with a vertical line.
+type Event struct {
+	At    time.Time
+	Label string
+	Kind  string
+}
+
+// Options are what a chart is drawn with besides its series.
+type Options struct {
+	// FixedMax pins the top of the scale; zero works it out from the data.
+	FixedMax float64
+	// Wide draws the chart across a whole row. See chartWide.
+	Wide   bool
+	Rules  []Rule
+	Events []Event
 }
 
 // The chart's own geometry, in the units of its viewBox. The left inset is
@@ -111,6 +147,8 @@ type View struct {
 	W, H float64
 
 	Plots  []Plot
+	Rules  []RuleLine
+	Marks  []Mark
 	Grid   []Grid
 	Times  []Time
 	Legend bool
@@ -137,6 +175,7 @@ type Plot struct {
 	// bar or stacked chart draws instead.
 	Line string
 	Area string
+	Band string
 	Bars []Bar
 
 	// Latest is the most recent value, for the legend.
@@ -194,6 +233,27 @@ func (v View) CursorJSON() string {
 	return string(out)
 }
 
+// RuleLine is a Rule, positioned. LabelY is where its label sits: above the
+// line, unless another label already sits there.
+type RuleLine struct {
+	Y, LabelY float64
+	Label     string
+}
+
+// Mark is an Event, positioned. Its label is written only when there are few
+// enough marks for the labels to stand apart; otherwise the line carries it as
+// a tooltip.
+type Mark struct {
+	X         float64
+	Label     string
+	Kind      string
+	ShowLabel bool
+	Anchor    string
+}
+
+// maxLabelledMarks is how many events a chart writes out in full.
+const maxLabelledMarks = 3
+
 // Bar is one bar, in viewBox units.
 type Bar struct {
 	X, Y, W, H float64
@@ -220,16 +280,22 @@ type Time struct {
 // where the panel declared one, which is what keeps a percentage chart honest
 // at 3% instead of redrawing itself as if 3 were a lot.
 func Build(kind string, series []Series, unit string, fixedMax float64) View {
-	return build(chartW, kind, series, unit, fixedMax)
+	return BuildWith(kind, series, unit, Options{FixedMax: fixedMax})
 }
 
 // BuildWide is Build for a chart given a whole row rather than half of one.
 // See chartWide.
 func BuildWide(kind string, series []Series, unit string, fixedMax float64) View {
-	return build(chartWide, kind, series, unit, fixedMax)
+	return BuildWith(kind, series, unit, Options{FixedMax: fixedMax, Wide: true})
 }
 
-func build(w float64, kind string, series []Series, unit string, fixedMax float64) View {
+// BuildWith positions a set of series with everything else a chart may carry:
+// rules across it and events marked on it.
+func BuildWith(kind string, series []Series, unit string, o Options) View {
+	w, fixedMax := chartW, o.FixedMax
+	if o.Wide {
+		w = chartWide
+	}
 	v := View{Kind: kind, W: w, H: chartH, Legend: len(series) > 1}
 
 	from, to, ok := span(series)
@@ -295,8 +361,14 @@ func build(w float64, kind string, series []Series, unit string, fixedMax float6
 		v.Cursor.X = append(v.Cursor.X, x(when))
 	}
 
+	v.Rules = rules(o.Rules, y)
+	v.Marks = marks(o.Events, from, to, x, w)
+
 	for i, s := range series {
 		p := Plot{Label: s.Label, Colour: chartColour(i)}
+		if s.Colour != "" {
+			p.Colour = s.Colour
+		}
 		if n := len(s.Points); n > 0 {
 			p.Latest = amount(s.Points[n-1].Value, unit)
 		}
@@ -333,6 +405,16 @@ func build(w float64, kind string, series []Series, unit string, fixedMax float6
 				mark(pt, py)
 			}
 			p.Line = strings.TrimSpace(line.String())
+			if s.Band && len(s.Points) > 0 {
+				var band strings.Builder
+				for _, pt := range s.Points {
+					fmt.Fprintf(&band, "%.1f,%.1f ", x(pt.At), y(pt.Hi))
+				}
+				for i := len(s.Points) - 1; i >= 0; i-- {
+					fmt.Fprintf(&band, "%.1f,%.1f ", x(s.Points[i].At), y(s.Points[i].Lo))
+				}
+				p.Band = strings.TrimSpace(band.String())
+			}
 			if kind == "area" && len(s.Points) > 0 {
 				floor := chartH - chartPadB
 				p.Area = fmt.Sprintf("%.1f,%.1f %s %.1f,%.1f",
@@ -343,6 +425,56 @@ func build(w float64, kind string, series []Series, unit string, fixedMax float6
 		v.Cursor.Series = append(v.Cursor.Series, read)
 	}
 	return v
+}
+
+// rules positions the horizontal rules, and moves a label below its line when
+// it would sit on the one before: two alerts five points apart would
+// otherwise print one label over the other.
+func rules(in []Rule, y func(float64) float64) []RuleLine {
+	sorted := slices.Clone(in)
+	slices.SortFunc(sorted, func(a, b Rule) int { return cmpFloat(b.Value, a.Value) })
+	out := make([]RuleLine, 0, len(sorted))
+	lastLabel := math.Inf(-1)
+	for _, r := range sorted {
+		line := RuleLine{Y: y(r.Value), Label: r.Label}
+		line.LabelY = line.Y - 4
+		if line.LabelY-lastLabel < 11 {
+			line.LabelY = line.Y + 11
+		}
+		lastLabel = line.LabelY
+		out = append(out, line)
+	}
+	return out
+}
+
+func cmpFloat(a, b float64) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	}
+	return 0
+}
+
+// marks positions the events inside the window the chart covers.
+func marks(in []Event, from, to time.Time, x func(time.Time) float64, w float64) []Mark {
+	var out []Mark
+	for _, e := range in {
+		if e.At.Before(from) || e.At.After(to) {
+			continue
+		}
+		out = append(out, Mark{X: x(e.At), Label: e.Label, Kind: e.Kind})
+	}
+	show := len(out) <= maxLabelledMarks
+	for i := range out {
+		out[i].ShowLabel = show
+		out[i].Anchor = "start"
+		if out[i].X > w*0.75 { // past three quarters of the way, written leftwards
+			out[i].Anchor = "end"
+		}
+	}
+	return out
 }
 
 // columns is every moment any series has a point for, in order.

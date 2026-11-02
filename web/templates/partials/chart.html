@@ -22,13 +22,27 @@
     <line x1="46" y1="{{.Y}}" x2="{{$v.W}}" y2="{{.Y}}" class="chart-grid"/>
     <text x="40" y="{{.Y}}" class="chart-label" text-anchor="end" dominant-baseline="middle">{{.Label}}</text>
     {{end}}
+    {{/* Events behind everything: a dashed rule from the top of the plot to
+         the axis, its label written out when there are few enough. */}}
+    {{range .Marks}}
+    <g class="chart-event is-{{.Kind}}">
+      <title>{{.Label}}</title>
+      <line x1="{{.X}}" x2="{{.X}}" y1="{{$v.Cursor.Top}}" y2="{{$v.Cursor.Bottom}}"/>
+      {{if .ShowLabel}}<text x="{{.X}}" dx="{{if eq .Anchor "end"}}-4{{else}}4{{end}}" y="{{$v.Cursor.Top}}" dy="8" class="chart-label" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}
+    </g>
+    {{end}}
     <line class="chart-cursor" y1="{{.Cursor.Top}}" y2="{{.Cursor.Bottom}}" x1="0" x2="0" hidden/>
     {{range .Plots}}
     {{$colour := .Colour}}
+    {{if .Band}}<polygon points="{{.Band}}" fill="{{$colour}}" fill-opacity="0.16"/>{{end}}
     {{if .Area}}<polygon points="{{.Area}}" fill="{{$colour}}" fill-opacity="0.14"/>{{end}}
     {{if .Line}}<polyline points="{{.Line}}" fill="none" stroke="{{$colour}}" stroke-width="2"
                           stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>{{end}}
     {{range .Bars}}<rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" fill="{{$colour}}" rx="1"/>{{end}}
+    {{end}}
+    {{range .Rules}}
+    <line x1="46" y1="{{.Y}}" x2="{{$v.W}}" y2="{{.Y}}" class="chart-rule"/>
+    <text x="{{$v.W}}" y="{{.LabelY}}" dx="-2" class="chart-label chart-rule-label" text-anchor="end">{{.Label}}</text>
     {{end}}
     {{/* One mark per series, parked until the pointer puts it somewhere. */}}
     {{range .Cursor.Series}}

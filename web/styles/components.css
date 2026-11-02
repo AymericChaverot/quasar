@@ -789,6 +789,26 @@ input[type="checkbox"]:focus-visible {
   fill: var(--text-faint);
   font-size: 10px;
 }
+/* A level across the plot, such as where an alert fires: dashed, in the
+   colour an alert is. */
+.chart-rule {
+  stroke: var(--err);
+  stroke-opacity: 0.6;
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
+.chart-rule-label { fill: var(--err); }
+/* A moment on the timeline: finer than a rule and in the faint text colour,
+   so the series stay the thing the eye follows. */
+.chart-event line {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}
+.chart-event.is-alert line { stroke: var(--err); stroke-opacity: 0.6; }
+.chart-event.is-recover line { stroke: var(--ok); stroke-opacity: 0.6; }
 .chart-legend {
   display: flex;
   flex-wrap: wrap;
