@@ -20,6 +20,16 @@ var selfServiceRoutes = map[string]bool{
 	"POST /settings/2fa/begin":   true, // own second factor
 	"POST /settings/2fa/enable":  true,
 	"POST /settings/2fa/disable": true,
+	// A browser asking whether another site may read the status; it changes
+	// nothing and answers only what the operator allowed.
+	"OPTIONS /api/v1/status": true,
+}
+
+// selfGuardedAPIRoutes are API routes registered public because they decide
+// their own access from the operator's settings.
+var selfGuardedAPIRoutes = map[string]bool{
+	"GET /api/v1/status":     true,
+	"OPTIONS /api/v1/status": true,
 }
 
 // privilegedReads are GET routes that hand over more than they appear to, and
@@ -95,6 +105,12 @@ func TestAPIRoutesRequireAToken(t *testing.T) {
 	found := 0
 	for pattern, level := range s.guards {
 		if !strings.Contains(pattern, "/api/") {
+			continue
+		}
+		// The status is the one API route meant to be read by anybody: it
+		// checks its own access, off by default, and is tested for it in
+		// status_api_test.go.
+		if selfGuardedAPIRoutes[pattern] {
 			continue
 		}
 		found++

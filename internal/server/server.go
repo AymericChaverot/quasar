@@ -39,6 +39,8 @@ const (
 type Server struct {
 	// sparks keeps the application list's day-long lines for a minute.
 	sparks sparkCache
+	// status keeps the status API's last answer for a few seconds.
+	status statusCache
 
 	cfg     config.Config
 	db      *sql.DB
@@ -409,6 +411,10 @@ func (s *Server) routes() {
 	s.admin("POST /settings/tokens/{id}/delete", s.handleTokenDelete)
 
 	// JSON API, authenticated by Bearer token rather than a session.
+	// The status checks its own access: off, any token, or anybody, as the
+	// operator chose, and always the status page's own key.
+	s.public("GET /api/v1/status", s.handleStatusAPI)
+	s.public("OPTIONS /api/v1/status", s.handleStatusPreflight)
 	s.apiRead("GET /api/v1/apps", s.handleAPIApps)
 	s.apiRead("GET /api/v1/apps/{id}", s.handleAPIApp)
 	s.apiRead("GET /api/v1/system", s.handleAPISystem)
