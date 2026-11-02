@@ -25,8 +25,29 @@ The choice applies to every log view and is remembered by your browser.
 Quasar keeps a copy of every application's output. To search it, click **Search history** in the Logs tab, or open **Logs** in the navigation.
 
 - Filter by application, or search all of them.
-- Search for any text, such as `error` or `exception`. The number of matching lines is shown above the results.
-- Results come 100 lines at a time, newest first. Use the pager under the list, or type a page number into the current page's box.
+- Narrow to the **last hour**, **24 h** or **7 days**.
+- **Errors only** keeps the lines that report a failure: `error`, `exception`, `fatal`, `panic`, `traceback`, `failed`…
+- Results come 100 lines at a time, newest first, with what the search found highlighted. The number of matching lines is shown above them. Use the pager under the list, or type a page number into the current page's box.
+
+### Search syntax
+
+The search box finds **words**, using an index, so it stays fast with millions of lines. Click **?** in the box for a reminder.
+
+| You type | Quasar finds lines with |
+| --- | --- |
+| `refused timeout` | both words |
+| `refus` | a word starting with it: `refused`, `refusing` |
+| `"connection refused"` | these words, in this order |
+| `refused OR timeout` | either word |
+| `-healthcheck` | not this word |
+
+Case and accents don't matter. Punctuation splits words: `user_id=42` finds `user_id=42` and `user id 42`.
+
+To find a piece of a word, or text exactly as typed (`efuse` inside `refused`, `50%`), tick **Exact text**. That search reads every line, so it is slower on a large history.
+
+### The lines around a line
+
+Hover a line and click **Context** to see what its application wrote just before and just after it, with the line highlighted. **Earlier** and **Later** load more; **Open in the application's logs** goes to its Logs tab.
 
 Each application has its own colour on this page, so lines from different applications are easy to tell apart. Change it in the application's **Settings** tab → **Log colour**; it only affects the Logs page.
 
