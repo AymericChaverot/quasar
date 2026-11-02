@@ -415,13 +415,41 @@ func (s *Server) appAction(action string) http.HandlerFunc {
 			err = s.dock.Restart(ctx, a)
 		}
 		if err != nil {
+			if !isHTMX(r) {
+				s.redirectWith(w, r, actionPage(r, a), errNotice(a.Name+" did not "+action, "", err))
+				return
+			}
 			http.Error(w, fmt.Sprintf("%s failed: %v", action, err), http.StatusInternalServerError)
 			return
 		}
 		s.audit(r, "app."+action, a.Name, "")
-		s.renderPartial(w, "app_status_panel", s.appView(r, a))
+		done := map[string]string{"start": " started", "stop": " stopped", "restart": " restarted"}[action]
+		s.appActionDone(w, r, a, okNotice(a.Name+done, ""))
 	}
 }
+
+// appActionDone answers an action on an application. From its own page, sent
+// by htmx, the answer is the status panel redrawn. Sent as a plain form — from
+// the command palette, on whatever page it was opened — it is a toast on that
+// same page.
+func (s *Server) appActionDone(w http.ResponseWriter, r *http.Request, a *db.App, n Notice) {
+	if !isHTMX(r) {
+		s.redirectWith(w, r, actionPage(r, a), n)
+		return
+	}
+	s.renderPartial(w, "app_status_panel", s.appView(r, a))
+}
+
+// actionPage is where a plain form acting on an application goes back to: the
+// page it was sent from, or else the application's own.
+func actionPage(r *http.Request, a *db.App) string {
+	if from := startedFrom(r); from != "" {
+		return from
+	}
+	return "/apps/" + a.ID
+}
+
+func isHTMX(r *http.Request) bool { return r.Header.Get("HX-Request") == "true" }
 
 // handleAppRedeploy re-creates the container from what is already on the
 // server, which is how a configuration change is applied without also picking
@@ -434,7 +462,7 @@ func (s *Server) handleAppRedeploy(w http.ResponseWriter, r *http.Request) {
 	s.dock.DeployAsync(a, "manual")
 	s.followDeploy(r, a)
 	s.audit(r, "app.deploy", a.Name, "")
-	s.renderPartial(w, "app_status_panel", s.appView(r, a))
+	s.appActionDone(w, r, a, infoNotice(a.Name+" is being redeployed", "You will be told here how it ends."))
 }
 
 // handleAppUpdate goes and gets the newest version first: a git pull and
@@ -447,7 +475,7 @@ func (s *Server) handleAppUpdate(w http.ResponseWriter, r *http.Request) {
 	s.dock.UpdateAsync(a, "update")
 	s.followDeploy(r, a)
 	s.audit(r, "app.update", a.Name, a.DeployType)
-	s.renderPartial(w, "app_status_panel", s.appView(r, a))
+	s.appActionDone(w, r, a, infoNotice(a.Name+" is being updated", "You will be told here how it ends."))
 }
 
 // handleAppRollback puts the application back on an earlier deployment.
