@@ -2,6 +2,7 @@ package chart
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -345,5 +346,32 @@ func TestEventsTooCloseTogetherAreNotBothLabelled(t *testing.T) {
 	got := []bool{v.Marks[0].ShowLabel, v.Marks[1].ShowLabel, v.Marks[2].ShowLabel}
 	if !got[0] || got[1] || !got[2] {
 		t.Errorf("labelled = %v; want the first and the last, not the one beside the first", got)
+	}
+}
+
+// A stacked area sits each series on the total of the ones before it, and the
+// scale reaches the total rather than the largest single series.
+func TestAStackedAreaSitsOnTheSeriesBelow(t *testing.T) {
+	t0 := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	at := []time.Time{t0, t0.Add(time.Hour)}
+	v := BuildWith(StackedArea, []Series{
+		{Label: "a", Points: []Point{{At: at[0], Value: 30}, {At: at[1], Value: 30}}},
+		{Label: "b", Points: []Point{{At: at[0], Value: 50}, {At: at[1], Value: 70}}},
+	}, "", Options{})
+	if v.Grid[len(v.Grid)-1].Label != "100" {
+		t.Errorf("scale tops out at %s, want 100 for a total of 100", v.Grid[len(v.Grid)-1].Label)
+	}
+	y := func(val float64) string {
+		return fmt.Sprintf("%.1f", chartPadT+(chartH-chartPadT-chartPadB)*(1-val/100))
+	}
+	// b's upper edge is the total; its lower edge is a's upper edge.
+	if !strings.Contains(v.Plots[1].Line, ","+y(100)) || !strings.Contains(v.Plots[1].Area, ","+y(30)) {
+		t.Errorf("b line %q area %q; want it between 30 and the total", v.Plots[1].Line, v.Plots[1].Area)
+	}
+	if got := v.Cursor.Series[1].Value[1]; got != "70" {
+		t.Errorf("the cursor reads b as %q at the second column, want its own 70", got)
+	}
+	if slices.Contains(Kinds, StackedArea) {
+		t.Error("a station should not be able to ask for a stacked area")
 	}
 }

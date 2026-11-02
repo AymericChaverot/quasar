@@ -28,6 +28,12 @@ import (
 // Kinds are the shapes a chart may take.
 var Kinds = []string{"line", "area", "bar", "stacked"}
 
+// StackedArea is a kind the dashboard draws for itself and a station cannot
+// ask for: each series an area on top of the ones before it, so the top edge
+// is the total. It is not in Kinds, which is what a station's manifest is
+// checked against.
+const StackedArea = "stackedarea"
+
 // MaxColours is how many series colours a theme may name, and therefore how
 // many a chart cycles through before it starts again. Eight is more than a
 // chart anybody can read holds, and it is the same number as the series a
@@ -409,6 +415,23 @@ func BuildWith(kind string, series []Series, unit string, o Options) View {
 				}
 			}
 
+		case StackedArea:
+			// Each series is the band between the running total before it and
+			// the total with it; the line is its upper edge. The cursor reads
+			// the series' own value, placed on that edge.
+			var top, base []string
+			for _, pt := range s.Points {
+				below := stacked[pt.At]
+				above := below + pt.Value
+				stacked[pt.At] = above
+				top = append(top, fmt.Sprintf("%.1f,%.1f", x(pt.At), y(above)))
+				base = append(base, fmt.Sprintf("%.1f,%.1f", x(pt.At), y(below)))
+				mark(pt, y(above))
+			}
+			slices.Reverse(base)
+			p.Line = strings.Join(top, " ")
+			p.Area = strings.TrimSpace(p.Line + " " + strings.Join(base, " "))
+
 		default:
 			var line strings.Builder
 			for _, pt := range s.Points {
@@ -550,7 +573,7 @@ func span(series []Series) (from, to time.Time, ok bool) {
 // peak is the largest value the scale has to reach. Stacked bars reach the sum
 // of what is stacked at a moment rather than the largest single one.
 func peak(kind string, series []Series) float64 {
-	if kind != "stacked" {
+	if kind != "stacked" && kind != StackedArea {
 		var max float64
 		for _, s := range series {
 			for _, p := range s.Points {

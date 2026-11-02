@@ -35,7 +35,9 @@
     {{range .Plots}}
     {{$colour := .Colour}}
     {{if .Band}}<polygon points="{{.Band}}" fill="{{$colour}}" fill-opacity="0.16"/>{{end}}
-    {{if .Area}}<polygon points="{{.Area}}" fill="{{$colour}}" fill-opacity="0.14"/>{{end}}
+    {{/* A stacked area is the whole of its series, so it is filled to be read
+         as one; a plain area is a shade under its line. */}}
+    {{if .Area}}<polygon points="{{.Area}}" fill="{{$colour}}" fill-opacity="{{if eq $v.Kind "stackedarea"}}0.5{{else}}0.14{{end}}"/>{{end}}
     {{if .Line}}<polyline points="{{.Line}}" fill="none" stroke="{{$colour}}" stroke-width="2"
                           stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>{{end}}
     {{range .Bars}}<rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" fill="{{$colour}}" rx="1"/>{{end}}
