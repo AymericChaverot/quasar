@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"quasar/internal/db"
@@ -29,5 +30,20 @@ func TestAnAppActionFromAFormGoesBackWithAToast(t *testing.T) {
 	r.Header.Set("Referer", "https://elsewhere.org/")
 	if got := actionPage(r, a); got != "/apps/a1" {
 		t.Errorf("went to %q", got)
+	}
+}
+
+// A theme chosen from the palette leaves the reader on the page they were on.
+func TestThemeGoesBackWhereItWasChosen(t *testing.T) {
+	s, r, _ := signedIn(t)
+	for referer, want := range map[string]string{"http://" + r.Host + "/system": "/system", "": "/settings"} {
+		req := httptest.NewRequest(http.MethodPost, "/theme", strings.NewReader("theme=paper"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Referer", referer)
+		w := httptest.NewRecorder()
+		s.handleThemeSet(w, req)
+		if w.Header().Get("Location") != want {
+			t.Errorf("from %q: went to %q, want %q", referer, w.Header().Get("Location"), want)
+		}
 	}
 }

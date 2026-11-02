@@ -64,7 +64,13 @@ func (s *Server) handleThemeSet(w http.ResponseWriter, r *http.Request) {
 		Secure:   s.cfg.CookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	// Back where it was chosen: Settings, or any page the command palette
+	// was opened on.
+	to := startedFrom(r)
+	if to == "" {
+		to = "/settings"
+	}
+	http.Redirect(w, r, to, http.StatusSeeOther)
 }
 
 // currentUser resolves the logged-in user from the session cookie. requireAuth
