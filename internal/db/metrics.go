@@ -41,8 +41,17 @@ type MetricPoint struct {
 	V3 float64 // disk % (server only)
 }
 
-func RecordServerMetric(db *sql.DB, cpu, mem, disk float64) error {
-	_, err := db.Exec("INSERT INTO metrics (cpu, mem, disk) VALUES (?, ?, ?)", cpu, mem, disk)
+// ServerSample is one reading of the server, as the monitor stores it.
+type ServerSample struct {
+	CPU, Mem, Disk float64 // percentages
+	Load1          float64
+	SwapGB         float64
+	MemGB, DiskGB  float64 // used, in gigabytes
+}
+
+func RecordServerMetric(db *sql.DB, s ServerSample) error {
+	_, err := db.Exec(`INSERT INTO metrics (cpu, mem, disk, load1, swap_gb, mem_gb, disk_gb)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`, s.CPU, s.Mem, s.Disk, s.Load1, s.SwapGB, s.MemGB, s.DiskGB)
 	return err
 }
 

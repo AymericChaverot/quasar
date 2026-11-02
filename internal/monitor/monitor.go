@@ -203,7 +203,10 @@ func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyri
 	for {
 		time.Sleep(metricsInterval)
 		if s, err := vps.Collect(hostRoot); err == nil {
-			if err := db.RecordServerMetric(database, s.CPUPercent, s.MemPercent, s.DiskPercent); err != nil {
+			if err := db.RecordServerMetric(database, db.ServerSample{
+				CPU: s.CPUPercent, Mem: s.MemPercent, Disk: s.DiskPercent,
+				Load1: s.Load1, SwapGB: s.SwapUsedGB, MemGB: s.MemUsedGB, DiskGB: s.DiskUsedGB,
+			}); err != nil {
 				log.Printf("monitor: recording the server sample: %v", err)
 			}
 			alerts.check(database, s)

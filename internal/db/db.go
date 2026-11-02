@@ -311,6 +311,13 @@ var migrations = []string{
 	// last because it is the newest: the list is read as a history of what the
 	// schema has had to grow.
 	"ALTER TABLE apps ADD COLUMN log_color TEXT NOT NULL DEFAULT ''",
+	// What a percentage leaves out: the load, the swap, and how much memory and
+	// disk the server sample was in gigabytes, which is the unit a change in
+	// either is read in. Zero for the samples taken before they were recorded.
+	"ALTER TABLE metrics ADD COLUMN load1 REAL NOT NULL DEFAULT 0",
+	"ALTER TABLE metrics ADD COLUMN swap_gb REAL NOT NULL DEFAULT 0",
+	"ALTER TABLE metrics ADD COLUMN mem_gb REAL NOT NULL DEFAULT 0",
+	"ALTER TABLE metrics ADD COLUMN disk_gb REAL NOT NULL DEFAULT 0",
 }
 
 // maxConns is how many connections the pool keeps: enough for the polls of a

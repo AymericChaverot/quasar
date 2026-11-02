@@ -5,6 +5,7 @@ package vps
 
 import (
 	"github.com/shirou/gopsutil/v4/disk"
+	"github.com/shirou/gopsutil/v4/load"
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
@@ -16,10 +17,17 @@ type Stats struct {
 	DiskPercent float64
 	DiskUsedGB  float64
 	DiskTotalGB float64
+
+	// Load1 is the one-minute load average: how many processes wanted a CPU,
+	// which says what a percentage cannot — whether the machine is queueing.
+	Load1 float64
+	// SwapUsedGB and SwapTotalGB are zero on the many VPSes that have none.
+	SwapUsedGB  float64
+	SwapTotalGB float64
 }
 
 // Collect reads CPU use since the previous reading (see cpu.go) and current
-// memory/disk usage.
+// memory, disk, load and swap usage.
 func Collect(hostRoot string) (Stats, error) {
 	var s Stats
 
@@ -37,6 +45,15 @@ func Collect(hostRoot string) (Stats, error) {
 		s.DiskPercent = du.UsedPercent
 		s.DiskUsedGB = float64(du.Used) / (1 << 30)
 		s.DiskTotalGB = float64(du.Total) / (1 << 30)
+	}
+
+	if avg, err := load.Avg(); err == nil {
+		s.Load1 = avg.Load1
+	}
+
+	if sw, err := mem.SwapMemory(); err == nil {
+		s.SwapUsedGB = float64(sw.Used) / (1 << 30)
+		s.SwapTotalGB = float64(sw.Total) / (1 << 30)
 	}
 
 	return s, nil
