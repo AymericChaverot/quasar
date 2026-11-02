@@ -715,11 +715,34 @@ input[type="checkbox"]:focus-visible {
 .uptime-bar.is-ok { background: var(--ok); }
 .uptime-bar.is-warn { background: var(--warn); }
 .uptime-bar.is-err { background: var(--err); }
-.uptime-bar:hover { opacity: 0.7; }
+.uptime-bar:hover { box-shadow: 0 0 0 1px var(--text); }
+/* Each day says what it was on hover, at once and legibly, rather than in
+   the browser's own tooltip a second later. Centred over its bar, except at
+   the ends, where it would run off the card. */
+.uptime-bar { position: relative; }
+.uptime-bar:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  padding: 0.25rem 0.5rem;
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-badge);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.uptime-bar:nth-child(-n + 15):hover::after { left: 0; transform: none; }
+.uptime-bar:nth-last-child(-n + 15):hover::after { left: auto; right: 0; transform: none; }
 .uptime-axis { display: flex; justify-content: space-between; margin-top: 0.375rem; }
 .uptime-narrow { display: none; }
 @media (max-width: 640px) {
   .uptime-bar:nth-child(-n + 60) { display: none; }
+  .uptime-bar:nth-child(n + 61):nth-child(-n + 68):hover::after { left: 0; transform: none; }
   .uptime-wide { display: none; }
   .uptime-narrow { display: inline; }
 }

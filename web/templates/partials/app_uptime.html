@@ -16,7 +16,7 @@
   {{/* A bar a day, oldest first. On a phone only the last month is drawn:
        ninety bars in its width would be hairlines. */}}
   <div class="uptime-bars" role="img" aria-label="Health checks answered, a bar a day over the last {{len .Bars}} days">
-    {{range .Bars}}<span class="uptime-bar is-{{.Tone}}" title="{{.Title}}"></span>{{end}}
+    {{range .Bars}}<span class="uptime-bar is-{{.Tone}}" data-tip="{{.Title}}"></span>{{end}}
   </div>
   <div class="uptime-axis faint text-xs">
     <span><span class="uptime-wide">{{len .Bars}} days ago</span><span class="uptime-narrow">30 days ago</span></span>
