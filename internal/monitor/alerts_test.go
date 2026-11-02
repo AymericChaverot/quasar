@@ -85,7 +85,7 @@ func TestDiskAlertFiresOnceAndRecovers(t *testing.T) {
 
 	al.check(database, vps.Stats{DiskPercent: 60})
 	got = sink.taken()
-	if len(got) != 1 || !strings.Contains(got[0], "back to") {
+	if len(got) != 1 || !strings.Contains(got[0], "back under") {
 		t.Fatalf("expected one recovery message, got %v", got)
 	}
 

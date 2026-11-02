@@ -117,7 +117,7 @@
   {{/* Archives hold every app's data and .env, and the key download opens all
        of it, so the whole section is admin-only rather than partly gated. */}}
   {{if .IsAdmin}}
-  <section class="space-y-4">
+  <section id="backups" class="space-y-4">
     <h2 class="h-label">Backups</h2>
     <div class="card space-y-4 p-4">
       <div class="flex items-center justify-between">

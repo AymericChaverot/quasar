@@ -21,6 +21,53 @@ import (
 
 var client = &http.Client{Timeout: 10 * time.Second}
 
+// Alert is something the platform has to tell whoever runs it: an
+// application down, a deploy failed, a disk filling up.
+type Alert struct {
+	// Kind is ok, info, warn or err: how the dashboard draws it.
+	Kind string
+	// Title says what happened in a few words, Text what it means or what to
+	// do, and Detail what a program said about it, as it said it.
+	Title, Text, Detail string
+	// Link is the dashboard page it is about.
+	Link string
+}
+
+// Alert kinds, the dashboard's words for them.
+const (
+	KindOK   = "ok"
+	KindInfo = "info"
+	KindWarn = "warn"
+	KindErr  = "err"
+)
+
+// Message is the alert as one message, for the channels.
+func (a Alert) Message() string {
+	msg := "Quasar: " + a.Title
+	if !strings.HasSuffix(msg, ".") {
+		msg += "."
+	}
+	if a.Text != "" {
+		msg += " " + a.Text
+	}
+	if a.Detail != "" {
+		msg += "\n" + a.Detail
+	}
+	return msg
+}
+
+// Raise keeps an alert in the dashboard's notifications, where everybody who
+// signs in sees it whether or not any channel is configured, then sends it
+// over every channel.
+func Raise(database *sql.DB, a Alert) {
+	if err := db.AddNotification(database, db.Notification{
+		Kind: a.Kind, Title: a.Title, Text: a.Text, Detail: a.Detail, Link: a.Link,
+	}); err != nil {
+		event.Warning("notify", "keeping the alert in the notifications", err.Error())
+	}
+	Send(database, a.Message())
+}
+
 // Send delivers a message over every configured channel. Failures are logged,
 // never fatal: notifications must not break deploys or monitoring.
 //

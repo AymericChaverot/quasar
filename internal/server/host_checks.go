@@ -94,25 +94,24 @@ func (s *Server) announceHostUpdates(m *hostupdate.Manager) {
 	host := vps.CollectHost()
 	view := s.hostUpdateView(docker.EngineInfo{}, host, false)
 	event.Info("host", hostUpdatesCount(len(pkgs))+" waiting")
-	notify.Send(s.db, hostUpdatesMessage(pkgs, view.Reboot))
+	notify.Raise(s.db, hostUpdatesAlert(pkgs, view.Reboot))
 }
 
-// hostUpdatesMessage is the notification: how many updates, whether Docker is
+// hostUpdatesAlert is the notification: how many updates, whether Docker is
 // among them, since that one is installed on its own and stops everything, and
 // whether a restart is already owed.
-func hostUpdatesMessage(pkgs []hostupdate.Package, reboot bool) string {
-	msg := "Quasar: " + hostUpdatesCount(len(pkgs)) + " waiting on the server"
+func hostUpdatesAlert(pkgs []hostupdate.Package, reboot bool) notify.Alert {
+	text := "Install them from the System page."
 	for _, p := range pkgs {
 		if hostupdate.IsDocker(p.Name) {
-			msg += ", Docker among them — it is installed on its own and restarts every application"
+			text = "Docker is among them: it is installed on its own and restarts every application. " + text
 			break
 		}
 	}
-	msg += ". Install them from the System page."
 	if reboot {
-		msg += " A restart is also needed for what was installed before."
+		text += " A restart is also needed for what was installed before."
 	}
-	return msg
+	return notify.Alert{Kind: notify.KindInfo, Title: hostUpdatesCount(len(pkgs)) + " waiting on the server", Text: text, Link: "/system"}
 }
 
 func hostUpdatesCount(n int) string {

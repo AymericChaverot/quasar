@@ -137,10 +137,11 @@ func watchStates(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring
 			switch {
 			case state == "error":
 				event.Error("app", a.Name, "stopped unexpectedly", "was "+prev)
-				notify.Send(database, fmt.Sprintf("Quasar: %s (%s.*) is in ERROR state", a.Name, a.Subdomain))
+				notify.Raise(database, notify.Alert{Kind: notify.KindErr, Title: a.Name + " stopped",
+					Text: "Its container stopped unexpectedly. It was " + prev + ".", Link: "/apps/" + a.ID})
 			case prev == "error" && state == "running":
 				event.Info("app", a.Name, "running again")
-				notify.Send(database, fmt.Sprintf("Quasar: %s (%s.*) recovered and is running again", a.Name, a.Subdomain))
+				notify.Raise(database, notify.Alert{Kind: notify.KindOK, Title: a.Name + " is running again", Link: "/apps/" + a.ID})
 			}
 		}
 		for id := range last {
@@ -186,14 +187,16 @@ func checkHealth(database *sql.DB, dock *docker.Client, keyring *secrets.Keyring
 				checks := fmt.Sprintf("failed %d health checks in a row", fails)
 				if err != nil {
 					event.Error("health", a.Name, checks, "could not be restarted", err.Error())
-					notify.Send(database, fmt.Sprintf("Quasar: %s failed %d health checks and could NOT be restarted: %v", a.Name, fails, err))
+					notify.Raise(database, notify.Alert{Kind: notify.KindErr, Title: a.Name + " is not answering",
+						Text: fmt.Sprintf("It failed %d health checks in a row and could not be restarted.", fails), Detail: err.Error(), Link: "/apps/" + a.ID})
 				} else {
 					event.Warning("health", a.Name, checks, "restarted")
 					logIncident(db.MarkIncidentRestarted(database, a.ID), a.ID)
 					if err := db.RecordChartEvent(database, db.EventRestart, a.ID, "Auto-restart · "+a.Name); err != nil {
 						log.Printf("monitor: marking the restart of %s: %v", a.ID, err)
 					}
-					notify.Send(database, fmt.Sprintf("Quasar: %s failed %d health checks — container restarted automatically", a.Name, fails))
+					notify.Raise(database, notify.Alert{Kind: notify.KindWarn, Title: a.Name + " restarted",
+						Text: fmt.Sprintf("It failed %d health checks in a row, so its container was restarted.", fails), Link: "/apps/" + a.ID})
 				}
 			}
 		}
@@ -442,7 +445,8 @@ func runScheduledTasks(database *sql.DB, dock *docker.Client, keyring *secrets.K
 				log.Printf("monitor: recording the run of task %d: %v", t.ID, recErr)
 			}
 			if err != nil {
-				notify.Send(database, fmt.Sprintf("Quasar: scheduled task failed on %s: %s (%v)", a.Name, t.Command, err))
+				notify.Raise(database, notify.Alert{Kind: notify.KindErr, Title: "Scheduled task failed on " + a.Name,
+					Text: t.Command, Detail: err.Error(), Link: "/apps/" + a.ID})
 			}
 		}
 	}

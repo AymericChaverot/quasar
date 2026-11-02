@@ -275,3 +275,21 @@ func TestSenderFallsBackToUsername(t *testing.T) {
 		t.Errorf("sender() = %q, want the explicit From", got)
 	}
 }
+
+// An alert is kept in the notifications whether or not a channel is set up,
+// and goes out as one message saying all of it.
+func TestRaiseKeepsTheAlert(t *testing.T) {
+	database := openTestDB(t)
+	a := Alert{Kind: KindErr, Title: "photos failed to deploy", Text: "The version before keeps running.", Detail: "exit status 1", Link: "/apps/photos"}
+	Raise(database, a)
+	got, err := db.Notifications(database, 1, db.NotificationFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Title != a.Title || got[0].Kind != "err" || got[0].Detail != a.Detail || got[0].Link != a.Link || got[0].UserID != 0 {
+		t.Fatalf("kept %+v", got)
+	}
+	if m := a.Message(); m != "Quasar: photos failed to deploy. The version before keeps running.\nexit status 1" {
+		t.Fatalf("message %q", m)
+	}
+}

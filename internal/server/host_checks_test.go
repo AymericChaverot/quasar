@@ -24,13 +24,13 @@ func TestFingerprint(t *testing.T) {
 	}
 }
 
-func TestHostUpdatesMessage(t *testing.T) {
-	one := hostUpdatesMessage([]hostupdate.Package{{Name: "curl"}}, false)
+func TestHostUpdatesAlert(t *testing.T) {
+	one := hostUpdatesAlert([]hostupdate.Package{{Name: "curl"}}, false).Message()
 	if !strings.Contains(one, "1 update waiting") || strings.Contains(one, "Docker") || strings.Contains(one, "restart is also") {
 		t.Errorf("one update: %q", one)
 	}
-	many := hostUpdatesMessage([]hostupdate.Package{{Name: "curl"}, {Name: "docker-ce"}}, true)
-	for _, want := range []string{"2 updates waiting", "Docker among them", "restart is also needed"} {
+	many := hostUpdatesAlert([]hostupdate.Package{{Name: "curl"}, {Name: "docker-ce"}}, true).Message()
+	for _, want := range []string{"2 updates waiting", "Docker is among them", "restart is also needed"} {
 		if !strings.Contains(many, want) {
 			t.Errorf("%q does not say %q", many, want)
 		}

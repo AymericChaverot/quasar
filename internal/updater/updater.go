@@ -123,7 +123,8 @@ func StartChecker(database *sql.DB, repo string) {
 			// mean a message every half hour until the update is applied.
 			if err == nil && latest != known && IsNewer(version.Version, latest) {
 				event.Info("update", "Quasar "+latest+" is available", "running "+version.Version)
-				notify.Send(database, fmt.Sprintf("Quasar: version %s is available (current: %s). Update from the System page.", latest, version.Version))
+				notify.Raise(database, notify.Alert{Kind: notify.KindInfo, Title: "Quasar " + latest + " is available",
+					Text: "This server runs " + version.Version + ". Update from the System page.", Link: "/system"})
 			}
 			time.Sleep(CheckInterval)
 		}

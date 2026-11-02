@@ -180,7 +180,8 @@ func (c *Client) runAsync(a *db.App, source string, plan []deployPhase, fn func(
 			if recErr := db.FinishDeployment(c.dbc, depID, "failed", err.Error(), tag); recErr != nil {
 				log.Printf("deploy %s: recording the failure: %v", a.ID, recErr)
 			}
-			notify.Send(c.dbc, fmt.Sprintf("Quasar: deploy failed for %s (%s): %v", a.Name, a.Subdomain, err))
+			notify.Raise(c.dbc, notify.Alert{Kind: notify.KindErr, Title: a.Name + " failed to deploy",
+				Text: "The version before keeps running. The deploy log is on the application's page.", Detail: err.Error(), Link: "/apps/" + a.ID})
 			c.note(a.ID, "deploy failed after %s: %v", took, err)
 			run.finish(err.Error())
 			return

@@ -81,16 +81,16 @@ func (al *alerter) evaluate(database *sql.DB, g gauge) {
 		al.over[g.name]++
 		if !al.firing[g.name] && al.over[g.name] >= g.sustain {
 			al.firing[g.name] = true
-			notify.Send(database, fmt.Sprintf("Quasar: %s at %s, over the %.0f%% threshold",
-				g.name, g.detail, limit))
+			notify.Raise(database, notify.Alert{Kind: notify.KindWarn, Title: fmt.Sprintf("%s over %.0f%%", g.name, limit),
+				Text: g.name + " at " + g.detail + ".", Link: "/"})
 			mark(database, db.EventAlert, fmt.Sprintf("%s over %.0f%%", g.name, limit))
 		}
 	case g.value < limit-alertHysteresis:
 		al.over[g.name] = 0
 		if al.firing[g.name] {
 			al.firing[g.name] = false
-			notify.Send(database, fmt.Sprintf("Quasar: %s back to %s, under the %.0f%% threshold",
-				g.name, g.detail, limit))
+			notify.Raise(database, notify.Alert{Kind: notify.KindOK, Title: fmt.Sprintf("%s back under %.0f%%", g.name, limit),
+				Text: g.name + " at " + g.detail + ".", Link: "/"})
 			mark(database, db.EventRecover, fmt.Sprintf("%s back under %.0f%%", g.name, limit))
 		}
 	default:

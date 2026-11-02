@@ -160,7 +160,8 @@ func (c *stationCall) notify(raw json.RawMessage) (json.RawMessage, error) {
 
 	// Named, because a message arriving out of nowhere is one nobody can act
 	// on: whose station, about which application.
-	notify.Send(c.srv.db, fmt.Sprintf("%s (%s): %s", c.doc.Name, c.app.Name, a.Message))
+	notify.Raise(c.srv.db, notify.Alert{Kind: notify.KindInfo, Title: c.doc.Name + " · " + c.app.Name,
+		Text: a.Message, Link: "/apps/" + c.app.ID})
 	c.audit("station.notify", a.Message)
 	return json.RawMessage("null"), nil
 }

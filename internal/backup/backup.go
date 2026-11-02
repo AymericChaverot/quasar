@@ -155,7 +155,8 @@ func pushOffsite(database *sql.DB, k *secrets.Keyring, path, name string) {
 	}
 	if err != nil {
 		event.Error("offsite", name, "upload failed", err.Error())
-		notify.Send(database, fmt.Sprintf("Quasar: backup %s was written locally but the offsite upload FAILED: %v", name, err))
+		notify.Raise(database, notify.Alert{Kind: notify.KindErr, Title: "Offsite upload failed",
+			Text: "Backup " + name + " was written on the server, but not uploaded offsite.", Detail: err.Error(), Link: "/system#backups"})
 		if auditErr := db.RecordAudit(database, db.AuditEntry{
 			Actor: db.ActorSystem, Action: "offsite.failed", Target: name, Detail: err.Error(),
 		}); auditErr != nil {
@@ -220,7 +221,8 @@ func StartScheduler(database *sql.DB, k *secrets.Keyring, appsDir, dir string, d
 			name, err := Run(database, k, appsDir, dir, dump)
 			Report(dir, name, "scheduled", started, err)
 			if err != nil {
-				notify.Send(database, "Quasar: scheduled backup FAILED: "+err.Error())
+				notify.Raise(database, notify.Alert{Kind: notify.KindErr, Title: "Scheduled backup failed",
+					Text: "Tonight's backup was not written.", Detail: err.Error(), Link: "/system#backups"})
 			}
 		}
 	}()
