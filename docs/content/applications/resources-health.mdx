@@ -42,3 +42,18 @@ A health check regularly requests a path of your app over HTTP, and restarts the
 The path is checked every 30 seconds. After **3 failures in a row**, the container is restarted, and a [notification](/server/notifications/) is sent.
 
 Leave the path empty to turn the check off.
+
+### Uptime
+
+The **Overview** tab shows the share of health checks that answered, for today, the last 7, 30 and 90 days, and one bar per day for the last 90 days (30 on a phone). Hover a bar to see its date and how many checks failed.
+
+| Colour | Checks answered that day |
+| --- | --- |
+| Green | 99.5% or more |
+| Amber | 95% to 99.5% |
+| Red | Less than 95% |
+| Grey | No check ran |
+
+Only the health checks count: an app without a health path has no uptime, and a stopped app is not checked, so its days stay grey. Days are in UTC.
+
+Checks are kept one by one for 7 days, then counted per day for 90 days.
