@@ -313,3 +313,30 @@ func LatestAppUsage(db *sql.DB, since time.Time) (map[string]AppUsage, error) {
 	}
 	return out, rows.Err()
 }
+
+// AppUsageSeries is every application's samples since a moment, averaged into
+// buckets, by application ID: one query for the whole of the dashboard's list
+// rather than one per row.
+func AppUsageSeries(db *sql.DB, since time.Time, bucket time.Duration) (map[string][]MetricPoint, error) {
+	secs := bucketSeconds(bucket)
+	rows, err := db.Query(`SELECT app_id, CAST(strftime('%s', ts) / ? AS INTEGER) * ?, AVG(cpu), AVG(mem_mb)
+		FROM app_metrics WHERE ts >= ? GROUP BY 1, 2 ORDER BY 1, 2`, secs, secs, since.UTC())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]MetricPoint{}
+	for rows.Next() {
+		var (
+			id    string
+			epoch int64
+			p     MetricPoint
+		)
+		if err := rows.Scan(&id, &epoch, &p.V1, &p.V2); err != nil {
+			return nil, err
+		}
+		p.TS = time.Unix(epoch, 0).UTC()
+		out[id] = append(out[id], p)
+	}
+	return out, rows.Err()
+}

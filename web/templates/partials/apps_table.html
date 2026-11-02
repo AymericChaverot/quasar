@@ -1,5 +1,8 @@
+{{/* Takes an AppsTable: the rows, and how they show what each application
+     uses — bars, columns, or not at all. */}}
 {{define "apps_table"}}
-{{if not .}}
+{{$res := .Resources}}
+{{if not .Rows}}
 {{template "apps_empty" true}}
 {{else}}
 <div class="table-wrap">
@@ -15,11 +18,13 @@
         <th>URL</th>
         <th>Type</th>
         <th class="col-status">Status</th>
+        {{if eq $res "bars"}}<th class="col-resources">Resources</th>
+        {{else if eq $res "columns"}}<th class="col-resources">CPU</th><th class="col-resources">RAM</th>{{end}}
         <th class="col-uptime">Uptime</th>
       </tr>
     </thead>
     <tbody>
-      {{range .}}
+      {{range .Rows}}
       <tr>
         <td class="pr-0!">
           {{/* Both slots are drawn on every row; only the moves that exist hold
@@ -92,6 +97,20 @@
           </span>
         </td>
         <td>{{template "status_badge" .Status.State}}</td>
+        {{if eq $res "bars"}}
+        <td class="col-resources">{{with .Usage}}
+          {{/* Against the whole machine: a bar half full is half the server. */}}
+          <div class="usage-bars" title="Last sample, against the whole server">
+            <span class="usage-label">CPU</span>{{template "usage_bar" (dict "Share" .CPUShare "Colour" "var(--chart)")}}<span class="usage-value">{{.CPU}}</span>
+            <span class="usage-label">RAM</span>{{template "usage_bar" (dict "Share" .MemShare "Colour" "var(--chart-memory)")}}<span class="usage-value">{{.Mem}}</span>
+          </div>
+          {{else}}<span class="faint">–</span>{{end}}</td>
+        {{else if eq $res "columns"}}
+        {{with .Usage}}
+        <td class="col-resources"><span class="usage-col" title="CPU over the last 24 hours">{{template "usage_spark" (dict "Line" .CPULine "Colour" "var(--chart)")}}{{.CPU}}</span></td>
+        <td class="col-resources"><span class="usage-col" title="Memory over the last 24 hours">{{template "usage_spark" (dict "Line" .MemLine "Colour" "var(--chart-memory)")}}{{.Mem}}</span></td>
+        {{else}}<td class="col-resources faint">–</td><td class="col-resources faint">–</td>{{end}}
+        {{end}}
         <td class="col-uptime mono muted">{{if .Status.Uptime}}{{.Status.Uptime}}{{else}}–{{end}}</td>
       </tr>
       {{end}}
@@ -100,6 +119,15 @@
 </div>
 {{end}}
 {{end}}
+
+{{/* A share of the machine, drawn rather than styled like every other colour
+   on a chart: a width in a style attribute would be the one value that took a
+   different road to the page. */}}
+{{define "usage_bar"}}<svg class="usage-bar" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true"><rect width="100" height="4" rx="2" class="usage-track"/><rect width="{{.Share}}" height="4" rx="2" fill="{{.Colour}}"/></svg>{{end}}
+
+{{/* A day of one measurement, in front of its figure; nothing for an
+   application too new to have one. */}}
+{{define "usage_spark"}}{{if .Line}}<svg class="usage-spark" viewBox="0 0 48 14" aria-hidden="true"><polyline points="{{.Line}}" fill="none" stroke="{{.Colour}}" stroke-width="1.3" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>{{end}}{{end}}
 
 {{/* An empty list carries no row to read the role from, so it is told
      whether to offer the first deploy: a viewer would only get a 403. */}}

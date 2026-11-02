@@ -102,7 +102,7 @@ func TestAppsTableLinksRepository(t *testing.T) {
 		Domain: "example.com",
 	}}
 	var buf bytes.Buffer
-	if err := s.pages["dashboard"].ExecuteTemplate(&buf, "apps_table", rows); err != nil {
+	if err := s.pages["dashboard"].ExecuteTemplate(&buf, "apps_table", AppsTable{Rows: rows}); err != nil {
 		t.Fatal(err)
 	}
 	if n := strings.Count(buf.String(), `aria-label="Repository `); n != 1 {
@@ -148,7 +148,7 @@ func TestAppsTableLinksImage(t *testing.T) {
 		Domain: "example.com",
 	}}
 	var buf bytes.Buffer
-	if err := s.pages["dashboard"].ExecuteTemplate(&buf, "apps_table", rows); err != nil {
+	if err := s.pages["dashboard"].ExecuteTemplate(&buf, "apps_table", AppsTable{Rows: rows}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(buf.String(), `href="https://github.com/acme/blog/pkgs/container/blog"`) {

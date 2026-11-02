@@ -133,3 +133,24 @@ func TestLatestAppUsageIsEachApplicationsNewestSample(t *testing.T) {
 		t.Errorf("latest = %+v; want a at 20%% and b at 5%%, nothing for the stale one", got)
 	}
 }
+
+// One query hands back every application's buckets, apart.
+func TestAppUsageSeriesKeepsEachApplicationApart(t *testing.T) {
+	database := openTestDB(t)
+	for _, row := range []struct {
+		app, ago string
+		cpu      float64
+	}{{"a", "-90 minutes", 10}, {"a", "-20 minutes", 30}, {"b", "-20 minutes", 5}} {
+		if _, err := database.Exec(`INSERT INTO app_metrics (app_id, ts, cpu, mem_mb) VALUES (?, datetime('now', ?), ?, 100)`,
+			row.app, row.ago, row.cpu); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := AppUsageSeries(database, time.Now().Add(-2*time.Hour), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got["a"]) != 2 || len(got["b"]) != 1 || got["b"][0].V1 != 5 {
+		t.Errorf("series = %+v", got)
+	}
+}

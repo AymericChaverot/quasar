@@ -44,6 +44,9 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		// What can be turned on under the history chart, from the same list
 		// the partial behind it reads, so the two cannot drift apart.
 		"Toggles": picker(r, ServerPicker, ServerToggles),
+		// How the list shows what each application uses, for its picker to
+		// open on.
+		"Resources": savedResourceMode(r),
 		"Pre": s.prerender(r, map[string]string{
 			"system":     "/partials/system",
 			"metrics":    "/partials/metrics",

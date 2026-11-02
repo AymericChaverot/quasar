@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"quasar/internal/certs"
 	"quasar/internal/db"
@@ -22,7 +23,9 @@ func (s *Server) handleAppsPartial(w http.ResponseWriter, r *http.Request) {
 	views := s.appViews(r, apps)
 	views[0].First = true
 	views[len(views)-1].Last = true
-	s.renderPartial(w, "apps_table", views)
+	mode := s.resourceMode(w, r)
+	s.fillResources(views, mode, time.Now())
+	s.renderPartial(w, "apps_table", AppsTable{Rows: views, Resources: mode})
 }
 
 // handleSystemContainersPartial lists Quasar's own containers, read-only.

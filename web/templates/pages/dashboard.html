@@ -63,9 +63,21 @@
 <script src="/static/js/top-consumers.js" defer></script>
 
 <section class="mb-10">
-  <h2 class="h-label mb-3">Applications</h2>
+  <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <h2 class="h-label mb-0!">Applications</h2>
+    {{/* How the list shows what each application uses. Polled with the list,
+         like the history's picker, so the choice travels with every request. */}}
+    <form id="apps-resources" class="range-pick"
+          hx-get="/partials/apps" hx-target="#apps-pane" hx-swap="innerHTML" hx-trigger="change">
+      <span class="range-label">Resources</span>
+      <label class="chip chip-filter"><input type="radio" name="resources" value="bars"{{if eq .Resources "bars"}} checked{{end}}>Bars</label>
+      <label class="chip chip-filter"><input type="radio" name="resources" value="columns"{{if eq .Resources "columns"}} checked{{end}}>Columns</label>
+      <label class="chip chip-filter"><input type="radio" name="resources" value="off"{{if eq .Resources "off"}} checked{{end}}>Hidden</label>
+    </form>
+  </div>
   {{$p := pre . "apps"}}
-  <div id="apps-pane" hx-get="/partials/apps" hx-trigger="{{if not $p}}load, {{end}}every 5s, quasar:seen" hx-swap="innerHTML">
+  <div id="apps-pane" hx-get="/partials/apps" hx-trigger="{{if not $p}}load, {{end}}every 5s, quasar:seen" hx-swap="innerHTML"
+       hx-include="#apps-resources">
     {{if $p}}{{$p}}{{else}}<div class="card h-24 animate-pulse"></div>{{end}}
   </div>
 </section>

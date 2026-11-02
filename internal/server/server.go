@@ -37,6 +37,9 @@ const (
 )
 
 type Server struct {
+	// sparks keeps the application list's day-long lines for a minute.
+	sparks sparkCache
+
 	cfg     config.Config
 	db      *sql.DB
 	dock    *docker.Client

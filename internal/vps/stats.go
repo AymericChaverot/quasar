@@ -66,3 +66,17 @@ func Collect(hostRoot string) (Stats, error) {
 
 	return s, nil
 }
+
+// Capacity is what the machine has to share out: its logical CPUs and its
+// memory in megabytes. What an application uses is drawn against it. Cheap
+// enough to read on every poll, and unlike Collect it takes no CPU reading,
+// so it does not disturb the one the server's cards are measured against.
+func Capacity() (cpus int, memMB float64) {
+	if n, err := cpu.Counts(true); err == nil {
+		cpus = n
+	}
+	if vm, err := mem.VirtualMemory(); err == nil {
+		memMB = float64(vm.Total) / (1 << 20)
+	}
+	return cpus, memMB
+}

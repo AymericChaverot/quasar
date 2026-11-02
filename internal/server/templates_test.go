@@ -463,7 +463,7 @@ func TestExecuteTemplates(t *testing.T) {
 		{"system_app_sizes", map[string]any{"AppSizes": []AppSize(nil)}},
 		// Both build badges, plus the rows that carry none: an image app and a
 		// git app whose repository is not on disk yet.
-		{"apps_table", []AppView{app, gitApp, {
+		{"apps_table", AppsTable{Resources: "bars", Rows: []AppView{app, gitApp, {
 			App:    &db.App{ID: "beef0003", Name: "Docs", Subdomain: "docs", DeployType: "git"},
 			Status: docker.AppStatus{State: "running"},
 			Domain: "example.com",
@@ -476,8 +476,20 @@ func TestExecuteTemplates(t *testing.T) {
 			App:    &db.App{ID: "ff00ff00", Name: "Site", Subdomain: "@", DeployType: "image", ImageRef: "nginx", Port: 80},
 			Status: docker.AppStatus{State: "running"},
 			Domain: "example.com",
-		}}},
-		{"apps_table", []AppView(nil)},
+			Usage:  &AppResources{CPU: "6.2%", Mem: "1.8 GB", CPUShare: 4, MemShare: 12, CPULine: "0,5 48,9", MemLine: "0,3 48,4"},
+		}}}},
+		{"apps_table", AppsTable{Resources: "columns", Rows: []AppView{{
+			App:    &db.App{ID: "ff00ff00", Name: "Site", Subdomain: "@", DeployType: "image", ImageRef: "nginx", Port: 80},
+			Status: docker.AppStatus{State: "running"},
+			Domain: "example.com",
+			Usage:  &AppResources{CPU: "6.2%", Mem: "1.8 GB", CPULine: "0,5 48,9"},
+		}, {
+			App:    &db.App{ID: "beef0004", Name: "New", Subdomain: "new", DeployType: "git"},
+			Status: docker.AppStatus{State: "stopped"},
+			Domain: "example.com",
+		}}}},
+		{"apps_table", AppsTable{Resources: "off", Rows: []AppView{app}}},
+		{"apps_table", AppsTable{}},
 		{"app_status_panel", app},
 		{"app_status_panel", gitApp},
 		{"git_build_panel", gitApp},

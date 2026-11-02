@@ -3083,6 +3083,49 @@
     width: 7.5rem;
     white-space: nowrap;
   }
+  .table-wrap .col-resources {
+    width: 9.5rem;
+    white-space: nowrap;
+  }
+  .usage-bars {
+    display: grid;
+    grid-template-columns: auto 4.5rem auto;
+    align-items: center;
+    gap: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+  }
+  .usage-label {
+    font-family: var(--font-mono);
+    color: var(--text-faint);
+  }
+  .usage-value {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+  }
+  .usage-bar {
+    display: block;
+    width: 100%;
+    height: 0.25rem;
+  }
+  .usage-track {
+    fill: var(--text);
+    @supports (color: color-mix(in lab, red, red)) {
+      fill: color-mix(in srgb, var(--text) 12%, transparent);
+    }
+  }
+  .usage-col {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+  .usage-spark {
+    width: 3rem;
+    height: 0.875rem;
+    flex-shrink: 0;
+  }
   .file-title {
     display: flex;
     align-items: center;

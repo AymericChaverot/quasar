@@ -55,6 +55,10 @@ type AppView struct {
 	// IsAdmin gates the controls inside partials, which are rendered without
 	// the page data map that carries it everywhere else.
 	IsAdmin bool
+	// Usage is what the application is using now, for the dashboard's list;
+	// nil when it is not running, was not sampled lately, or the list is not
+	// showing it.
+	Usage *AppResources
 }
 
 // Host is the public hostname of the app: "sub.domain", or the bare root
