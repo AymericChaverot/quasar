@@ -8,8 +8,11 @@
 <div class="mt-2 mb-8 flex items-start justify-between">
   <div>
     <h1 class="page-title">{{.Name}}</h1>
-    <a href="https://{{.Host}}" target="_blank" rel="noopener"
-       class="link mono text-sm">{{.Host}}</a>
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <a href="https://{{.Host}}" target="_blank" rel="noopener"
+         class="link mono text-sm">{{.Host}}</a>
+      {{template "ports_header" .}}
+    </div>
   </div>
   <div class="flex items-center gap-3">
     {{/* Where the tabs above come from, said out loud: this page does more
@@ -165,6 +168,15 @@
 {{end}}
 
 <div class="page-pane{{if $.Station}} hidden{{end}}" data-pane="overview">
+{{/* First on the tab for a stack that publishes ports: for a game server
+     this is the whole answer to "how do I join", and the rest of the page is
+     machinery. */}}
+{{if .Ports}}
+<section class="mt-8">
+  <h2 class="h-label mb-3">Connect</h2>
+  {{template "ports_card" .}}
+</section>
+{{end}}
 {{if eq .DeployType "git"}}
 <section class="mt-8">
   <h2 class="h-label mb-3">Build</h2>

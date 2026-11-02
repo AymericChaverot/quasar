@@ -70,6 +70,7 @@
         <td>
           <a href="https://{{.Host}}" target="_blank" rel="noopener"
              class="link mono">{{.Host}}</a>
+          {{template "ports_line" .}}
         </td>
         {{/* A git app is built one of two ways, and which one decides what a
              deploy actually does — so the list says so rather than making the

@@ -55,6 +55,10 @@ type AppView struct {
 	// IsAdmin gates the controls inside partials, which are rendered without
 	// the page data map that carries it everywhere else.
 	IsAdmin bool
+	// Ports are the host ports the stack publishes itself, past Traefik: where
+	// a game server or a database is reached. Read from the compose file, so
+	// they are known whether the stack is running or not.
+	Ports []docker.HostPort
 	// Usage is what the application is using now, for the dashboard's list;
 	// nil when it is not running, was not sampled lately, or the list is not
 	// showing it.
@@ -141,7 +145,7 @@ func (s *Server) appViewBase(a *db.App, admin bool) AppView {
 	// Read once: it looks at the checkout, and whether the app is a stack
 	// follows from it.
 	build := s.dock.GitBuildFor(a)
-	return AppView{
+	v := AppView{
 		App:     a,
 		Domain:  s.cfg.Domain,
 		Deploy:  s.dock.Deploying(a.ID),
@@ -150,6 +154,10 @@ func (s *Server) appViewBase(a *db.App, admin bool) AppView {
 		Network: s.dock.Network(),
 		IsAdmin: admin,
 	}
+	if v.Stack {
+		v.Ports = s.dock.HostPortsFor(a)
+	}
+	return v
 }
 
 // appDetailView is appView for the pages about one application, which have
@@ -162,6 +170,37 @@ func (s *Server) appDetailView(r *http.Request, a *db.App) AppView {
 	v.AuthPending = s.dock.ProtectionPending(r.Context(), a)
 	v.Limits = s.dock.Limits(r.Context(), a)
 	return v
+}
+
+// PortView is a published port as the pages show it.
+type PortView struct {
+	docker.HostPort
+	// Address is where to connect, a range written whole; Dial is the one
+	// address to copy, the first port of it.
+	Address, Dial string
+}
+
+// PortViews are the ports the stack publishes, each with its address on this
+// application's domain: any name that resolves to the server reaches it, and
+// the application's own is the one somebody will remember.
+func (v AppView) PortViews() []PortView {
+	out := make([]PortView, 0, len(v.Ports))
+	for _, p := range v.Ports {
+		out = append(out, PortView{HostPort: p, Address: p.Address(v.Host()), Dial: p.Dial(v.Host())})
+	}
+	return out
+}
+
+// PublicPorts are the PortViews reachable from outside the server: the ones
+// worth giving to somebody, and so the ones the list and the header show.
+func (v AppView) PublicPorts() []PortView {
+	var out []PortView
+	for _, p := range v.PortViews() {
+		if p.Public() {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // LimitsText names the limits stored for the app, "unlimited" for none.

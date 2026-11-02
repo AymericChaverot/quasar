@@ -1,0 +1,64 @@
+{{/* The host ports a stack publishes itself: a game server, a database. There
+     is no link to click for one of these, so the address somebody connects to
+     is written out, with a button to copy it. */}}
+
+{{/* A protocol, as a small tag beside a port. */}}
+{{define "port_proto"}}<span class="port-proto{{if eq . "udp"}} is-udp{{end}}">{{.}}</span>{{end}}
+
+{{/* The button that copies an address; copy.js does the copying. */}}
+{{define "copy_button"}}<button type="button" class="copy-btn" data-copy="{{.}}" title="Copy {{.}}" aria-label="Copy {{.}}">{{template "icon_copy"}}</button>{{end}}
+
+{{/* Beside the domain in the page's header: the public addresses only. */}}
+{{define "ports_header"}}
+{{range .PublicPorts}}
+<span class="port-addr text-sm">
+  <span class="muted" aria-hidden="true">·</span>
+  <span class="mono">{{.Address}}</span>{{template "port_proto" .Proto}}{{template "copy_button" .Dial}}
+</span>
+{{end}}
+{{end}}
+
+{{/* Under the domain in the dashboard's list. */}}
+{{define "ports_line"}}
+{{with .PublicPorts}}
+<div class="ports-line">
+  {{range .}}<span class="mono">:{{.Ports}}</span>{{template "port_proto" .Proto}}{{end}}
+</div>
+{{end}}
+{{end}}
+
+{{/* The Overview's Connect card: every published port, and how far it reaches. */}}
+{{define "ports_card"}}
+<div class="table-wrap ports-card">
+    <table>
+      <thead><tr><th>Address</th><th>Protocol</th><th>Service</th><th>Reachable</th><th><span class="sr-only">Copy</span></th></tr></thead>
+      <tbody>
+        {{range .PortViews}}
+        <tr>
+          <td class="mono">{{.Address}}</td>
+          <td>{{template "port_proto" .Proto}}</td>
+          <td class="mono muted">{{.Service}}</td>
+          <td>
+            {{if .Public}}<span class="port-reach is-public"><span class="dot"></span>From anywhere</span>
+            {{else}}<span class="port-reach"><span class="dot"></span>{{if or (eq .IP "127.0.0.1") (eq .IP "::1")}}This server only{{else}}On {{.IP}} only{{end}}</span>{{end}}
+          </td>
+          <td class="text-right">{{template "copy_button" .Dial}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{/* Said once, for all of them: what is different about these ports from
+       the domain above them. The firewall is the one most people meet — the
+       stack is up, the port is published, and nobody can connect, because
+       the hosting provider's own firewall never heard of it. */}}
+  {{with .PublicPorts}}
+  <div class="ports-foot">
+    {{template "icon_alert_triangle"}}
+    <p>These ports are answered by the container itself, not by Traefik: no TLS, and none of the edge
+      protections apply. If your hosting provider puts a firewall in front of the server, open
+      {{range $i, $p := .}}{{if $i}}, {{end}}<span class="mono">{{$p.Ports}}/{{$p.Proto}}</span>{{end}}
+      there too.</p>
+  </div>
+  {{end}}
+</div>
+{{end}}

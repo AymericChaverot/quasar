@@ -1,0 +1,71 @@
+/* --- Published ports ---------------------------------------------------------- */
+
+/* The protocol beside a port. UDP takes the accent: it is the one that
+   surprises — a firewall rule opened for TCP does nothing for it. */
+.port-proto {
+  display: inline-block;
+  margin-left: 0.375rem;
+  padding: 0 0.375rem;
+  border: var(--border-w) solid var(--border-strong);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  line-height: 1rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  vertical-align: 0.0625rem;
+}
+.port-proto.is-udp {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.port-addr { display: inline-flex; align-items: center; gap: 0.5rem; }
+.port-addr .port-proto { margin-left: -0.125rem; }
+
+.copy-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: var(--border-w) solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: color 0.15s, border-color 0.15s;
+}
+.copy-btn:hover,
+.copy-btn:focus-visible { color: var(--text); border-color: var(--border); }
+.copy-btn .ico { width: 0.8125rem; height: 0.8125rem; }
+.copy-btn.is-done { color: var(--ok); }
+
+/* Under the domain in the dashboard's list. */
+.ports-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.125rem 0.625rem;
+  margin-top: 0.1875rem;
+  font-size: 0.71875rem;
+  color: var(--text-muted);
+}
+.ports-line .port-proto { margin-left: 0.25rem; font-size: 0.5625rem; line-height: 0.875rem; }
+
+.ports-card td { padding-top: 0.5625rem; padding-bottom: 0.5625rem; }
+.port-reach { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; color: var(--text-muted); }
+.port-reach .dot { width: 0.4375rem; height: 0.4375rem; border-radius: 50%; background: var(--text-faint); }
+.port-reach.is-public .dot { background: var(--ok); }
+
+.ports-foot {
+  display: flex;
+  gap: 0.625rem;
+  align-items: flex-start;
+  padding: 0.75rem 1rem;
+  border-top: var(--border-w) solid var(--border);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.ports-foot > .ico { width: 0.9375rem; height: 0.9375rem; flex: none; margin-top: 0.0625rem; color: var(--warn); }
