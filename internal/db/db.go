@@ -76,6 +76,15 @@ CREATE TABLE IF NOT EXISTS health_history (
 );
 CREATE INDEX IF NOT EXISTS idx_health_app_ts ON health_history(app_id, ts);
 
+-- A day of an application's probes once they are a week old: see uptime.go.
+CREATE TABLE IF NOT EXISTS health_daily (
+	app_id TEXT NOT NULL,
+	day    TEXT NOT NULL,
+	ok     INTEGER NOT NULL,
+	total  INTEGER NOT NULL,
+	PRIMARY KEY (app_id, day)
+);
+
 CREATE TABLE IF NOT EXISTS metrics (
 	ts   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	cpu  REAL NOT NULL,

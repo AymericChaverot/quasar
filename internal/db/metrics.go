@@ -217,18 +217,6 @@ func queryPoints(db *sql.DB, query string, args ...any) ([]MetricPoint, error) {
 	return out, rows.Err()
 }
 
-// PruneTimeSeries drops health probes older than the retention window.
-//
-// The server's and the applications' samples are not here: they are folded
-// into hours rather than dropped, and that is FoldMetrics' job. A station's own
-// series are not here either. They are not dropped when they age out,
-// they are folded into hours first, and that is FoldStationSeries' job. Nor
-// are stored log lines, which are kept as long as the operator set: see
-// PruneRetained.
-func PruneTimeSeries(db *sql.DB, olderThan time.Time) error {
-	return exec(db, "DELETE FROM health_history WHERE ts < ?", olderThan.UTC())
-}
-
 // Reclaim gives the disk back the space deleted rows left behind, returning
 // how many bytes were recovered (0 when it chose not to run).
 //
@@ -263,6 +251,7 @@ func DeleteAppTimeSeries(db *sql.DB, appID string) error {
 		exec(db, "DELETE FROM app_metrics WHERE app_id = ?", appID),
 		exec(db, "DELETE FROM app_metrics_hourly WHERE app_id = ?", appID),
 		exec(db, "DELETE FROM health_history WHERE app_id = ?", appID),
+		exec(db, "DELETE FROM health_daily WHERE app_id = ?", appID),
 		exec(db, "DELETE FROM app_sizes WHERE app_id = ?", appID),
 	)
 }

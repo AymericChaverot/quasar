@@ -44,6 +44,11 @@ const (
 	// samples before it.
 	HistoryRetention = 30 * 24 * time.Hour
 
+	// UptimeRetention is how long an application's health probes are kept
+	// once counted into days: three months, the stretch an uptime is usually
+	// quoted over. A day is one row an application.
+	UptimeRetention = 90 * 24 * time.Hour
+
 	// seriesRetention is how long a station's own series are kept once folded
 	// into hours. Longer than everything else because they cost so much less
 	// once they are: a year of hourly rows for eight series is a few hundred
@@ -235,8 +240,11 @@ func sampleMetrics(database *sql.DB, dock *docker.Client, hostRoot string, keyri
 			}
 		}
 		if time.Since(lastPrune) > time.Hour {
-			if err := db.PruneTimeSeries(database, time.Now().Add(-Retention)); err != nil {
-				log.Printf("monitor: trimming the health checks: %v", err)
+			// The health probes are counted into days rather than dropped,
+			// which is what an application's uptime bars are drawn from.
+			if err := db.FoldHealth(database,
+				time.Now().Add(-Retention), time.Now().Add(-UptimeRetention)); err != nil {
+				log.Printf("monitor: folding the health checks into days: %v", err)
 			}
 			if err := db.FoldMetrics(database,
 				time.Now().Add(-Retention), time.Now().Add(-HistoryRetention)); err != nil {
