@@ -8,6 +8,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"quasar/internal/db"
+	"quasar/internal/event"
 )
 
 // Notices.
@@ -47,6 +50,9 @@ type Notice struct {
 	// started" turning into "Cleanup finished" is one toast that changed, not
 	// two stacked on top of each other.
 	ID string
+	// Link is the page the notice is about, for the notification it is kept
+	// as once it ends a job.
+	Link string
 }
 
 // heldNotices is how many notices wait for one person at most. A dashboard
@@ -263,6 +269,21 @@ func (s *Server) pendingNotices(r *http.Request) []Notice {
 		return nil
 	}
 	return s.notices.take(token, user)
+}
+
+// tellEnd tells user how a job they started ended — a toast now or on their
+// next page — and keeps it in their notifications, where it stays once the
+// toast is gone.
+func (s *Server) tellEnd(user int64, n Notice, since time.Time) {
+	s.notices.deliver(user, n, since)
+	if user == 0 {
+		return
+	}
+	if err := db.AddNotification(s.db, db.Notification{
+		UserID: user, Kind: n.Kind, Title: n.Title, Text: n.Text, Detail: n.Detail, Link: n.Link,
+	}); err != nil {
+		event.Warning("notifications", "keeping "+n.Title, err.Error())
+	}
 }
 
 // noticeID names a notice a later one will take the place of.

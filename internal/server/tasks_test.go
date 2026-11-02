@@ -86,6 +86,31 @@ func TestATaskReportsToWhoeverStartedIt(t *testing.T) {
 	}
 }
 
+// How a job ended stays in the notifications of the person who started it,
+// and of nobody else.
+func TestTheEndOfATaskIsKeptForWhoeverStartedIt(t *testing.T) {
+	s, r, user := signedIn(t)
+	if !s.startTask(r, "sweep", infoNotice("Sweep started", ""), func() Notice {
+		n := okNotice("Sweep finished", "1.2 GB freed")
+		n.Link = "/system"
+		return n
+	}) {
+		t.Fatal("the task did not start")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	var got []db.Notification
+	for len(got) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+		got, _ = db.Notifications(s.db, user, db.NotificationFilter{Origin: "mine"})
+	}
+	if len(got) != 1 || got[0].Title != "Sweep finished" || got[0].Link != "/system" || got[0].UserID != user {
+		t.Fatalf("kept %+v", got)
+	}
+	if other, _ := db.Notifications(s.db, user+1, db.NotificationFilter{}); len(other) != 0 {
+		t.Fatalf("somebody else sees %+v", other)
+	}
+}
+
 // A page opened while the task was ending — drawn before the end, its stream
 // opened after — still hears of it, rather than on the page after.
 func TestAStreamOpensOnWhatWasHeld(t *testing.T) {
@@ -180,5 +205,21 @@ func TestTheStreamCarriesAFinishedTask(t *testing.T) {
 	}
 	if !strings.Contains(got, "event: notice") || !strings.Contains(got, "toast-ok") || !strings.Contains(got, "1.2 GB") {
 		t.Errorf("the stream said:\n%s", got)
+	}
+}
+
+// A job's notification leads back to the page it was started from, and only
+// to one of this dashboard's.
+func TestStartedFrom(t *testing.T) {
+	for referer, want := range map[string]string{
+		"http://example.com/system?x=1": "/system",
+		"http://elsewhere.org/system":   "",
+		"":                              "",
+	} {
+		r := httptest.NewRequest(http.MethodPost, "http://example.com/system/cleanup", nil)
+		r.Header.Set("Referer", referer)
+		if got := startedFrom(r); got != want {
+			t.Errorf("%q: got %q, want %q", referer, got, want)
+		}
 	}
 }

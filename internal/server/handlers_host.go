@@ -237,7 +237,8 @@ func (s *Server) handleHostJob(w http.ResponseWriter, r *http.Request) {
 	started.ID = noticeID("host")
 	tell := func(n Notice) {
 		n.ID = started.ID
-		s.notices.deliver(user, n, since)
+		n.Link = "/system"
+		s.tellEnd(user, n, since)
 	}
 	if err := s.startHostJob(m, kind, s.actor(r), tell); err != nil {
 		s.redirectSystem(w, r, errNotice("Nothing was started", "", err))

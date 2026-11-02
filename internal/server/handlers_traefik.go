@@ -201,7 +201,8 @@ func (s *Server) handleTraefikUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		s.traefik.finish(err)
 		end.ID = started.ID
-		s.notices.deliver(user, end, since)
+		end.Link = "/system"
+		s.tellEnd(user, end, since)
 	}()
 
 	// Worded as the action taken rather than as progress: the Environment card

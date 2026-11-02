@@ -2,7 +2,9 @@ package server
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -67,15 +69,29 @@ func (s *Server) startTask(r *http.Request, key string, started Notice, work fun
 	}
 	user, _, _, _ := s.currentUser(r)
 	since := noticeSince(r)
+	from := startedFrom(r)
 	started.ID = id
 	s.flash(r, started)
 	go func() {
 		defer s.tasks.release(key)
 		n := work()
 		n.ID = id
-		s.notices.deliver(user, n, since)
+		if n.Link == "" {
+			n.Link = from
+		}
+		s.tellEnd(user, n, since)
 	}()
 	return true
+}
+
+// startedFrom is the dashboard page a job was started from, which is where to
+// go back to from its notification: the page the form or button was on.
+func startedFrom(r *http.Request) string {
+	u, err := url.Parse(r.Header.Get("Referer"))
+	if err != nil || u.Host != r.Host || !strings.HasPrefix(u.Path, "/") {
+		return ""
+	}
+	return u.Path
 }
 
 // noticeSince is the moment the end of what this request starts should be
@@ -113,11 +129,15 @@ func (s *Server) followDeploy(r *http.Request, a *db.App) {
 		if snap.Gen != gen {
 			return
 		}
-		n := okNotice(name+" deployed", "")
+		// A failed deploy is an alert, already in everybody's notifications:
+		// the person who started it is only owed the toast.
 		if snap.Err != "" {
-			n = Notice{Kind: noticeErr, Title: name + " failed to deploy", Text: "The deploy log is on the application's page.", Detail: snap.Err}
+			s.notices.deliver(user, Notice{Kind: noticeErr, Title: name + " failed to deploy", Text: "The deploy log is on the application's page.", Detail: snap.Err}, since)
+			return
 		}
-		s.notices.deliver(user, n, since)
+		n := okNotice(name+" deployed", "")
+		n.Link = "/apps/" + id
+		s.tellEnd(user, n, since)
 	}()
 }
 
