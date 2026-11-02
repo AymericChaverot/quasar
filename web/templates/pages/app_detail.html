@@ -194,6 +194,13 @@
 {{end}}
 
 <section class="mt-8">
+  <h2 class="h-label mb-3">Uptime</h2>
+  {{$p := pre $ "uptime"}}
+  <div hx-get="/partials/apps/{{.ID}}/uptime" hx-trigger="{{if not $p}}load, {{end}}every 60s, quasar:seen" hx-swap="innerHTML">
+    {{if $p}}{{$p}}{{else}}<div class="card h-28 animate-pulse"></div>{{end}}
+  </div>
+</section>
+<section class="mt-8">
   <h2 class="h-label mb-3">TLS</h2>
   {{$p := pre $ "tls"}}
   <div hx-get="/partials/apps/{{.ID}}/tls"{{if not $p}} hx-trigger="load"{{end}} hx-swap="innerHTML">

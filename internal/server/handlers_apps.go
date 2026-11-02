@@ -333,6 +333,7 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 		"tls": base + "tls", "stats": base + "stats", "metrics": base + "metrics",
 		"storage": base + "storage", "growth": base + "storage-history",
 		"tasks": base + "tasks", "deployments": base + "deployments",
+		"uptime": base + "uptime",
 	}
 	if s.dock.UsesCompose(a) {
 		panels["containers"] = base + "containers"

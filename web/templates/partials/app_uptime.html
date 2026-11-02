@@ -1,0 +1,32 @@
+{{define "app_uptime"}}
+{{if and .Empty (not .HasCheck)}}
+<div class="card muted p-4 text-sm">
+  No health check, so no uptime to show: give the application a health path in its Settings and Quasar will start counting.
+</div>
+{{else}}
+<div class="card p-4">
+  <dl class="uptime-figures">
+    {{range .Figures}}
+    <div>
+      <dt class="faint text-xs">{{.Label}}</dt>
+      <dd class="mono uptime-figure is-{{.Tone}}">{{.Value}}</dd>
+    </div>
+    {{end}}
+  </dl>
+  {{/* A bar a day, oldest first. On a phone only the last month is drawn:
+       ninety bars in its width would be hairlines. */}}
+  <div class="uptime-bars" role="img" aria-label="Health checks answered, a bar a day over the last {{len .Bars}} days">
+    {{range .Bars}}<span class="uptime-bar is-{{.Tone}}" title="{{.Title}}"></span>{{end}}
+  </div>
+  <div class="uptime-axis faint text-xs">
+    <span><span class="uptime-wide">{{len .Bars}} days ago</span><span class="uptime-narrow">30 days ago</span></span>
+    <span>Today</span>
+  </div>
+  {{if .Empty}}
+  <p class="help">No check has run yet: the first one is at most thirty seconds away, while the application is running.</p>
+  {{else if not .HasCheck}}
+  <p class="help">The health path has been removed, so no new day is being recorded.</p>
+  {{end}}
+</div>
+{{end}}
+{{end}}

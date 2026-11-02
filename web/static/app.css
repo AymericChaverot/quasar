@@ -352,6 +352,9 @@
   .h-24 {
     height: calc(var(--spacing) * 24);
   }
+  .h-28 {
+    height: calc(var(--spacing) * 28);
+  }
   .h-32 {
     height: calc(var(--spacing) * 32);
   }
@@ -2143,6 +2146,72 @@
   }
   .health-delta.is-down {
     color: var(--ok);
+  }
+  .uptime-figures {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 0.875rem;
+  }
+  .uptime-figure {
+    font-size: 1rem;
+  }
+  .uptime-figure.is-ok {
+    color: var(--ok);
+  }
+  .uptime-figure.is-warn {
+    color: var(--warn);
+  }
+  .uptime-figure.is-err {
+    color: var(--err);
+  }
+  .uptime-figure.is-none {
+    color: var(--text-faint);
+  }
+  .uptime-bars {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 2px;
+    height: 2rem;
+  }
+  .uptime-bar {
+    border-radius: 2px;
+    background: var(--text);
+    @supports (color: color-mix(in lab, red, red)) {
+      background: color-mix(in srgb, var(--text) 12%, transparent);
+    }
+  }
+  .uptime-bar.is-ok {
+    background: var(--ok);
+  }
+  .uptime-bar.is-warn {
+    background: var(--warn);
+  }
+  .uptime-bar.is-err {
+    background: var(--err);
+  }
+  .uptime-bar:hover {
+    opacity: 0.7;
+  }
+  .uptime-axis {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.375rem;
+  }
+  .uptime-narrow {
+    display: none;
+  }
+  @media (max-width: 640px) {
+    .uptime-bar:nth-child(-n + 60) {
+      display: none;
+    }
+    .uptime-wide {
+      display: none;
+    }
+    .uptime-narrow {
+      display: inline;
+    }
   }
   .env-row {
     display: flex;

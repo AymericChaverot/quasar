@@ -159,6 +159,7 @@ func TestViewerCanReachTheReadSurface(t *testing.T) {
 		"GET /partials/metrics",
 		"GET /partials/top-consumers",
 		"GET /partials/apps/{id}/stats",
+		"GET /partials/apps/{id}/uptime",
 	} {
 		if got := s.guards[pattern]; got != accessSelf {
 			t.Errorf("%s is registered as %q, want %q", pattern, got, accessSelf)
