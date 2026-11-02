@@ -79,7 +79,8 @@ They are written onto a container Quasar creates, and a stack is described by it
 Other things that grow:
 
 - **Backups**: kept according to the retention setting, on the same disk as everything else. Consider an [offsite copy](/server/backups/#offsite-copy).
-- **Logs and metrics**: kept 7 days, plus a cap of 50,000 lines per application.
+- **Logs**: kept 7 days by default, plus a cap of 50,000 lines per application.
+- **Metrics**: a sample a minute for 7 days, then one an hour for 30 days.
 - **Application data**: the **Growth** chart on an application's page shows which one is growing.
 
 Set a **disk usage alert** in [notifications](/server/notifications/#usage-alerts): a full disk is the most common way a VPS goes down.

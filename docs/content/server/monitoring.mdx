@@ -7,12 +7,33 @@ description: Server health, metrics history, logs and the audit log.
 
 The dashboard's home page shows:
 
-- **Server health**: live CPU, memory and disk usage.
-- **History**: CPU, memory and disk over the last 24 hours or 7 days.
-- **Applications**: every application with its status.
+- **Server health**: live CPU, memory and disk usage. Each bar has a tick where its [alert](/server/notifications/#usage-alerts) fires, and turns amber in the 15 points below it. Next to the figure, an arrow gives the change since the same hour yesterday, in % for the CPU and in GB for the memory and the disk. Under the bar: the cores and the load, the swap, and when the disk will be full at its pace of the last week.
+- **History**: CPU, memory and disk on one chart, over the last hour, 24 hours, 7 days or 30 days.
+- **Applications**: every application with its status and what it uses.
 - **System containers**: Traefik, the socket proxy and the dashboard itself. Click one for its resources and live logs; the dashboard's own log is described in [dashboard log](/server/dashboard-log/).
 
-Metrics are sampled in the background and kept for 7 days.
+### History
+
+The toggles under the chart turn each part of it on or off, and the choice is remembered:
+
+| Toggle | Draws |
+| --- | --- |
+| **CPU**, **Memory**, **Disk** | The measurement, as an average over each point. |
+| **Min / max** | The lowest and highest sample behind each point, as a band: a spike averaged away is still there. |
+| **Alert thresholds** | A dashed line at each alert's level. |
+| **Events** | A dashed line at each deployment, automatic restart and alert. Hover one for what it was. |
+
+**Top consumers**, next to the window, opens the applications' memory or CPU stacked over the same window, and their ranking right now.
+
+### Applications
+
+**Resources**, next to the list's heading, chooses how it shows what each running application uses:
+
+- **Bars**: CPU and memory against the whole server.
+- **Columns**: CPU and memory, each after a line of its last 24 hours.
+- **Hidden**: neither.
+
+Metrics are sampled every minute and kept for 7 days, then one point per hour (average, minimum and maximum) for 30 days.
 
 ## System page
 
