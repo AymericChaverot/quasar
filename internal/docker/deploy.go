@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/moby/moby/client"
 	"log"
 	"net/http"
 	"os"
@@ -15,13 +16,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types/build"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/api/types/registry"
 	"github.com/moby/go-archive"
+	"github.com/moby/moby/api/types/build"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/api/types/registry"
 
 	"quasar/internal/db"
 	"quasar/internal/event"
@@ -289,7 +288,7 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 	if pull {
 		c.stage(a.ID, phaseFetch)
 		c.note(a.ID, "pulling %s", imageRef)
-		rc, err := c.api.ImagePull(ctx, imageRef, image.PullOptions{RegistryAuth: c.registryAuth(imageRef)})
+		rc, err := c.api.ImagePull(ctx, imageRef, client.ImagePullOptions{RegistryAuth: c.registryAuth(imageRef)})
 		if err != nil {
 			return fmt.Errorf("pull %s: %w", imageRef, err)
 		}
@@ -329,7 +328,7 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 			// A container that will not stop is why the new one will fail to
 			// bind its port a moment from now, so the reason belongs in the log
 			// before that happens.
-			if err := c.api.ContainerStop(ctx, id, container.StopOptions{}); err != nil {
+			if _, err := c.api.ContainerStop(ctx, id, client.ContainerStopOptions{}); err != nil {
 				event.Warning("deploy", a.Name, "the previous container "+id[:12]+" will not stop", err.Error())
 			}
 		}
@@ -344,7 +343,7 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 			// The rollback is the last thing standing between a failed deploy
 			// and an app that is simply down. If it does not work, that is the
 			// single most important line in the log.
-			if err := c.api.ContainerStart(undo, id, container.StartOptions{}); err != nil {
+			if _, err := c.api.ContainerStart(undo, id, client.ContainerStartOptions{}); err != nil {
 				event.Error("deploy", a.Name, "ROLLBACK FAILED — container "+id[:12]+" is still stopped", err.Error())
 			}
 		}
@@ -359,7 +358,7 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 	}
 
 	name := deployContainerName(a.ID)
-	created, err := c.api.ContainerCreate(ctx,
+	created, err := c.create(ctx,
 		&container.Config{
 			Image:  imageRef,
 			Env:    envLines(a.EnvContent),
@@ -373,12 +372,12 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 				c.network: {Aliases: []string{ContainerName(a.ID)}},
 			},
 		},
-		nil, name)
+		name)
 	if err != nil {
 		rollback()
 		return fmt.Errorf("create container: %w", err)
 	}
-	if err := c.api.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
+	if _, err := c.api.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
 		c.removeContainer(context.WithoutCancel(ctx), created.ID)
 		rollback()
 		return fmt.Errorf("start container: %w", err)
@@ -447,7 +446,7 @@ func (c *Client) waitServing(ctx context.Context, a *db.App, name, id string, po
 	var lastErr error
 	for {
 		c.progress(a.ID, time.Since(start).Seconds()/budget.Seconds())
-		info, err := c.api.ContainerInspect(ctx, id)
+		info, err := c.inspect(ctx, id)
 		if err != nil {
 			return fmt.Errorf("inspect new container: %w", err)
 		}
@@ -725,7 +724,7 @@ func (c *Client) buildImage(ctx context.Context, a *db.App, src string) (string,
 	c.stage(a.ID, phaseBuild)
 	tag := fmt.Sprintf("%s:%d", buildTagPrefix(a.ID), time.Now().Unix())
 	c.note(a.ID, "building %s from the Dockerfile", tag)
-	resp, err := c.api.ImageBuild(ctx, buildCtx, build.ImageBuildOptions{
+	resp, err := c.api.ImageBuild(ctx, buildCtx, client.ImageBuildOptions{
 		Tags:       []string{tag},
 		Dockerfile: "Dockerfile",
 		Remove:     true,
@@ -750,17 +749,17 @@ func (c *Client) buildImage(ctx context.Context, a *db.App, src string) (string,
 
 // pruneBuilds removes old git-built images beyond the rollback window.
 func (c *Client) pruneBuilds(ctx context.Context, appID string) {
-	list, err := c.api.ImageList(ctx, image.ListOptions{
-		Filters: filters.NewArgs(filters.Arg("reference", buildTagPrefix(appID)+":*")),
+	list, err := c.api.ImageList(ctx, client.ImageListOptions{
+		Filters: make(client.Filters).Add("reference", buildTagPrefix(appID)+":*"),
 	})
-	if err != nil || len(list) <= keepBuilds {
+	if err != nil || len(list.Items) <= keepBuilds {
 		return
 	}
-	sort.Slice(list, func(i, j int) bool { return list[i].Created > list[j].Created })
-	for _, img := range list[keepBuilds:] {
+	sort.Slice(list.Items, func(i, j int) bool { return list.Items[i].Created > list.Items[j].Created })
+	for _, img := range list.Items[keepBuilds:] {
 		// Best effort: an image still referenced by a stopped container will
 		// not go, and the next prune will find it again.
-		if _, err := c.api.ImageRemove(ctx, img.ID, image.RemoveOptions{Force: true, PruneChildren: true}); err != nil {
+		if _, err := c.api.ImageRemove(ctx, img.ID, client.ImageRemoveOptions{Force: true, PruneChildren: true}); err != nil {
 			log.Printf("prune: removing the old build %s: %v", img.ID[:12], err)
 		}
 	}
@@ -768,14 +767,14 @@ func (c *Client) pruneBuilds(ctx context.Context, appID string) {
 
 // BuildTags lists the app's locally available git-build tags (for rollback).
 func (c *Client) BuildTags(ctx context.Context, appID string) []string {
-	list, err := c.api.ImageList(ctx, image.ListOptions{
-		Filters: filters.NewArgs(filters.Arg("reference", buildTagPrefix(appID)+":*")),
+	list, err := c.api.ImageList(ctx, client.ImageListOptions{
+		Filters: make(client.Filters).Add("reference", buildTagPrefix(appID)+":*"),
 	})
 	if err != nil {
 		return nil
 	}
 	var tags []string
-	for _, img := range list {
+	for _, img := range list.Items {
 		tags = append(tags, img.RepoTags...)
 	}
 	sort.Sort(sort.Reverse(sort.StringSlice(tags)))

@@ -45,7 +45,7 @@ func (c *Client) Route(ctx context.Context, a *db.App) RouteInfo {
 	if id == "" {
 		return RouteInfo{}
 	}
-	info, err := c.api.ContainerInspect(ctx, id)
+	info, err := c.inspect(ctx, id)
 	if err != nil {
 		return RouteInfo{}
 	}

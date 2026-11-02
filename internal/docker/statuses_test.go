@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/client"
+	"github.com/moby/moby/client"
 
 	"quasar/internal/db"
 )
@@ -82,9 +82,9 @@ func fakeClient(t *testing.T, f *fakeDaemon) *Client {
 	t.Helper()
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
-	api, err := client.NewClientWithOpts(
+	api, err := client.New(
 		client.WithHost("tcp://"+srv.Listener.Addr().String()),
-		client.WithVersion("1.45"),
+		client.WithAPIVersion("1.45"),
 	)
 	if err != nil {
 		t.Fatal(err)

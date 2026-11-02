@@ -2,12 +2,13 @@ package docker
 
 import (
 	"context"
+	"github.com/moby/moby/client"
 	"regexp"
 	"sort"
 	"strconv"
 	"sync"
 
-	"github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/api/types/container"
 
 	"quasar/internal/db"
 )
@@ -25,7 +26,7 @@ import (
 // already worked it out for each, and it means reading the checkout.
 func (c *Client) Statuses(ctx context.Context, apps []*db.App, stack map[string]bool) map[string]AppStatus {
 	out := make(map[string]AppStatus, len(apps))
-	list, err := c.api.ContainerList(ctx, container.ListOptions{All: true})
+	list, err := c.api.ContainerList(ctx, client.ContainerListOptions{All: true})
 	if err != nil {
 		for _, a := range apps {
 			out[a.ID] = AppStatus{State: "not deployed"}
@@ -34,7 +35,7 @@ func (c *Client) Statuses(ctx context.Context, apps []*db.App, stack map[string]
 	}
 	single := map[string][]container.Summary{}
 	projects := map[string][]container.Summary{}
-	for _, ct := range list {
+	for _, ct := range list.Items {
 		if id := ct.Labels[appLabel]; id != "" {
 			single[id] = append(single[id], ct)
 		}
@@ -67,7 +68,7 @@ func (c *Client) Statuses(ctx context.Context, apps []*db.App, stack map[string]
 		sort.Slice(cts, func(i, j int) bool { return cts[i].Created > cts[j].Created })
 		newest := cts[0]
 		if newest.State != "running" {
-			out[a.ID] = statusFromState(newest.State, "", exitCodeOf(newest.Status))
+			out[a.ID] = statusFromState(string(newest.State), "", exitCodeOf(newest.Status))
 			continue
 		}
 		wg.Add(1)
@@ -76,8 +77,8 @@ func (c *Client) Statuses(ctx context.Context, apps []*db.App, stack map[string]
 			slots <- struct{}{}
 			defer func() { <-slots }()
 			st := AppStatus{State: "running"}
-			if info, err := c.api.ContainerInspect(ctx, containerID); err == nil {
-				st = statusFromState(info.State.Status, info.State.StartedAt, info.State.ExitCode)
+			if info, err := c.inspect(ctx, containerID); err == nil {
+				st = statusFromState(string(info.State.Status), info.State.StartedAt, info.State.ExitCode)
 			}
 			mu.Lock()
 			out[appID] = st

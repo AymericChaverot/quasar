@@ -3,13 +3,11 @@ package docker
 import (
 	"context"
 	"fmt"
+	"github.com/moby/moby/client"
 	"slices"
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
 )
 
 // DiskUsage is a dashboard-friendly summary of Docker's disk consumption.
@@ -45,20 +43,20 @@ type SystemContainer struct {
 // SystemContainers lists the platform's own containers (dashboard, Traefik,
 // socket proxy, updater) by their quasar- name prefix.
 func (c *Client) SystemContainers(ctx context.Context) []SystemContainer {
-	list, err := c.api.ContainerList(ctx, container.ListOptions{
+	list, err := c.api.ContainerList(ctx, client.ContainerListOptions{
 		All:     true,
-		Filters: filters.NewArgs(filters.Arg("name", "quasar-")),
+		Filters: make(client.Filters).Add("name", "quasar-"),
 	})
 	if err != nil {
 		return nil
 	}
 	var out []SystemContainer
-	for _, ct := range list {
+	for _, ct := range list.Items {
 		name := ""
 		if len(ct.Names) > 0 {
 			name = strings.TrimPrefix(ct.Names[0], "/")
 		}
-		sc := SystemContainer{Name: name, Image: ct.Image, State: ct.State}
+		sc := SystemContainer{Name: name, Image: ct.Image, State: string(ct.State)}
 		if ct.State == "running" {
 			sc.Uptime = humanDuration(time.Since(time.Unix(ct.Created, 0)))
 		}
@@ -76,14 +74,14 @@ func (c *Client) GetSystemContainer(ctx context.Context, name string) (SystemCon
 	if !strings.HasPrefix(name, "quasar-") {
 		return SystemContainer{}, fmt.Errorf("not a system container")
 	}
-	info, err := c.api.ContainerInspect(ctx, name)
+	info, err := c.inspect(ctx, name)
 	if err != nil {
 		return SystemContainer{}, err
 	}
 	sc := SystemContainer{
 		Name:  strings.TrimPrefix(info.Name, "/"),
 		Image: info.Config.Image,
-		State: info.State.Status,
+		State: string(info.State.Status),
 	}
 	if info.State.Running {
 		if started, err := time.Parse(time.RFC3339Nano, info.State.StartedAt); err == nil {
@@ -107,15 +105,15 @@ type EngineInfo struct {
 
 func (c *Client) EngineInfo(ctx context.Context) EngineInfo {
 	out := EngineInfo{DockerVersion: "unknown", APIVersion: "unknown"}
-	if v, err := c.api.ServerVersion(ctx); err == nil {
+	if v, err := c.api.ServerVersion(ctx, client.ServerVersionOptions{}); err == nil {
 		out.DockerVersion = v.Version
 		out.APIVersion = v.APIVersion
 		out.OSType = v.Os + "/" + v.Arch
 	}
-	if info, err := c.api.Info(ctx); err == nil {
-		out.Rootless = slices.Contains(info.SecurityOptions, "name=rootless")
+	if info, err := c.api.Info(ctx, client.InfoOptions{}); err == nil {
+		out.Rootless = slices.Contains(info.Info.SecurityOptions, "name=rootless")
 	}
-	if info, err := c.api.ContainerInspect(ctx, "quasar-traefik"); err == nil {
+	if info, err := c.inspect(ctx, "quasar-traefik"); err == nil {
 		out.TraefikImage = info.Config.Image
 	}
 	return out
@@ -128,5 +126,6 @@ func (c *Client) EngineInfo(ctx context.Context) EngineInfo {
 // without it, the next save writes the old contents straight back. It costs a
 // few seconds during which nothing is served.
 func (c *Client) RestartTraefik(ctx context.Context) error {
-	return c.api.ContainerRestart(ctx, "quasar-traefik", container.StopOptions{})
+	_, err := c.api.ContainerRestart(ctx, "quasar-traefik", client.ContainerRestartOptions{})
+	return err
 }

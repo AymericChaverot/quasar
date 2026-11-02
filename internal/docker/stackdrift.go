@@ -84,7 +84,7 @@ func (c *Client) StackDrift(ctx context.Context, compose []byte, installDir stri
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			info, err := c.api.ContainerInspect(ctx, name)
+			info, err := c.inspect(ctx, name)
 			if err != nil || info.Config == nil {
 				return
 			}

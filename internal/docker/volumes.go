@@ -2,12 +2,12 @@ package docker
 
 import (
 	"context"
+	"github.com/moby/moby/client"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/volume"
+	"github.com/moby/moby/api/types/volume"
 
 	"quasar/internal/db"
 )
@@ -43,12 +43,12 @@ func (v Volume) Local() bool { return v.Driver == "local" && v.Mountpoint != "" 
 // the same bytes. The trade is that it is a slow call, which is why the section
 // that shows it is a partial.
 func (c *Client) Volumes(ctx context.Context) ([]Volume, error) {
-	du, err := c.api.DiskUsage(ctx, types.DiskUsageOptions{})
+	du, err := c.api.DiskUsage(ctx, client.DiskUsageOptions{Volumes: true, Verbose: true})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Volume, 0, len(du.Volumes))
-	for _, v := range du.Volumes {
+	out := make([]Volume, 0, len(du.Volumes.Items))
+	for _, v := range ptrs(du.Volumes.Items) {
 		out = append(out, volumeFrom(v))
 	}
 	// Largest first: the reason to open this list is almost always to find what
@@ -69,11 +69,11 @@ func (c *Client) Volumes(ctx context.Context) ([]Volume, error) {
 // directory tree would make the browser crawl. Size is left at zero here; the
 // caller that wants it is the list, not the browser.
 func (c *Client) Volume(ctx context.Context, name string) (Volume, error) {
-	v, err := c.api.VolumeInspect(ctx, name)
+	res, err := c.api.VolumeInspect(ctx, name, client.VolumeInspectOptions{})
 	if err != nil {
 		return Volume{}, err
 	}
-	return volumeFrom(&v), nil
+	return volumeFrom(&res.Volume), nil
 }
 
 func volumeFrom(v *volume.Volume) Volume {
@@ -161,7 +161,7 @@ func (c *Client) AppMounts(ctx context.Context, a *db.App) []Mount {
 	seen := map[string]bool{}
 	var out []Mount
 	for _, ct := range list {
-		info, err := c.api.ContainerInspect(ctx, ct.ID)
+		info, err := c.inspect(ctx, ct.ID)
 		if err != nil {
 			continue
 		}

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/api/types/container"
 
 	"quasar/internal/db"
 )
@@ -63,7 +63,7 @@ func appContainerFrom(ct container.Summary) AppContainer {
 		Name:    name,
 		Service: ct.Labels["com.docker.compose.service"],
 		Image:   ct.Image,
-		State:   ct.State,
+		State:   string(ct.State),
 		IsWeb:   ct.Labels["traefik.enable"] == "true",
 	}
 	if ct.State == "running" {

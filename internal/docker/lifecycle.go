@@ -3,13 +3,13 @@ package docker
 import (
 	"context"
 	"errors"
+	"github.com/moby/moby/client"
 	"os"
 	"sort"
 	"strconv"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
+	"github.com/moby/moby/api/types/container"
 
 	"quasar/internal/db"
 )
@@ -35,15 +35,15 @@ var ErrNoContainer = errors.New("app has no container")
 // names carry a per-deploy suffix. Containers created before that suffix
 // existed are named qs-<id> but carry the same label, so they resolve too.
 func (c *Client) appContainers(ctx context.Context, appID string) []container.Summary {
-	list, err := c.api.ContainerList(ctx, container.ListOptions{
+	list, err := c.api.ContainerList(ctx, client.ContainerListOptions{
 		All:     true,
-		Filters: filters.NewArgs(filters.Arg("label", appLabel+"="+appID)),
+		Filters: make(client.Filters).Add("label", appLabel+"="+appID),
 	})
 	if err != nil {
 		return nil
 	}
-	sort.Slice(list, func(i, j int) bool { return list[i].Created > list[j].Created })
-	return list
+	sort.Slice(list.Items, func(i, j int) bool { return list.Items[i].Created > list.Items[j].Created })
+	return list.Items
 }
 
 // appContainer resolves the container currently serving an app.
@@ -57,14 +57,14 @@ func (c *Client) appContainer(ctx context.Context, appID string) (string, error)
 
 // composeContainers lists every container of a compose app's project.
 func (c *Client) composeContainers(ctx context.Context, appID string) []container.Summary {
-	list, err := c.api.ContainerList(ctx, container.ListOptions{
+	list, err := c.api.ContainerList(ctx, client.ContainerListOptions{
 		All:     true,
-		Filters: filters.NewArgs(filters.Arg("label", "com.docker.compose.project="+composeProject(appID))),
+		Filters: make(client.Filters).Add("label", "com.docker.compose.project="+composeProject(appID)),
 	})
 	if err != nil {
 		return nil
 	}
-	return list
+	return list.Items
 }
 
 // composeWebContainer picks the container a compose app serves HTTP from: the
@@ -98,11 +98,11 @@ func (c *Client) Status(ctx context.Context, a *db.App) AppStatus {
 	if err != nil {
 		return AppStatus{State: "not deployed"}
 	}
-	info, err := c.api.ContainerInspect(ctx, id)
+	info, err := c.inspect(ctx, id)
 	if err != nil {
 		return AppStatus{State: "not deployed"}
 	}
-	return statusFromState(info.State.Status, info.State.StartedAt, info.State.ExitCode)
+	return statusFromState(string(info.State.Status), info.State.StartedAt, info.State.ExitCode)
 }
 
 func (c *Client) composeStatus(ctx context.Context, appID string) AppStatus {
@@ -158,7 +158,8 @@ func (c *Client) Start(ctx context.Context, a *db.App) error {
 	if err != nil {
 		return err
 	}
-	return c.api.ContainerStart(ctx, id, container.StartOptions{})
+	_, err = c.api.ContainerStart(ctx, id, client.ContainerStartOptions{})
+	return err
 }
 
 func (c *Client) Stop(ctx context.Context, a *db.App) error {
@@ -169,7 +170,8 @@ func (c *Client) Stop(ctx context.Context, a *db.App) error {
 	if err != nil {
 		return err
 	}
-	return c.api.ContainerStop(ctx, id, container.StopOptions{})
+	_, err = c.api.ContainerStop(ctx, id, client.ContainerStopOptions{})
+	return err
 }
 
 func (c *Client) Restart(ctx context.Context, a *db.App) error {
@@ -180,7 +182,8 @@ func (c *Client) Restart(ctx context.Context, a *db.App) error {
 	if err != nil {
 		return err
 	}
-	return c.api.ContainerRestart(ctx, id, container.StopOptions{})
+	_, err = c.api.ContainerRestart(ctx, id, client.ContainerRestartOptions{})
+	return err
 }
 
 // Remove tears down the app's containers and deletes its directory on disk.
@@ -206,7 +209,7 @@ func (c *Client) Remove(ctx context.Context, a *db.App) error {
 func (c *Client) removeContainer(ctx context.Context, name string) {
 	// A container that has already gone reports "no such container", which is
 	// the outcome this was asking for.
-	_ = c.api.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
+	_, _ = c.api.ContainerRemove(ctx, name, client.ContainerRemoveOptions{Force: true})
 }
 
 func humanDuration(d time.Duration) string {

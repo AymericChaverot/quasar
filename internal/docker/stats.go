@@ -3,9 +3,10 @@ package docker
 import (
 	"context"
 	"encoding/json"
+	"github.com/moby/moby/client"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/api/types/container"
 
 	"quasar/internal/db"
 )
@@ -104,13 +105,7 @@ func (c *Client) StatsByName(ctx context.Context, name string) (ContainerStats, 
 // the second of its two samples otherwise, which is what fills PreCPUStats.
 func (c *Client) readStats(ctx context.Context, name string, oneShot bool) (container.StatsResponse, error) {
 	var s container.StatsResponse
-	var resp container.StatsResponseReader
-	var err error
-	if oneShot {
-		resp, err = c.api.ContainerStatsOneShot(ctx, name)
-	} else {
-		resp, err = c.api.ContainerStats(ctx, name, false)
-	}
+	resp, err := c.api.ContainerStats(ctx, name, client.ContainerStatsOptions{IncludePreviousSample: !oneShot})
 	if err != nil {
 		return s, err
 	}

@@ -3,9 +3,10 @@ package docker
 import (
 	"context"
 	"fmt"
+	"github.com/moby/moby/client"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/network"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 )
 
 // The status page runs in a container of its own, started from the very
@@ -34,7 +35,7 @@ type StatusPage struct {
 // dashboardImage is the image the dashboard's container was started from, by
 // id, so the page is started from exactly that and never pulls anything.
 func (c *Client) dashboardImage(ctx context.Context) (string, error) {
-	info, err := c.api.ContainerInspect(ctx, dashboardName)
+	info, err := c.inspect(ctx, dashboardName)
 	if err != nil {
 		return "", fmt.Errorf("the dashboard does not run in a container named %s, so there is no image to start the page from: %w", dashboardName, err)
 	}
@@ -43,11 +44,11 @@ func (c *Client) dashboardImage(ctx context.Context) (string, error) {
 
 // StatusPageState reports the page's container.
 func (c *Client) StatusPageState(ctx context.Context) StatusPage {
-	info, err := c.api.ContainerInspect(ctx, StatusPageName)
+	info, err := c.inspect(ctx, StatusPageName)
 	if err != nil {
 		return StatusPage{State: "not deployed"}
 	}
-	st := StatusPage{State: info.State.Status}
+	st := StatusPage{State: string(info.State.Status)}
 	if img, err := c.dashboardImage(ctx); err == nil {
 		st.Current = img == info.Image
 	}
@@ -63,7 +64,7 @@ func (c *Client) DeployStatusPage(ctx context.Context, host, apiURL, key string)
 	}
 	c.removeContainer(ctx, StatusPageName)
 
-	created, err := c.api.ContainerCreate(ctx,
+	created, err := c.create(ctx,
 		&container.Config{
 			Image: img,
 			Cmd:   []string{"status-page"},
@@ -87,11 +88,11 @@ func (c *Client) DeployStatusPage(ctx context.Context, host, apiURL, key string)
 		&network.NetworkingConfig{
 			EndpointsConfig: map[string]*network.EndpointSettings{c.network: {}},
 		},
-		nil, StatusPageName)
+		StatusPageName)
 	if err != nil {
 		return fmt.Errorf("create the status page: %w", err)
 	}
-	if err := c.api.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
+	if _, err := c.api.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
 		c.removeContainer(ctx, StatusPageName)
 		return fmt.Errorf("start the status page: %w", err)
 	}

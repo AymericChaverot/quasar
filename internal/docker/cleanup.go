@@ -3,16 +3,16 @@ package docker
 import (
 	"context"
 	"fmt"
+	"github.com/moby/moby/client"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/build"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/api/types/volume"
+	"github.com/moby/moby/api/types/build"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/image"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/api/types/volume"
 )
 
 // Reclaimable is one category of Docker state a sweep would remove.
@@ -270,14 +270,14 @@ func (s sweep) empty() bool {
 // consistent with itself.
 func (c *Client) resolve(ctx context.Context, appIDs []string) (sweep, error) {
 	var s sweep
-	du, err := c.api.DiskUsage(ctx, types.DiskUsageOptions{})
+	du, err := c.diskUsage(ctx, true)
 	if err != nil {
 		return s, err
 	}
-	k := c.protect(appIDs, du.Containers)
+	k := c.protect(appIDs, ptrs(du.Containers.Items))
 	s.usage = usageOf(du)
 
-	for _, img := range du.Images {
+	for _, img := range ptrs(du.Images.Items) {
 		if k.image(img) {
 			continue
 		}
@@ -287,17 +287,17 @@ func (c *Client) resolve(ctx context.Context, appIDs []string) (sweep, error) {
 			s.images = append(s.images, img)
 		}
 	}
-	for _, rec := range du.BuildCache {
+	for _, rec := range ptrs(du.BuildCache.Items) {
 		if !rec.Shared && !rec.InUse {
 			s.cache = append(s.cache, rec)
 		}
 	}
-	for _, ct := range du.Containers {
+	for _, ct := range ptrs(du.Containers.Items) {
 		if !k.container(ct) {
 			s.containers = append(s.containers, ct)
 		}
 	}
-	for _, v := range du.Volumes {
+	for _, v := range ptrs(du.Volumes.Items) {
 		if !k.volume(v) {
 			s.volumes = append(s.volumes, v)
 		}
@@ -310,31 +310,38 @@ func (c *Client) resolve(ctx context.Context, appIDs []string) (sweep, error) {
 // Both the scan and the measurement of what a sweep freed go through it, so the
 // before and after of a sweep are counted the same way and their difference
 // means something.
-func usageOf(du types.DiskUsage) DiskUsage {
-	u := DiskUsage{
-		ImagesCount:     len(du.Images),
-		ImagesBytes:     du.LayersSize,
-		ContainersCount: len(du.Containers),
-		VolumesCount:    len(du.Volumes),
-		CacheCount:      len(du.BuildCache),
+func usageOf(du client.DiskUsageResult) DiskUsage {
+	// The daemon's own totals, which leave out what it counts twice — the
+	// layers images share, the build cache records shared with another — as
+	// `docker system df` does.
+	return DiskUsage{
+		ImagesCount:     int(du.Images.TotalCount),
+		ImagesBytes:     du.Images.TotalSize,
+		ContainersCount: int(du.Containers.TotalCount),
+		ContainersBytes: du.Containers.TotalSize,
+		VolumesCount:    int(du.Volumes.TotalCount),
+		VolumesBytes:    du.Volumes.TotalSize,
+		CacheCount:      int(du.BuildCache.TotalCount),
+		CacheBytes:      du.BuildCache.TotalSize,
 	}
-	for _, rec := range du.BuildCache {
-		// A shared record is one the daemon also counts under another; adding it
-		// here would charge the same layer to the total twice. This is the same
-		// arithmetic `docker system df` does.
-		if !rec.Shared {
-			u.CacheBytes += rec.Size
-		}
+}
+
+// diskUsage asks the daemon for its disk report on everything it holds, with
+// the items themselves when they are wanted and not only the totals.
+func (c *Client) diskUsage(ctx context.Context, items bool) (client.DiskUsageResult, error) {
+	return c.api.DiskUsage(ctx, client.DiskUsageOptions{
+		Containers: true, Images: true, BuildCache: true, Volumes: true, Verbose: items,
+	})
+}
+
+// ptrs points into a slice the SDK returns by value, for the code here that
+// passes its items around and keeps some of them.
+func ptrs[T any](items []T) []*T {
+	out := make([]*T, len(items))
+	for i := range items {
+		out[i] = &items[i]
 	}
-	for _, ct := range du.Containers {
-		u.ContainersBytes += ct.SizeRw
-	}
-	for _, v := range du.Volumes {
-		if v.UsageData != nil && v.UsageData.Size > 0 {
-			u.VolumesBytes += v.UsageData.Size
-		}
-	}
-	return u
+	return out
 }
 
 // strayNetworks lists local networks nothing is attached to and the platform
@@ -342,17 +349,17 @@ func usageOf(du types.DiskUsage) DiskUsage {
 // report its endpoints, and a network wrongly judged unused takes a live
 // application off the internet.
 func (c *Client) strayNetworks(ctx context.Context, k keep) []string {
-	list, err := c.api.NetworkList(ctx, network.ListOptions{})
+	list, err := c.api.NetworkList(ctx, client.NetworkListOptions{})
 	if err != nil {
 		return nil
 	}
 	var out []string
-	for _, n := range list {
+	for _, n := range list.Items {
 		if k.network(n) {
 			continue
 		}
-		full, err := c.api.NetworkInspect(ctx, n.ID, network.InspectOptions{})
-		if err != nil || len(full.Containers) > 0 {
+		full, err := c.api.NetworkInspect(ctx, n.ID, client.NetworkInspectOptions{})
+		if err != nil || len(full.Network.Containers) > 0 {
 			continue
 		}
 		out = append(out, n.Name)
@@ -787,7 +794,7 @@ const cleanupStalls = 2
 // `docker system prune -a` is what it refuses to touch.
 func (c *Client) Cleanup(ctx context.Context, appIDs []string, opts CleanupOptions) (CleanupReport, error) {
 	defer c.forgetStorage()
-	before, err := c.api.DiskUsage(ctx, types.DiskUsageOptions{})
+	before, err := c.diskUsage(ctx, false)
 	if err != nil {
 		return CleanupReport{}, err
 	}
@@ -848,7 +855,7 @@ func (c *Client) Cleanup(ctx context.Context, appIDs []string, opts CleanupOptio
 	// one of its tags, which is how a sweep came to claim more than the disk
 	// gave back. A negative difference means something else grew while this ran
 	// — a deploy, most likely — and is not this sweep's to report.
-	if after, err := c.api.DiskUsage(ctx, types.DiskUsageOptions{}); err == nil {
+	if after, err := c.diskUsage(ctx, false); err == nil {
 		if freed := usageOf(before).Total() - usageOf(after).Total(); freed > 0 {
 			rep.Bytes = freed
 		}
@@ -873,7 +880,7 @@ func settle(ctx context.Context) bool {
 // which is what tells the caller whether another pass is worth making.
 func (c *Client) sweepOnce(ctx context.Context, s sweep, rep *CleanupReport) (removed, failed int) {
 	for _, ct := range s.containers {
-		if err := c.api.ContainerRemove(ctx, ct.ID, container.RemoveOptions{}); err != nil {
+		if _, err := c.api.ContainerRemove(ctx, ct.ID, client.ContainerRemoveOptions{}); err != nil {
 			failed++
 			continue
 		}
@@ -893,16 +900,16 @@ func (c *Client) sweepOnce(ctx context.Context, s sweep, rep *CleanupReport) (re
 	// The build cache has no per-record delete, and its own prune already keeps
 	// what is in use — the same set the scan counted.
 	if len(s.cache) > 0 {
-		if out, err := c.api.BuildCachePrune(ctx, build.CachePruneOptions{All: true}); err == nil {
-			rep.Cache += len(out.CachesDeleted)
-			removed += len(out.CachesDeleted)
+		if out, err := c.api.BuildCachePrune(ctx, client.BuildCachePruneOptions{All: true}); err == nil {
+			rep.Cache += len(out.Report.CachesDeleted)
+			removed += len(out.Report.CachesDeleted)
 		} else {
 			failed++
 		}
 	}
 
 	for _, name := range s.networks {
-		if err := c.api.NetworkRemove(ctx, name); err != nil {
+		if _, err := c.api.NetworkRemove(ctx, name, client.NetworkRemoveOptions{}); err != nil {
 			failed++
 			continue
 		}
@@ -912,7 +919,7 @@ func (c *Client) sweepOnce(ctx context.Context, s sweep, rep *CleanupReport) (re
 
 	// Already narrowed to the volumes the operator consented to, if any.
 	for _, v := range s.volumes {
-		if err := c.api.VolumeRemove(ctx, v.Name, false); err != nil {
+		if _, err := c.api.VolumeRemove(ctx, v.Name, client.VolumeRemoveOptions{}); err != nil {
 			failed++
 			continue
 		}
@@ -933,7 +940,7 @@ func (c *Client) removeImage(ctx context.Context, img *image.Summary) bool {
 		// the page after every sweep. Forcing is what `docker image prune`
 		// itself does here, and it is safe for the same reason: an image any
 		// container still uses never reaches this, keep.image holds it back.
-		_, err := c.api.ImageRemove(ctx, img.ID, image.RemoveOptions{Force: true, PruneChildren: true})
+		_, err := c.api.ImageRemove(ctx, img.ID, client.ImageRemoveOptions{Force: true, PruneChildren: true})
 		return err == nil
 	}
 	// A tagged image is deleted the way `docker rmi` does it: by each of its
@@ -943,7 +950,7 @@ func (c *Client) removeImage(ctx context.Context, img *image.Summary) bool {
 	// using it.
 	ok := false
 	for _, ref := range img.RepoTags {
-		if _, err := c.api.ImageRemove(ctx, ref, image.RemoveOptions{PruneChildren: true}); err == nil {
+		if _, err := c.api.ImageRemove(ctx, ref, client.ImageRemoveOptions{PruneChildren: true}); err == nil {
 			ok = true
 		}
 	}

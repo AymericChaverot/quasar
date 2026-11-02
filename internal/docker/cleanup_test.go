@@ -3,11 +3,11 @@ package docker
 import (
 	"testing"
 
-	"github.com/docker/docker/api/types/build"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/api/types/volume"
+	"github.com/moby/moby/api/types/build"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/image"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/api/types/volume"
 )
 
 // The exclusions are the whole of a cleanup's safety: what it removes is
@@ -29,7 +29,7 @@ func ct(name, state string, created int64, labels map[string]string) *container.
 	return &container.Summary{
 		ID:      name,
 		Names:   []string{"/" + name},
-		State:   state,
+		State:   container.ContainerState(state),
 		Created: created,
 		Labels:  labels,
 	}

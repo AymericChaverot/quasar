@@ -3,8 +3,9 @@ package docker
 import (
 	"context"
 	"fmt"
+	"github.com/moby/moby/client"
 
-	"github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/api/types/container"
 )
 
 // hostJobName is the container that hands a job to the host, and HostJobUnit
@@ -37,13 +38,13 @@ const (
 func (c *Client) RunOnHost(ctx context.Context, script string) error {
 	// The dashboard's own image, which is on the host already: all it needs
 	// is chroot, and busybox has one.
-	self, err := c.api.ContainerInspect(ctx, "quasar-dashboard")
+	self, err := c.inspect(ctx, "quasar-dashboard")
 	if err != nil {
 		return fmt.Errorf("find the dashboard's own image: %w", err)
 	}
 
 	c.removeContainer(ctx, hostJobName)
-	created, err := c.api.ContainerCreate(ctx,
+	created, err := c.create(ctx,
 		&container.Config{
 			Image: self.Config.Image,
 			Entrypoint: []string{
@@ -59,19 +60,19 @@ func (c *Client) RunOnHost(ctx context.Context, script string) error {
 			PidMode:     "host",
 			NetworkMode: "none",
 		},
-		nil, nil, hostJobName)
+		nil, hostJobName)
 	if err != nil {
 		return fmt.Errorf("create the host job container: %w", err)
 	}
-	if err := c.api.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
+	if _, err := c.api.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
 		return fmt.Errorf("start the host job container: %w", err)
 	}
 
-	statusCh, errCh := c.api.ContainerWait(ctx, created.ID, container.WaitConditionNotRunning)
+	wait := c.api.ContainerWait(ctx, created.ID, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
 	select {
-	case err := <-errCh:
+	case err := <-wait.Error:
 		return fmt.Errorf("watch the host job container: %w", err)
-	case st := <-statusCh:
+	case st := <-wait.Result:
 		if st.StatusCode != 0 {
 			// Left behind on failure, like the updaters: `docker logs
 			// quasar-host-job` is where the reason is.

@@ -3,12 +3,12 @@ package docker
 import (
 	"bufio"
 	"context"
+	"github.com/moby/moby/client"
 	"io"
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/moby/moby/api/pkg/stdcopy"
 
 	"quasar/internal/db"
 )
@@ -40,7 +40,7 @@ func (c *Client) StreamLogs(ctx context.Context, a *db.App, send func(LogLine)) 
 // StreamLogsByName follows any container's logs by name — used for app
 // containers, the services of a stack, and read-only system containers.
 func (c *Client) StreamLogsByName(ctx context.Context, name string, send func(LogLine)) error {
-	rc, err := c.api.ContainerLogs(ctx, name, container.LogsOptions{
+	rc, err := c.api.ContainerLogs(ctx, name, client.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     true,

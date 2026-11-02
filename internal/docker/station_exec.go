@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/moby/moby/client"
 	"io"
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/moby/moby/api/pkg/stdcopy"
 
 	"quasar/internal/db"
 )
@@ -123,7 +123,7 @@ func (c *Client) ExecInService(ctx context.Context, a *db.App, service string, a
 		return ExecResult{}, err
 	}
 
-	exec, err := c.api.ContainerExecCreate(ctx, target, container.ExecOptions{
+	exec, err := c.api.ExecCreate(ctx, target, client.ExecCreateOptions{
 		Cmd:          argv,
 		AttachStdin:  stdin != "",
 		AttachStdout: true,
@@ -132,7 +132,7 @@ func (c *Client) ExecInService(ctx context.Context, a *db.App, service string, a
 	if err != nil {
 		return ExecResult{}, fmt.Errorf("exec create: %w", err)
 	}
-	resp, err := c.api.ContainerExecAttach(ctx, exec.ID, container.ExecStartOptions{})
+	resp, err := c.api.ExecAttach(ctx, exec.ID, client.ExecAttachOptions{})
 	if err != nil {
 		return ExecResult{}, fmt.Errorf("exec attach: %w", err)
 	}
@@ -167,7 +167,7 @@ func (c *Client) ExecInService(ctx context.Context, a *db.App, service string, a
 		out.Stderr, out.Truncated = out.Stderr[:MaxExecOutput], true
 	}
 
-	inspect, err := c.api.ContainerExecInspect(ctx, exec.ID)
+	inspect, err := c.api.ExecInspect(ctx, exec.ID, client.ExecInspectOptions{})
 	if err != nil {
 		return out, err
 	}
@@ -186,7 +186,7 @@ func (c *Client) TailLogs(ctx context.Context, a *db.App, service string, tail i
 	if tail <= 0 || tail > 5000 {
 		tail = 200
 	}
-	rc, err := c.api.ContainerLogs(ctx, target, container.LogsOptions{
+	rc, err := c.api.ContainerLogs(ctx, target, client.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Tail:       fmt.Sprint(tail),

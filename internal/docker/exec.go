@@ -5,13 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/moby/moby/client"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/moby/moby/api/pkg/stdcopy"
 
 	"quasar/internal/db"
 )
@@ -45,7 +44,7 @@ func (c *Client) RunCommand(ctx context.Context, a *db.App, command string) (str
 	if err != nil {
 		return "", err
 	}
-	exec, err := c.api.ContainerExecCreate(ctx, target, container.ExecOptions{
+	exec, err := c.api.ExecCreate(ctx, target, client.ExecCreateOptions{
 		Cmd:          []string{"/bin/sh", "-c", command},
 		AttachStdout: true,
 		AttachStderr: true,
@@ -53,7 +52,7 @@ func (c *Client) RunCommand(ctx context.Context, a *db.App, command string) (str
 	if err != nil {
 		return "", fmt.Errorf("exec create: %w", err)
 	}
-	resp, err := c.api.ContainerExecAttach(ctx, exec.ID, container.ExecStartOptions{})
+	resp, err := c.api.ExecAttach(ctx, exec.ID, client.ExecAttachOptions{})
 	if err != nil {
 		return "", fmt.Errorf("exec attach: %w", err)
 	}
@@ -64,7 +63,7 @@ func (c *Client) RunCommand(ctx context.Context, a *db.App, command string) (str
 	// read below is what decides whether the command worked.
 	_, _ = stdcopy.StdCopy(&buf, &buf, resp.Reader)
 
-	inspect, err := c.api.ContainerExecInspect(ctx, exec.ID)
+	inspect, err := c.api.ExecInspect(ctx, exec.ID, client.ExecInspectOptions{})
 	if err != nil {
 		return buf.String(), err
 	}
@@ -85,7 +84,7 @@ func (c *Client) CaptureCommand(ctx context.Context, a *db.App, command string) 
 	if err != nil {
 		return nil, err
 	}
-	exec, err := c.api.ContainerExecCreate(ctx, target, container.ExecOptions{
+	exec, err := c.api.ExecCreate(ctx, target, client.ExecCreateOptions{
 		Cmd:          []string{"/bin/sh", "-c", command},
 		AttachStdout: true,
 		AttachStderr: true,
@@ -93,7 +92,7 @@ func (c *Client) CaptureCommand(ctx context.Context, a *db.App, command string) 
 	if err != nil {
 		return nil, fmt.Errorf("exec create: %w", err)
 	}
-	resp, err := c.api.ContainerExecAttach(ctx, exec.ID, container.ExecStartOptions{})
+	resp, err := c.api.ExecAttach(ctx, exec.ID, client.ExecAttachOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("exec attach: %w", err)
 	}
@@ -104,7 +103,7 @@ func (c *Client) CaptureCommand(ctx context.Context, a *db.App, command string) 
 		return nil, fmt.Errorf("read command output: %w", err)
 	}
 
-	inspect, err := c.api.ContainerExecInspect(ctx, exec.ID)
+	inspect, err := c.api.ExecInspect(ctx, exec.ID, client.ExecInspectOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -134,33 +133,33 @@ func (c *Client) DumpForBackup(a *db.App) ([]byte, error) {
 
 // InteractiveShell opens a TTY /bin/sh inside the app's container and returns
 // the bidirectional stream plus the exec ID (needed for resizes).
-func (c *Client) InteractiveShell(ctx context.Context, a *db.App) (types.HijackedResponse, string, error) {
+func (c *Client) InteractiveShell(ctx context.Context, a *db.App) (client.HijackedResponse, string, error) {
 	target, err := c.containerFor(ctx, a)
 	if err != nil {
-		return types.HijackedResponse{}, "", err
+		return client.HijackedResponse{}, "", err
 	}
-	exec, err := c.api.ContainerExecCreate(ctx, target, container.ExecOptions{
+	exec, err := c.api.ExecCreate(ctx, target, client.ExecCreateOptions{
 		Cmd:          []string{"/bin/sh"},
-		Tty:          true,
+		TTY:          true,
 		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
 		Env:          []string{"TERM=xterm-256color"},
 	})
 	if err != nil {
-		return types.HijackedResponse{}, "", fmt.Errorf("exec create: %w", err)
+		return client.HijackedResponse{}, "", fmt.Errorf("exec create: %w", err)
 	}
-	resp, err := c.api.ContainerExecAttach(ctx, exec.ID, container.ExecStartOptions{Tty: true})
+	resp, err := c.api.ExecAttach(ctx, exec.ID, client.ExecAttachOptions{TTY: true})
 	if err != nil {
-		return types.HijackedResponse{}, "", fmt.Errorf("exec attach: %w", err)
+		return client.HijackedResponse{}, "", fmt.Errorf("exec attach: %w", err)
 	}
-	return resp, exec.ID, nil
+	return resp.HijackedResponse, exec.ID, nil
 }
 
 func (c *Client) ResizeShell(ctx context.Context, execID string, rows, cols uint) {
 	// A resize the daemon refuses leaves the terminal at its old size, which
 	// is a cosmetic problem in a window the user is already looking at.
-	_ = c.api.ContainerExecResize(ctx, execID, container.ResizeOptions{Height: rows, Width: cols})
+	_, _ = c.api.ExecResize(ctx, execID, client.ExecResizeOptions{Height: rows, Width: cols})
 }
 
 // HealthURL is the in-network URL probed by the health checker (the dashboard

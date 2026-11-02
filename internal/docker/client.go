@@ -14,7 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/docker/client"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/client"
 
 	"quasar/internal/config"
 	"quasar/internal/db"
@@ -65,7 +67,8 @@ type DeployState struct {
 }
 
 func New(cfg config.Config, database *sql.DB, keyring *secrets.Keyring) (*Client, error) {
-	api, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	// The API version is negotiated with the daemon on the first request.
+	api, err := client.New(client.FromEnv)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +83,19 @@ func New(cfg config.Config, database *sql.DB, keyring *secrets.Keyring) (*Client
 		edgeAuthURL: cfg.EdgeAuthURL,
 		runs:        map[string]*deployRun{},
 	}, nil
+}
+
+// inspect reads what the daemon knows of a container, by name or ID.
+func (c *Client) inspect(ctx context.Context, id string) (container.InspectResponse, error) {
+	res, err := c.api.ContainerInspect(ctx, id, client.ContainerInspectOptions{})
+	return res.Container, err
+}
+
+// create makes a container from its configuration, under the given name.
+func (c *Client) create(ctx context.Context, cfg *container.Config, host *container.HostConfig, net *network.NetworkingConfig, name string) (client.ContainerCreateResult, error) {
+	return c.api.ContainerCreate(ctx, client.ContainerCreateOptions{
+		Config: cfg, HostConfig: host, NetworkingConfig: net, Name: name,
+	})
 }
 
 // appLabel marks a container as the managed container of a single-container

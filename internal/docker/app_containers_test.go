@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/api/types/container"
 
 	"quasar/internal/db"
 )
@@ -14,7 +14,7 @@ func summary(name, service, state string, labels map[string]string) container.Su
 	for k, v := range labels {
 		all[k] = v
 	}
-	return container.Summary{Names: []string{"/" + name}, State: state, Image: service + ":latest", Labels: all}
+	return container.Summary{Names: []string{"/" + name}, State: container.ContainerState(state), Image: service + ":latest", Labels: all}
 }
 
 // The list is polled every few seconds. Left in the creation order the daemon

@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/moby/moby/client"
 	"io"
 	"strings"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/moby/moby/api/pkg/stdcopy"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 )
 
 // traefikOverrideMark is the first line of the file the pin is written to, and
@@ -150,7 +150,7 @@ func (c *Client) UpdateTraefik(ctx context.Context, imageRef string, report func
 		return fmt.Errorf("refusing to update to %q: unexpected characters in image reference", imageRef)
 	}
 
-	rc, err := c.api.ImagePull(ctx, imageRef, image.PullOptions{})
+	rc, err := c.api.ImagePull(ctx, imageRef, client.ImagePullOptions{})
 	if err != nil {
 		return fmt.Errorf("pull %s: %w", imageRef, err)
 	}
@@ -169,14 +169,14 @@ func (c *Client) UpdateTraefik(ctx context.Context, imageRef string, report func
 
 	// The updater runs from the dashboard's own image, which is the one image
 	// on this host known to carry the docker CLI and the compose plugin.
-	self, err := c.api.ContainerInspect(ctx, "quasar-dashboard")
+	self, err := c.inspect(ctx, "quasar-dashboard")
 	if err != nil {
 		return fmt.Errorf("find the dashboard's own image: %w", err)
 	}
 
 	c.removeContainer(ctx, traefikUpdaterName)
 	script := strings.NewReplacer("__IMAGE__", imageRef, "__MARK__", traefikOverrideMark).Replace(traefikUpdaterScript)
-	created, err := c.api.ContainerCreate(ctx,
+	created, err := c.create(ctx,
 		&container.Config{
 			Image:      self.Config.Image,
 			Entrypoint: []string{"/bin/sh", "-c"},
@@ -195,19 +195,19 @@ func (c *Client) UpdateTraefik(ctx context.Context, imageRef string, report func
 		&network.NetworkingConfig{
 			EndpointsConfig: map[string]*network.EndpointSettings{c.socketNet: {}},
 		},
-		nil, traefikUpdaterName)
+		traefikUpdaterName)
 	if err != nil {
 		return fmt.Errorf("create traefik updater: %w", err)
 	}
-	if err := c.api.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
+	if _, err := c.api.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
 		return fmt.Errorf("start traefik updater: %w", err)
 	}
 
-	statusCh, errCh := c.api.ContainerWait(ctx, created.ID, container.WaitConditionNotRunning)
+	wait := c.api.ContainerWait(ctx, created.ID, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
 	select {
-	case err := <-errCh:
+	case err := <-wait.Error:
 		return fmt.Errorf("watch traefik updater: %w", err)
-	case st := <-statusCh:
+	case st := <-wait.Result:
 		if st.StatusCode == 0 {
 			return nil
 		}
@@ -234,7 +234,7 @@ func traefikFailure(code int64, detail string) string {
 // message that says what actually went wrong rather than only that something
 // did.
 func (c *Client) lastLines(ctx context.Context, id string, n int) string {
-	rc, err := c.api.ContainerLogs(ctx, id, container.LogsOptions{
+	rc, err := c.api.ContainerLogs(ctx, id, client.ContainerLogsOptions{
 		ShowStdout: true, ShowStderr: true, Tail: fmt.Sprint(n),
 	})
 	if err != nil {

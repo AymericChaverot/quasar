@@ -19,9 +19,10 @@ package docker
 import (
 	"context"
 	"fmt"
+	"github.com/moby/moby/client"
 	"strconv"
 
-	"github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/api/types/container"
 
 	"quasar/internal/db"
 )
@@ -107,7 +108,7 @@ func (c *Client) Limits(ctx context.Context, a *db.App) LimitsState {
 
 // limitsOf is Limits for a container already resolved.
 func (c *Client) limitsOf(ctx context.Context, a *db.App, id string) LimitsState {
-	info, err := c.api.ContainerInspect(ctx, id)
+	info, err := c.inspect(ctx, id)
 	if err != nil || info.HostConfig == nil {
 		return LimitsState{}
 	}
@@ -137,7 +138,7 @@ func (c *Client) ApplyLimits(ctx context.Context, a *db.App) (LimitsState, error
 	}
 	update := limitsUpdate(a)
 	if update.NanoCPUs != 0 || update.Memory != 0 {
-		if _, err := c.api.ContainerUpdate(ctx, id, container.UpdateConfig{Resources: update}); err != nil {
+		if _, err := c.api.ContainerUpdate(ctx, id, client.ContainerUpdateOptions{Resources: &update}); err != nil {
 			return c.limitsOf(ctx, a, id), fmt.Errorf("the running container refused the change: %w", err)
 		}
 	}

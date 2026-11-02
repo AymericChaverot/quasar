@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/moby/moby/client"
 	"io"
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/types/network"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 )
 
 // updaterScript pins the new image and recreates the dashboard, and guarantees
@@ -139,7 +139,7 @@ func (c *Client) SelfUpdate(ctx context.Context, imageRef, socketNetwork string,
 		return fmt.Errorf("refusing to update to %q: unexpected characters in image reference", imageRef)
 	}
 
-	rc, err := c.api.ImagePull(ctx, imageRef, image.PullOptions{})
+	rc, err := c.api.ImagePull(ctx, imageRef, client.ImagePullOptions{})
 	if err != nil {
 		return fmt.Errorf("pull %s: %w", imageRef, err)
 	}
@@ -150,7 +150,7 @@ func (c *Client) SelfUpdate(ctx context.Context, imageRef, socketNetwork string,
 	const updaterName = "quasar-updater"
 	c.removeContainer(ctx, updaterName)
 
-	created, err := c.api.ContainerCreate(ctx,
+	created, err := c.create(ctx,
 		&container.Config{
 			Image:      imageRef,
 			Entrypoint: []string{"/bin/sh", "-c"},
@@ -175,11 +175,11 @@ func (c *Client) SelfUpdate(ctx context.Context, imageRef, socketNetwork string,
 		&network.NetworkingConfig{
 			EndpointsConfig: map[string]*network.EndpointSettings{socketNetwork: {}},
 		},
-		nil, updaterName)
+		updaterName)
 	if err != nil {
 		return fmt.Errorf("create updater: %w", err)
 	}
-	if err := c.api.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
+	if _, err := c.api.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
 		return fmt.Errorf("start updater: %w", err)
 	}
 	return nil
