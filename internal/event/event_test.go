@@ -23,9 +23,9 @@ func TestPrint(t *testing.T) {
 	Info("deploy", "portfolio", "", "deployed in 41s")
 	Warning("login", "3 failed attempts")
 	Error("backup", "scheduled", "disk full")
-	want := "  ✓ deploy      portfolio · deployed in 41s\n" +
-		"  ! login       3 failed attempts\n" +
-		"  ✗ backup      scheduled · disk full\n"
+	want := "[  OK  ] deploy      portfolio | deployed in 41s\n" +
+		"[ WARN ] login       3 failed attempts\n" +
+		"[FAILED] backup      scheduled | disk full\n"
 	if buf.String() != want {
 		t.Errorf("got\n%s\nwant\n%s", buf.String(), want)
 	}
@@ -43,9 +43,9 @@ func TestCaptureStandardLog(t *testing.T) {
 	log.Printf("monitor: recording the sample for %s: %v", "a1", "disk I/O error")
 	log.Print("offsite upload of quasar-20260924.tar.gz: timeout")
 	log.Print("unprefixed")
-	want := "  ✗ monitor     recording the sample for a1: disk I/O error\n" +
-		"  ✗ offsite     upload of quasar-20260924.tar.gz: timeout\n" +
-		"  ✗ quasar      unprefixed\n"
+	want := "[FAILED] monitor     recording the sample for a1: disk I/O error\n" +
+		"[FAILED] offsite     upload of quasar-20260924.tar.gz: timeout\n" +
+		"[FAILED] quasar      unprefixed\n"
 	if buf.String() != want {
 		t.Errorf("got\n%s\nwant\n%s", buf.String(), want)
 	}

@@ -18,15 +18,15 @@ func TestLinesWithoutColour(t *testing.T) {
 
 	got := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
 	want := []string{
-		"  ✓ database    /data/db.sqlite · 3 applications",
-		"  ! docker      the daemon did not answer",
+		"[  OK  ] database    /data/db.sqlite | 3 applications",
+		"[ WARN ] docker      the daemon did not answer",
 	}
 	for i, w := range want {
 		if got[i] != w {
 			t.Errorf("line %d = %q, want %q", i, got[i], w)
 		}
 	}
-	if !strings.HasPrefix(got[2], "  ✓ ready       listening on :8080 · started in ") {
+	if !strings.HasPrefix(got[2], "[  OK  ] ready       listening on :8080 | started in ") {
 		t.Errorf("ready line = %q", got[2])
 	}
 }

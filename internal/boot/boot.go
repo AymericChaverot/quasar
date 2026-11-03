@@ -75,7 +75,7 @@ func (s *Sequence) Setting(name, value, note string) {
 	if value == "" {
 		value, note = "(not set)", ""
 	}
-	indent := strings.Repeat(" ", 4+labelWidth)
+	indent := strings.Repeat(" ", event.MarkWidth+labelWidth)
 	pad := strings.Repeat(" ", max(1, settingWidth-len(name)))
 	if note != "" {
 		note = "  " + note
@@ -94,7 +94,7 @@ func (s *Sequence) line(level event.Level, name string, details []string) {
 			kept = append(kept, d)
 		}
 	}
-	s.write(event.Format(level, name, strings.Join(kept, " · "), s.colour))
+	s.write(event.Format(level, name, strings.Join(kept, event.Separator), s.colour))
 }
 
 // write puts a line out. A start-up log that cannot be written has nowhere

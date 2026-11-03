@@ -1,11 +1,15 @@
 // Package event is the dashboard's log of what happens on the platform while
 // it runs: an application deployed or failing to, an update, a backup, a
 // sign-in, a certificate dropped. One line each, in the same shape as the
-// start-up sequence — a mark, the area in a column, then what happened:
+// start-up sequence — the outcome in brackets, the area in a column, then what
+// happened:
 //
-//	✓ deploy      portfolio · deployed in 41s · ghcr.io/me/portfolio:1.2 · by admin
-//	✗ backup      scheduled · disk full
-//	! login       3 failed attempts for "admin" from 203.0.113.7
+//	[  OK  ] deploy      portfolio | deployed in 41s | ghcr.io/me/portfolio:1.2 | by admin
+//	[FAILED] backup      scheduled | disk full
+//	[ WARN ] login       3 failed attempts for "admin" from 203.0.113.7
+//
+// The lines are plain ASCII, so they read the same in any terminal, font or
+// log collector; colour, when it is on, only paints the outcome.
 //
 // It is not the audit trail. The audit is every change, kept in the database
 // and searched from its page; this is what an operator reading `docker logs`
@@ -51,6 +55,12 @@ const (
 // same, so the two read as one log.
 const AreaWidth = 12
 
+// MarkWidth is how wide the outcome is, with the space after it: "[  OK  ] ".
+const MarkWidth = 9
+
+// Separator joins the details of a line.
+const Separator = " | "
+
 var (
 	mu     sync.Mutex
 	out    io.Writer = os.Stderr
@@ -66,7 +76,7 @@ func Warning(area string, details ...string) { Print(Warn, area, details...) }
 // Error records something that did not happen, or broke.
 func Error(area string, details ...string) { Print(Fail, area, details...) }
 
-// Print writes one line: details are joined with " · ", and empty ones left
+// Print writes one line: details are joined with Separator, and empty ones left
 // out, so a caller can pass a detail it may not have.
 func Print(level Level, area string, details ...string) {
 	var kept []string
@@ -77,7 +87,7 @@ func Print(level Level, area string, details ...string) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	_, _ = io.WriteString(out, Format(level, area, strings.Join(kept, " · "), colour))
+	_, _ = io.WriteString(out, Format(level, area, strings.Join(kept, Separator), colour))
 }
 
 // Duration writes how long something took as precisely as is worth reading:
@@ -97,18 +107,18 @@ func Duration(d time.Duration) string {
 
 // Format is one line as Print writes it, for the start-up sequence to share.
 func Format(level Level, area, detail string, inColour bool) string {
-	mark, c := "✓", green
+	word, c := "  OK  ", green
 	switch level {
 	case Warn:
-		mark, c = "!", amber
+		word, c = " WARN ", amber
 	case Fail:
-		mark, c = "✗", red
+		word, c = "FAILED", red
 	}
 	pad := strings.Repeat(" ", max(1, AreaWidth-len(area)))
 	if !inColour {
-		return "  " + mark + " " + area + pad + detail + "\n"
+		return "[" + word + "] " + area + pad + detail + "\n"
 	}
-	return "  " + c + mark + reset + " " + text + area + reset + pad + muted + detail + reset + "\n"
+	return muted + "[" + c + word + muted + "]" + reset + " " + text + area + reset + pad + muted + detail + reset + "\n"
 }
 
 // CaptureStandardLog routes the standard log package through here, so the
