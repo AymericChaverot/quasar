@@ -344,7 +344,7 @@ func (c *Client) deployImage(ctx context.Context, a *db.App, imageRef string, pu
 			// and an app that is simply down. If it does not work, that is the
 			// single most important line in the log.
 			if _, err := c.api.ContainerStart(undo, id, client.ContainerStartOptions{}); err != nil {
-				event.Error("deploy", a.Name, "ROLLBACK FAILED — container "+id[:12]+" is still stopped", err.Error())
+				event.Error("deploy", a.Name, "ROLLBACK FAILED: container "+id[:12]+" is still stopped", err.Error())
 			}
 		}
 	}

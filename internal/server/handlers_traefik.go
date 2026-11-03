@@ -172,7 +172,7 @@ func (s *Server) handleTraefikUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "traefik.update", version.TraefikImage, "from "+running)
-	event.Info("traefik", running+" → "+version.TraefikImage, "started", "by "+s.actor(r))
+	event.Info("traefik", running+" -> "+version.TraefikImage, "started", "by "+s.actor(r))
 
 	// How it ends goes to whoever started it, in place of the toast saying it
 	// started; the router coming back is also this page's stream coming back.

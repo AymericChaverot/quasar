@@ -85,7 +85,7 @@ func main() {
 		// A new key on an install that already has data is the one thing on
 		// this list worth stopping to read: nothing encrypted before can be
 		// opened with it.
-		keyState = "created — download it from System and keep it safe"
+		keyState = "created, download it from System and keep it safe"
 	}
 	seq.OK("master key", keyState)
 
@@ -123,7 +123,7 @@ func main() {
 	engine := dock.EngineInfo(ctx)
 	cancel()
 	if engine.DockerVersion == "unknown" {
-		seq.Warn("docker", "the daemon did not answer — applications cannot be managed until it does")
+		seq.Warn("docker", "the daemon did not answer, applications cannot be managed until it does")
 	} else {
 		seq.OK("docker", "Engine "+engine.DockerVersion, "API "+engine.APIVersion, engine.OSType)
 	}

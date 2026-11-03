@@ -225,7 +225,7 @@ func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "platform.update", latest, imageRef)
-	event.Info("update", "Quasar "+version.Version+" → "+latest, "started", "by "+s.actor(r))
+	event.Info("update", "Quasar "+version.Version+" -> "+latest, "started", "by "+s.actor(r))
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), updateTimeout)
