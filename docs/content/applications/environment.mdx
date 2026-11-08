@@ -18,7 +18,7 @@ For a pasted compose stack, the same tab also holds the compose file.
 - In the database, **encrypted** with the server's master key.
 - In `apps/<id>/.env` on the server, which containers read.
 
-Only admins can see this tab. Service tokens can't read variables either.
+Only admins can see this tab. Through the API, only an admin's [personal token](/reference/api/overview/#personal-tokens) can read them; service tokens can't.
 
 :::important
 The master key is not included in backups. Keep a copy, or backups can't be restored onto another server. See [backups](/server/backups/#the-master-key).

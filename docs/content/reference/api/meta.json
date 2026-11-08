@@ -9,6 +9,8 @@
     "list-apps",
     "get-app",
     "get-app-logs",
+    "get-app-env",
+    "put-app-env",
     "deploy-app",
     "start-app",
     "stop-app",

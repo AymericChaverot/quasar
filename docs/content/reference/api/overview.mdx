@@ -27,7 +27,7 @@ An admin creates them in **Settings → Service tokens**, for a pipeline. A serv
 | **viewer** | List and inspect applications, read their logs and server usage. |
 | **admin** | Also deploy, start, stop and restart applications. |
 
-- No service token can read environment variables or compose files.
+- No service token can read environment variables or compose files. An admin's personal token can read the environment, as the admin can on the dashboard.
 - Its actions appear in the audit log under its name: `token:github-actions`.
 
 ## Authentication
@@ -62,6 +62,8 @@ Errors return a JSON body with a message:
 | `GET` | `/api/v1/apps` | viewer | [List applications](/reference/api/list-apps/) |
 | `GET` | `/api/v1/apps/{id}` | viewer | [Get an application](/reference/api/get-app/) |
 | `GET` | `/api/v1/apps/{id}/logs` | viewer | [Read an application's logs](/reference/api/get-app-logs/) |
+| `GET` | `/api/v1/apps/{id}/env` | admin, personal token | [Read an application's environment](/reference/api/get-app-env/) |
+| `PUT` | `/api/v1/apps/{id}/env` | admin | [Replace an application's environment](/reference/api/put-app-env/) |
 | `POST` | `/api/v1/apps/{id}/deploy` | admin | [Deploy an application](/reference/api/deploy-app/) |
 | `POST` | `/api/v1/apps/{id}/start` | admin | [Start an application](/reference/api/start-app/) |
 | `POST` | `/api/v1/apps/{id}/stop` | admin | [Stop an application](/reference/api/stop-app/) |

@@ -134,6 +134,10 @@ func TestAPIWriteRoutesNeedAnAdminToken(t *testing.T) {
 	for _, pattern := range []string{
 		"POST /api/v1/apps/{id}/deploy",
 		"POST /api/v1/apps/{id}/restart",
+		"POST /api/v1/apps/{id}/start",
+		"POST /api/v1/apps/{id}/stop",
+		"GET /api/v1/apps/{id}/env",
+		"PUT /api/v1/apps/{id}/env",
 	} {
 		if got := s.guards[pattern]; got != accessTokenAdmin {
 			t.Errorf("%s is registered as %q, want %q", pattern, got, accessTokenAdmin)

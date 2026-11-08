@@ -157,6 +157,88 @@ paths:
               example:
                 error: 'no logs to read: app has no container'
 
+  /api/v1/apps/{id}/env:
+    get:
+      operationId: getAppEnv
+      summary: Read an application's environment
+      description: |
+        The application's environment variables, as the dotenv text the dashboard's editor shows: comments, blank lines and order included.
+
+        This is the one call that hands over secrets, so it takes an admin's **personal** token. A service token is refused, whatever its role. Every read is recorded in the audit log, without the values.
+      tags: [Applications]
+      parameters:
+        - $ref: '#/components/parameters/AppId'
+      responses:
+        '200':
+          description: The environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Env'
+              example:
+                content: "# the database\nDATABASE_URL=postgres://blog@db/blog\nDEBUG=0\n"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: The token is a service token, or acts as a viewer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: putAppEnv
+      summary: Replace an application's environment
+      description: |
+        Replaces the whole environment with the text given, as saving the dashboard's editor does. To change one variable, read the text, change its line and send the whole text back.
+
+        Like the editor, this does not redeploy: the running application keeps the values it started with until its next deploy.
+
+        Requires an admin token, personal or service. Recorded in the audit log, without the values.
+      tags: [Applications]
+      parameters:
+        - $ref: '#/components/parameters/AppId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Env'
+      responses:
+        '200':
+          description: The environment was saved.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, app]
+                properties:
+                  status:
+                    type: string
+                    const: saved
+                  app:
+                    type: string
+                    description: Identifier of the application.
+        '400':
+          description: The body is not `{"content": "..."}`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          description: The environment is larger than 1 MiB.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/v1/apps/{id}/deploy:
     post:
       operationId: deployApp
@@ -553,6 +635,14 @@ components:
         line:
           type: string
           description: The line, without its newline.
+
+    Env:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          description: The environment as dotenv text, one KEY=value per line.
 
     Me:
       type: object

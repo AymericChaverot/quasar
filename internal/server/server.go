@@ -429,6 +429,9 @@ func (s *Server) routes() {
 	s.apiRead("GET /api/v1/apps/{id}/logs", s.handleAPILogs)
 	s.apiRead("GET /api/v1/system", s.handleAPISystem)
 	s.apiWrite("POST /api/v1/apps/{id}/deploy", s.handleAPIDeploy)
+	// Admin tokens only, and for reading a personal one: see handlers_api_env.go.
+	s.apiWrite("GET /api/v1/apps/{id}/env", s.handleAPIEnvGet)
+	s.apiWrite("PUT /api/v1/apps/{id}/env", s.handleAPIEnvPut)
 	s.apiWrite("POST /api/v1/apps/{id}/start", s.handleAPILifecycle("start"))
 	s.apiWrite("POST /api/v1/apps/{id}/stop", s.handleAPILifecycle("stop"))
 	s.apiWrite("POST /api/v1/apps/{id}/restart", s.handleAPILifecycle("restart"))
