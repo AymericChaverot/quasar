@@ -108,9 +108,9 @@ paths:
       description: |
         Fetches the latest version of the application and deploys it, like the Update button in the dashboard: it pulls the image, or pulls the branch and rebuilds.
 
-        The call returns as soon as the deployment has started. Poll GET /api/v1/apps/{id} to follow its state.
+        The call returns as soon as the deployment has started. Poll GET /api/v1/apps/{id} until `deploy.running` is false, then read `deploy.error` for the outcome.
 
-        Requires an admin token.
+        Requires an admin.
       tags: [Applications]
       parameters:
         - $ref: '#/components/parameters/AppId'
@@ -147,6 +147,70 @@ paths:
               example:
                 error: a deploy is already in progress
 
+  /api/v1/apps/{id}/start:
+    post:
+      operationId: startApp
+      summary: Start an application
+      description: |
+        Starts the application's containers, as they were last deployed.
+
+        Requires an admin.
+      tags: [Applications]
+      parameters:
+        - $ref: '#/components/parameters/AppId'
+      responses:
+        '200':
+          description: The application was started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LifecycleResult'
+              example:
+                status: started
+                app: 3f9c2a7e
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Deploying'
+        '500':
+          $ref: '#/components/responses/LifecycleFailed'
+
+  /api/v1/apps/{id}/stop:
+    post:
+      operationId: stopApp
+      summary: Stop an application
+      description: |
+        Stops the application's containers. They stay stopped, through a restart of the server too, until the application is started or deployed again.
+
+        Requires an admin.
+      tags: [Applications]
+      parameters:
+        - $ref: '#/components/parameters/AppId'
+      responses:
+        '200':
+          description: The application was stopped.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LifecycleResult'
+              example:
+                status: stopped
+                app: 3f9c2a7e
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Deploying'
+        '500':
+          $ref: '#/components/responses/LifecycleFailed'
+
   /api/v1/apps/{id}/restart:
     post:
       operationId: restartApp
@@ -154,7 +218,7 @@ paths:
       description: |
         Restarts the application's containers, without fetching or rebuilding anything.
 
-        Requires an admin token.
+        Requires an admin.
       tags: [Applications]
       parameters:
         - $ref: '#/components/parameters/AppId'
@@ -182,6 +246,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Deploying'
         '500':
           description: Docker refused the restart.
           content:
@@ -302,6 +368,22 @@ components:
         type: string
 
   responses:
+    Deploying:
+      description: A deploy of this application is running; try again once it is over.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: a deploy is in progress
+    LifecycleFailed:
+      description: Docker refused. The message says why.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: 'blog did not start: no container to start; deploy it first'
     Unauthorized:
       description: The token is missing or invalid.
       content:
@@ -330,7 +412,7 @@ components:
   schemas:
     App:
       type: object
-      required: [id, name, subdomain, host, deploy_type, port, state]
+      required: [id, name, subdomain, host, deploy_type, port, state, deploy]
       properties:
         id:
           type: string
@@ -376,6 +458,33 @@ components:
           type: string
           description: How long the application has been running, such as 12m, 5h 20m or 3d 4h. Only set while it is running.
           example: 3d 4h
+
+        deploy:
+          type: object
+          required: [running, error]
+          description: |
+            The latest deploy since the dashboard started. After starting a deploy, poll the application until `running` is false, then read `error`.
+          properties:
+            running:
+              type: boolean
+              description: Whether a deploy is under way.
+            error:
+              type: [string, 'null']
+              description: Why the latest deploy failed; null when it succeeded, is still running, or there has been none since the dashboard started.
+          example:
+            running: false
+            error: null
+
+    LifecycleResult:
+      type: object
+      required: [status, app]
+      properties:
+        status:
+          type: string
+          enum: [started, stopped, restarted]
+        app:
+          type: string
+          description: Identifier of the application.
 
     Me:
       type: object

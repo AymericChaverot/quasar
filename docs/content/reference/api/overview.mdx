@@ -25,7 +25,7 @@ An admin creates them in **Settings → Service tokens**, for a pipeline. A serv
 | Role | Can |
 | --- | --- |
 | **viewer** | List and inspect applications, read server usage. |
-| **admin** | Also deploy and restart applications. |
+| **admin** | Also deploy, start, stop and restart applications. |
 
 - No service token can read environment variables or compose files.
 - Its actions appear in the audit log under its name: `token:github-actions`.
@@ -51,7 +51,7 @@ Errors return a JSON body with a message:
 | `401` | The token is missing, invalid or expired. |
 | `403` | The call needs an admin, and this token acts as a viewer. |
 | `404` | No application has this identifier. |
-| `409` | A deployment of this application is already running. |
+| `409` | A deployment of this application is running. |
 | `429` | Too many wrong tokens came from your address; it is refused for a while, as with [sign-in protection](/server/users/#sign-in-protection). The `Retry-After` header says for how long. |
 
 ## Endpoints
@@ -62,6 +62,8 @@ Errors return a JSON body with a message:
 | `GET` | `/api/v1/apps` | viewer | [List applications](/reference/api/list-apps/) |
 | `GET` | `/api/v1/apps/{id}` | viewer | [Get an application](/reference/api/get-app/) |
 | `POST` | `/api/v1/apps/{id}/deploy` | admin | [Deploy an application](/reference/api/deploy-app/) |
+| `POST` | `/api/v1/apps/{id}/start` | admin | [Start an application](/reference/api/start-app/) |
+| `POST` | `/api/v1/apps/{id}/stop` | admin | [Stop an application](/reference/api/stop-app/) |
 | `POST` | `/api/v1/apps/{id}/restart` | admin | [Restart an application](/reference/api/restart-app/) |
 | `GET` | `/api/v1/system` | viewer | [Get server usage](/reference/api/get-system/) |
 | `POST` | `/hooks/{id}/{secret}` | none | [Deploy webhook](/reference/api/deploy-webhook/) |

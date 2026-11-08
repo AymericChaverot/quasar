@@ -13,6 +13,7 @@ import (
 
 	"quasar/internal/auth"
 	"quasar/internal/db"
+	"quasar/internal/docker"
 )
 
 func apiTestServer(t *testing.T) (*Server, *sql.DB) {
@@ -185,7 +186,7 @@ func TestAPIAppExposesNoSecrets(t *testing.T) {
 	allowed := map[string]bool{
 		"ID": true, "Name": true, "Subdomain": true, "Host": true,
 		"DeployType": true, "ImageRef": true, "GitURL": true, "GitBranch": true,
-		"Port": true, "State": true, "Uptime": true,
+		"Port": true, "State": true, "Uptime": true, "Deploy": true,
 	}
 	forbidden := map[string]bool{
 		"EnvContent": true, "ComposeYAML": true, "PreBackupCmd": true,
@@ -297,5 +298,49 @@ func TestAPIAppRedactsGitCredentials(t *testing.T) {
 	}
 	if !strings.Contains(got.GitURL, "github.com/me/blog.git") {
 		t.Errorf("git_url = %q, lost the repository", got.GitURL)
+	}
+}
+
+// The deploy state is what a client that started a deploy polls: running,
+// then either no error or the reason, with any credentials taken out.
+func TestAPIDeployState(t *testing.T) {
+	if got := apiDeployOf(nil); got.Running || got.Error != nil {
+		t.Errorf("no deploy since start: %+v", got)
+	}
+	if got := apiDeployOf(&docker.DeployState{Running: true, Err: "stale"}); !got.Running || got.Error != nil {
+		t.Errorf("a running deploy reports no error yet: %+v", got)
+	}
+	got := apiDeployOf(&docker.DeployState{Err: "clone https://u:tok@github.com/x.git: denied"})
+	if got.Running || got.Error == nil {
+		t.Fatalf("a failed deploy: %+v", got)
+	}
+	if strings.Contains(*got.Error, "tok@") || !strings.Contains(*got.Error, "denied") {
+		t.Errorf("error = %q, want the reason without the credentials", *got.Error)
+	}
+	if got := apiDeployOf(&docker.DeployState{}); got.Error != nil {
+		t.Errorf("a successful deploy reports an error: %+v", got)
+	}
+}
+
+// Start and stop are admin routes like restart, and answer an unknown
+// application with a 404 rather than reaching Docker.
+func TestAPILifecycleRoutes(t *testing.T) {
+	s, database := apiTestServer(t)
+	s.routes()
+	admin, _ := auth.CreateToken(database, "ops", auth.RoleAdmin)
+	viewer, _ := auth.CreateToken(database, "mon", auth.RoleViewer)
+	for _, action := range []string{"start", "stop", "restart"} {
+		for _, tc := range []struct {
+			token string
+			want  int
+		}{{viewer, http.StatusForbidden}, {admin, http.StatusNotFound}} {
+			req := httptest.NewRequest("POST", "/api/v1/apps/nope/"+action, nil)
+			req.Header.Set("Authorization", "Bearer "+tc.token)
+			rec := httptest.NewRecorder()
+			s.mux.ServeHTTP(rec, req)
+			if rec.Code != tc.want {
+				t.Errorf("%s: status %d, want %d (%s)", action, rec.Code, tc.want, rec.Body.String())
+			}
+		}
 	}
 }

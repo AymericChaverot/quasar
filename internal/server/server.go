@@ -427,7 +427,9 @@ func (s *Server) routes() {
 	s.apiRead("GET /api/v1/apps/{id}", s.handleAPIApp)
 	s.apiRead("GET /api/v1/system", s.handleAPISystem)
 	s.apiWrite("POST /api/v1/apps/{id}/deploy", s.handleAPIDeploy)
-	s.apiWrite("POST /api/v1/apps/{id}/restart", s.handleAPIRestart)
+	s.apiWrite("POST /api/v1/apps/{id}/start", s.handleAPILifecycle("start"))
+	s.apiWrite("POST /api/v1/apps/{id}/stop", s.handleAPILifecycle("stop"))
+	s.apiWrite("POST /api/v1/apps/{id}/restart", s.handleAPILifecycle("restart"))
 
 	s.viewer("GET /logs", s.handleLogsPage)
 	s.viewer("GET /audit", s.handleAuditPage)

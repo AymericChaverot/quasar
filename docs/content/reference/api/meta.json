@@ -9,6 +9,8 @@
     "list-apps",
     "get-app",
     "deploy-app",
+    "start-app",
+    "stop-app",
     "restart-app",
     "---Server---",
     "get-system",

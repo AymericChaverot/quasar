@@ -143,6 +143,29 @@ type apiApp struct {
 	Port       int    `json:"port"`
 	State      string `json:"state"`
 	Uptime     string `json:"uptime,omitempty"`
+	// Deploy is how the latest deploy since the dashboard started went,
+	// which is what a client that started one polls for the outcome.
+	Deploy apiDeploy `json:"deploy"`
+}
+
+// apiDeploy is where an application's latest deploy stands.
+type apiDeploy struct {
+	Running bool `json:"running"`
+	// Error is why the latest deploy failed, or null when it did not (or
+	// when there has been none since the dashboard started).
+	Error *string `json:"error"`
+}
+
+func apiDeployOf(d *docker.DeployState) apiDeploy {
+	if d == nil {
+		return apiDeploy{}
+	}
+	out := apiDeploy{Running: d.Running}
+	if !d.Running && d.Err != "" {
+		msg := docker.RedactURL(d.Err)
+		out.Error = &msg
+	}
+	return out
 }
 
 func (s *Server) apiAppFrom(r *http.Request, a *db.App) apiApp { return apiAppOf(s.appView(r, a)) }
@@ -164,6 +187,7 @@ func apiAppOf(v AppView) apiApp {
 		Port:      a.Port,
 		State:     v.Status.State,
 		Uptime:    v.Status.Uptime,
+		Deploy:    apiDeployOf(v.Deploy),
 	}
 }
 
@@ -209,18 +233,44 @@ func (s *Server) handleAPIDeploy(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "deploying", "app": a.ID})
 }
 
-func (s *Server) handleAPIRestart(w http.ResponseWriter, r *http.Request) {
-	a, err := db.GetApp(s.db, s.keyring, r.PathValue("id"))
-	if err != nil {
-		writeAPIError(w, http.StatusNotFound, "application not found")
-		return
+// handleAPILifecycle starts, stops or restarts an application's containers,
+// as the buttons on its page do. Unlike a deploy it is quick, so it answers
+// once it is done.
+//
+// A failure says why, as the dashboard does to the admin who pressed the
+// button: only an admin token gets this far, and "internal error" would leave
+// it guessing whether the app is down.
+func (s *Server) handleAPILifecycle(action string) http.HandlerFunc {
+	done := map[string]string{"start": "started", "stop": "stopped", "restart": "restarted"}[action]
+	return func(w http.ResponseWriter, r *http.Request) {
+		a, err := db.GetApp(s.db, s.keyring, r.PathValue("id"))
+		if err != nil {
+			writeAPIError(w, http.StatusNotFound, "application not found")
+			return
+		}
+		if d := s.dock.Deploying(a.ID); d != nil && d.Running {
+			writeAPIError(w, http.StatusConflict, "a deploy is in progress")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+		defer cancel()
+		switch action {
+		case "start":
+			err = s.dock.Start(ctx, a)
+		case "stop":
+			err = s.dock.Stop(ctx, a)
+		default:
+			err = s.dock.Restart(ctx, a)
+		}
+		if err != nil {
+			log.Printf("api: %s %s: %v", action, a.Name, err)
+			writeAPIError(w, http.StatusInternalServerError,
+				a.Name+" did not "+action+": "+docker.RedactURL(err.Error()))
+			return
+		}
+		s.auditAPI(r, "app."+action, a.Name, "triggered by API token")
+		writeJSON(w, http.StatusOK, map[string]string{"status": done, "app": a.ID})
 	}
-	if err := s.dock.Restart(r.Context(), a); err != nil {
-		apiInternalError(w, r, err)
-		return
-	}
-	s.auditAPI(r, "app.restart", a.Name, "triggered by API token")
-	writeJSON(w, http.StatusOK, map[string]string{"status": "restarted", "app": a.ID})
 }
 
 // apiMe is who a token acts as, and what it is talking to.
