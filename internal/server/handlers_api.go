@@ -14,6 +14,7 @@ import (
 
 	"quasar/internal/auth"
 	"quasar/internal/db"
+	"quasar/internal/docker"
 	"quasar/internal/event"
 	"quasar/internal/version"
 	"quasar/internal/vps"
@@ -156,11 +157,13 @@ func apiAppOf(v AppView) apiApp {
 		Host:       v.Host(),
 		DeployType: a.DeployType,
 		ImageRef:   a.ImageRef,
-		GitURL:     a.GitURL,
-		GitBranch:  a.GitBranch,
-		Port:       a.Port,
-		State:      v.Status.State,
-		Uptime:     v.Status.Uptime,
+		// An operator may have pasted credentials into the clone URL, and a
+		// viewer token is no place for them.
+		GitURL:    docker.RedactURL(a.GitURL),
+		GitBranch: a.GitBranch,
+		Port:      a.Port,
+		State:     v.Status.State,
+		Uptime:    v.Status.Uptime,
 	}
 }
 

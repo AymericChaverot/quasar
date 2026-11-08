@@ -286,3 +286,16 @@ func TestWrongTokensLockTheAddressOut(t *testing.T) {
 			attempts, rec.Code, rec.Header().Get("Retry-After"))
 	}
 }
+
+// Credentials pasted into a clone URL stay on the server.
+func TestAPIAppRedactsGitCredentials(t *testing.T) {
+	a := &db.App{ID: "a1", Name: "blog", Subdomain: "blog", DeployType: "git",
+		GitURL: "https://user:ghp_secret@github.com/me/blog.git", GitBranch: "main"}
+	got := apiAppOf(AppView{App: a})
+	if strings.Contains(got.GitURL, "ghp_secret") || strings.Contains(got.GitURL, "user:") {
+		t.Errorf("git_url = %q, carries the credentials", got.GitURL)
+	}
+	if !strings.Contains(got.GitURL, "github.com/me/blog.git") {
+		t.Errorf("git_url = %q, lost the repository", got.GitURL)
+	}
+}
