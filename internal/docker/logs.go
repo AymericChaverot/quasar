@@ -5,6 +5,7 @@ import (
 	"context"
 	"github.com/moby/moby/client"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,14 +38,39 @@ func (c *Client) StreamLogs(ctx context.Context, a *db.App, send func(LogLine)) 
 	return c.StreamLogsByName(ctx, name, send)
 }
 
+// LogOptions are how much of a log to read, and whether to keep reading.
+type LogOptions struct {
+	Tail   int  // the most recent lines to start with
+	Follow bool // keep the stream open for new lines until ctx is cancelled
+	// Ready, when set, is called once Docker has accepted the request and
+	// before the first line: the moment a caller knows there is a log to read.
+	Ready func()
+}
+
+// ReadLogs reads the app's logs — its container, or the service a stack
+// serves HTTP from, as on its page — and invokes send for each line. Unlike
+// StreamLogs, a missing container is an error returned rather than a line in
+// a pane: an API caller has no pane.
+func (c *Client) ReadLogs(ctx context.Context, a *db.App, opts LogOptions, send func(LogLine)) error {
+	name, err := c.containerFor(ctx, a)
+	if err != nil {
+		return err
+	}
+	return c.readLogs(ctx, name, opts, send)
+}
+
 // StreamLogsByName follows any container's logs by name — used for app
 // containers, the services of a stack, and read-only system containers.
 func (c *Client) StreamLogsByName(ctx context.Context, name string, send func(LogLine)) error {
+	return c.readLogs(ctx, name, LogOptions{Tail: 200, Follow: true}, send)
+}
+
+func (c *Client) readLogs(ctx context.Context, name string, opts LogOptions, send func(LogLine)) error {
 	rc, err := c.api.ContainerLogs(ctx, name, client.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
-		Follow:     true,
-		Tail:       "200",
+		Follow:     opts.Follow,
+		Tail:       strconv.Itoa(opts.Tail),
 		// The daemon prefixes each line with the time it received it, which is
 		// the only timestamp available for a program that prints none of its
 		// own — and the only correct one for a backlog replayed at once.
@@ -54,6 +80,9 @@ func (c *Client) StreamLogsByName(ctx context.Context, name string, send func(Lo
 		return err
 	}
 	defer rc.Close()
+	if opts.Ready != nil {
+		opts.Ready()
+	}
 
 	pr, pw := io.Pipe()
 	go func() {

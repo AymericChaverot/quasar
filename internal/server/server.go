@@ -425,6 +425,8 @@ func (s *Server) routes() {
 	s.apiRead("GET /api/v1/me", s.handleAPIMe)
 	s.apiRead("GET /api/v1/apps", s.handleAPIApps)
 	s.apiRead("GET /api/v1/apps/{id}", s.handleAPIApp)
+	// The lines the application page shows, which a viewer may read.
+	s.apiRead("GET /api/v1/apps/{id}/logs", s.handleAPILogs)
 	s.apiRead("GET /api/v1/system", s.handleAPISystem)
 	s.apiWrite("POST /api/v1/apps/{id}/deploy", s.handleAPIDeploy)
 	s.apiWrite("POST /api/v1/apps/{id}/start", s.handleAPILifecycle("start"))

@@ -344,3 +344,32 @@ func TestAPILifecycleRoutes(t *testing.T) {
 		}
 	}
 }
+
+// The logs route refuses what it cannot answer before it reaches Docker.
+func TestAPILogsValidation(t *testing.T) {
+	s, database := apiTestServer(t)
+	s.routes()
+	token, _ := auth.CreateToken(database, "mon", auth.RoleViewer)
+	app := &db.App{ID: "a1", Name: "blog", Subdomain: "blog", DeployType: "image", ImageRef: "nginx"}
+	if err := db.InsertApp(database, s.keyring, app); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		path string
+		want int
+	}{
+		{"/api/v1/apps/nope/logs", http.StatusNotFound},
+		{"/api/v1/apps/a1/logs?tail=0", http.StatusBadRequest},
+		{"/api/v1/apps/a1/logs?tail=5001", http.StatusBadRequest},
+		{"/api/v1/apps/a1/logs?tail=many", http.StatusBadRequest},
+		{"/api/v1/apps/a1/logs?follow=sometimes", http.StatusBadRequest},
+	} {
+		req := httptest.NewRequest("GET", tc.path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		s.mux.ServeHTTP(rec, req)
+		if rec.Code != tc.want {
+			t.Errorf("%s: status %d, want %d (%s)", tc.path, rec.Code, tc.want, rec.Body.String())
+		}
+	}
+}

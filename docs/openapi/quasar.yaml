@@ -101,6 +101,62 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/apps/{id}/logs:
+    get:
+      operationId: getAppLogs
+      summary: Read an application's logs
+      description: |
+        The application's most recent output: its container's, or for a stack the service it serves HTTP from — the lines its page in the dashboard shows. With `follow=true` the response stays open and carries each new line as the application writes it, until the caller closes the connection.
+
+        The body is newline-delimited JSON: one object per line of output, each on a line of its own.
+
+        Works with any token. For older lines, and for searching, use the Logs page in the dashboard.
+      tags: [Applications]
+      parameters:
+        - $ref: '#/components/parameters/AppId'
+        - name: tail
+          in: query
+          description: How many of the most recent lines to start with.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5000
+            default: 200
+        - name: follow
+          in: query
+          description: Keep the response open and send new lines as they are written.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: The lines, oldest first.
+          content:
+            application/x-ndjson:
+              schema:
+                $ref: '#/components/schemas/LogLine'
+              example: |
+                {"time":"2026-11-09T10:00:00.123Z","line":"GET / 200"}
+                {"time":"2026-11-09T10:00:01.456Z","line":"GET /about 200"}
+        '400':
+          description: tail or follow is not a value the route takes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The application has no container to read from, such as before its first deploy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'no logs to read: app has no container'
+
   /api/v1/apps/{id}/deploy:
     post:
       operationId: deployApp
@@ -485,6 +541,18 @@ components:
         app:
           type: string
           description: Identifier of the application.
+
+    LogLine:
+      type: object
+      required: [time, line]
+      properties:
+        time:
+          type: [string, 'null']
+          format: date-time
+          description: When Docker received the line; null when it gave no time.
+        line:
+          type: string
+          description: The line, without its newline.
 
     Me:
       type: object
