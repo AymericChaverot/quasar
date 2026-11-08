@@ -52,6 +52,7 @@ Errors return a JSON body with a message:
 | `403` | The call needs an admin, and this token acts as a viewer. |
 | `404` | No application has this identifier. |
 | `409` | A deployment of this application is already running. |
+| `429` | Too many wrong tokens came from your address; it is refused for a while, as with [sign-in protection](/server/users/#sign-in-protection). The `Retry-After` header says for how long. |
 
 ## Endpoints
 

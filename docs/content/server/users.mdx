@@ -35,7 +35,7 @@ From then on, signing in asks for a code. To turn it off, confirm with your pass
 
 ## Sign-in protection
 
-After too many wrong passwords or 2FA codes, an address is refused for a while: by default, **5 failures within 15 minutes** lock it out for **15 minutes**.
+After too many wrong passwords, 2FA codes or API tokens, an address is refused for a while: by default, **5 failures within 15 minutes** lock it out for **15 minutes**.
 
 - While it is refused, the password isn't even checked, so guessing stops being useful.
 - Failures are counted per address, not per account: someone guessing at `admin` can't lock you out from elsewhere.

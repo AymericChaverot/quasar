@@ -511,7 +511,7 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
         <button type="submit" class="btn">Save</button>
       </div>
       <p class="help">
-        After {{.Attempts}} wrong passwords or 2FA codes within {{.LockMinutes}} minutes, an address is refused
+        After {{.Attempts}} wrong passwords, 2FA codes or API tokens within {{.LockMinutes}} minutes, an address is refused
         for {{.LockMinutes}} minutes, without its password even being checked. Counted per address, so guessing
         at an account never locks its owner out from elsewhere. A restart of the dashboard lifts every lock.
       </p>

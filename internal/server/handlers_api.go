@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"quasar/internal/auth"
 	"quasar/internal/db"
+	"quasar/internal/event"
 	"quasar/internal/version"
 	"quasar/internal/vps"
 )
@@ -75,7 +78,26 @@ func (s *Server) requireToken(adminOnly bool, next http.HandlerFunc) http.Handle
 			writeAPIError(w, http.StatusUnauthorized, "missing Authorization: Bearer <token> header")
 			return
 		}
+		// A wrong token counts like a wrong password, against the same
+		// address and under the same lock: guessing one is hopeless, but an
+		// address that keeps trying is worth refusing all the same. A right
+		// token forgets nothing, though — holding one is no proof that the
+		// password failures from the same place were honest.
+		ip := clientIP(r)
+		if wait, blocked := s.loginGuard.blocked(ip); blocked {
+			w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+			writeAPIError(w, http.StatusTooManyRequests,
+				"too many failed attempts from your address; try again in "+humanWait(wait))
+			return
+		}
 		id, err := auth.AuthenticateToken(s.db, secret)
+		if err != nil {
+			if locked, p := s.loginGuard.failed(ip); locked {
+				detail := fmt.Sprintf("after %d failed attempts", p.Attempts)
+				event.Warning("api", ip+" refused for "+humanWait(p.Lock), detail)
+				s.auditAs(r, db.ActorSystem, "login.lockout", ip, detail+", for "+humanWait(p.Lock))
+			}
+		}
 		if errors.Is(err, auth.ErrTokenExpired) {
 			writeAPIError(w, http.StatusUnauthorized, "token expired; create a new one in Settings")
 			return

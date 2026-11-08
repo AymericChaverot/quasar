@@ -255,3 +255,34 @@ func TestAPIMe(t *testing.T) {
 		t.Errorf("service token: %v", me)
 	}
 }
+
+// Wrong tokens count toward the same lock as wrong passwords: once an address
+// is locked out, even a valid token is refused until the lock runs out.
+func TestWrongTokensLockTheAddressOut(t *testing.T) {
+	s, database := apiTestServer(t)
+	s.loginGuard = newLoginGuard(func() loginPolicy { return loginPolicyFrom(database) })
+	good, err := auth.CreateToken(database, "ci", auth.RoleViewer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.requireToken(false, func(w http.ResponseWriter, r *http.Request) {})
+	call := func(token string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("GET", "/api/v1/apps", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+
+	attempts := loginPolicyFrom(database).Attempts
+	for i := 0; i < attempts; i++ {
+		if rec := call("qsr_wrong"); rec.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: status %d, want 401", i+1, rec.Code)
+		}
+	}
+	rec := call(good)
+	if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") == "" {
+		t.Errorf("after %d wrong tokens a valid one got %d (Retry-After %q), want 429",
+			attempts, rec.Code, rec.Header().Get("Retry-After"))
+	}
+}
