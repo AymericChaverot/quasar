@@ -261,7 +261,7 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      description: An API token created in Settings → API tokens. Tokens start with qsr_.
+      description: A personal token (Settings → Personal tokens) or a service token (Settings → Service tokens). Tokens start with qsr_.
 
   parameters:
     AppId:

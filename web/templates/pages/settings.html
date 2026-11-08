@@ -96,6 +96,62 @@
     </div>
   </section>
 
+  <section id="personal-tokens" class="space-y-4">
+    <h2 class="h-label">Personal tokens</h2>
+    <div class="card space-y-4 p-4">
+      {{if .NewPersonalToken}}
+      <div class="alert-ok space-y-2 p-3">
+        <p class="text-sm font-medium">Copy this token now — it is not stored and will never be shown again.</p>
+        <code class="mono block break-all rounded p-2 text-sm" style="background: var(--surface-2)">{{.NewPersonalToken}}</code>
+      </div>
+      {{end}}
+      {{if .MyTokens}}
+      <ul class="space-y-2">
+        {{range .MyTokens}}
+        <li class="flex flex-wrap items-center justify-between gap-3 rounded p-2" style="background: var(--surface-2)">
+          <div>
+            <span class="text-sm">{{.Name}}</span>
+            <span class="mono faint ml-2 text-xs">{{.Prefix}}…</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="muted text-xs">
+              {{if .Expired}}<span style="color: var(--err)">expired</span>{{else if .ExpiresAt.Valid}}expires {{.ExpiresAt.Time.Format "2006-01-02"}}{{else}}never expires{{end}}
+              · {{if .LastUsedAt.Valid}}last used {{.LastUsedAt.Time.Format "2006-01-02 15:04"}}{{else}}never used{{end}}
+            </span>
+            <form method="post" action="/settings/personal-tokens/{{.ID}}/delete"
+                  data-confirm="Revoke the token {{.Name}}? Whatever signed in with it is signed out immediately.">
+              <button type="submit" class="btn-danger py-1! text-xs">Revoke</button>
+            </form>
+          </div>
+        </li>
+        {{end}}
+      </ul>
+      {{end}}
+      <form method="post" action="/settings/personal-tokens" class="flex flex-wrap items-end field-row gap-3 {{if .MyTokens}}border-t pt-4{{end}}" style="border-color: var(--border)">
+        <div>
+          <label for="personal_token_name" class="label mb-1!">New token</label>
+          <input id="personal_token_name" name="name" type="text" placeholder="laptop" class="input mono w-48!" required>
+        </div>
+        <div>
+          <label for="personal_token_expires" class="label mb-1!">Expires</label>
+          <select id="personal_token_expires" name="expires" class="input w-32!">
+            {{range .Lifetimes}}<option value="{{.Value}}" {{if eq .Value "90d"}}selected{{end}}>{{.Label}}</option>{{end}}
+          </select>
+        </div>
+        <button type="submit" class="btn">Create token</button>
+      </form>
+      <div class="help space-y-2">
+        <p>
+          For signing in from the <span class="mono">qsr</span> command line, or anything else acting on your behalf.
+          A personal token does what your account can do, with the {{.Role}} role today and whatever role you have
+          tomorrow; it stops working when it expires or when the account is deleted. The audit log shows its
+          actions as yours, through the token.
+        </p>
+        <pre class="mono overflow-x-auto rounded p-2 text-xs" style="background: var(--surface-2)">qsr login {{.Domain}} https://admin.{{.Domain}}</pre>
+      </div>
+    </div>
+  </section>
+
   {{if .IsAdmin}}
   <section id="users" class="space-y-4">
     <h2 class="h-label">Users</h2>
@@ -161,7 +217,7 @@
   </section>
 
   <section id="tokens" class="space-y-4">
-    <h2 class="h-label">API tokens</h2>
+    <h2 class="h-label">Service tokens</h2>
     <div class="card space-y-4 p-4">
       {{if .NewToken}}
       <div class="alert-ok space-y-2 p-3">
@@ -213,13 +269,39 @@
         </p>
         <p>
           A viewer token can list and inspect applications and read host metrics; an admin token can
-          also deploy and restart. No token can read an application's environment variables or compose
-          file: a credential sitting in CI configuration is a weaker place than the encrypted column
-          those values live in.
+          also deploy and restart. No service token can read an application's environment variables or
+          compose file: a credential sitting in CI configuration is a weaker place than the encrypted
+          column those values live in.
         </p>
         <pre class="mono overflow-x-auto rounded p-2 text-xs" style="background: var(--surface-2)">curl -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1/apps
 curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1/apps/&lt;id&gt;/deploy</pre>
       </div>
+      {{if .OtherTokens}}
+      <div class="space-y-2 border-t pt-4" style="border-color: var(--border)">
+        <h3 class="label">Other users' personal tokens</h3>
+        <ul class="space-y-2">
+          {{range .OtherTokens}}
+          <li class="flex flex-wrap items-center justify-between gap-3 rounded p-2" style="background: var(--surface-2)">
+            <div>
+              <span class="text-sm">{{.Name}}</span>
+              <span class="chip ml-2">{{.Username}}</span>
+              <span class="mono faint ml-2 text-xs">{{.Prefix}}…</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="muted text-xs">
+                {{if .Expired}}<span style="color: var(--err)">expired</span>{{else if .ExpiresAt.Valid}}expires {{.ExpiresAt.Time.Format "2006-01-02"}}{{else}}never expires{{end}}
+                · {{if .LastUsedAt.Valid}}last used {{.LastUsedAt.Time.Format "2006-01-02 15:04"}}{{else}}never used{{end}}
+              </span>
+              <form method="post" action="/settings/personal-tokens/{{.ID}}/delete"
+                    data-confirm="Revoke {{.Username}}'s token {{.Name}}? Whatever signed in with it is signed out immediately.">
+                <button type="submit" class="btn-danger py-1! text-xs">Revoke</button>
+              </form>
+            </div>
+          </li>
+          {{end}}
+        </ul>
+      </div>
+      {{end}}
     </div>
   </section>
 

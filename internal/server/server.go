@@ -412,6 +412,10 @@ func (s *Server) routes() {
 	s.admin("POST /settings/users/{id}/delete", s.handleUserDelete)
 	s.admin("POST /settings/tokens", s.handleTokenCreate)
 	s.admin("POST /settings/tokens/{id}/delete", s.handleTokenDelete)
+	// Any signed-in user makes and revokes their own personal tokens, which
+	// never do more than the account itself; an admin also revokes anybody's.
+	s.viewer("POST /settings/personal-tokens", s.handlePersonalTokenCreate)
+	s.viewer("POST /settings/personal-tokens/{id}/delete", s.handlePersonalTokenDelete)
 
 	// JSON API, authenticated by Bearer token rather than a session.
 	// The status checks its own access: off, any token, or anybody, as the

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"math"
 	"net/http"
@@ -20,23 +21,40 @@ import (
 // lives in CI configuration, which is a weaker place than the encrypted column
 // those values sit in, so the API deliberately cannot read them out.
 
-// apiTokenKey is the context key carrying the authenticated token's name, for
-// the audit trail.
+// apiTokenKey is the context key carrying who the authenticated token acts
+// as, for the handlers and the audit trail.
 type apiTokenKey struct{}
 
-func withAPIToken(r *http.Request, name string) context.Context {
-	return context.WithValue(r.Context(), apiTokenKey{}, name)
+func withAPIToken(r *http.Request, id *auth.Identity) context.Context {
+	return context.WithValue(r.Context(), apiTokenKey{}, id)
+}
+
+// apiIdentity is who the request's token acts as. requireToken always sets
+// it; nil only reaches a handler registered outside it.
+func apiIdentity(r *http.Request) *auth.Identity {
+	id, _ := r.Context().Value(apiTokenKey{}).(*auth.Identity)
+	return id
+}
+
+// apiActor names a token in the audit log. A personal token's actions are its
+// owner's, done through it ("alice via laptop"); a service token's are the
+// token's own ("token:github-actions").
+func apiActor(id *auth.Identity) string {
+	switch {
+	case id == nil:
+		return "token"
+	case id.Personal():
+		return id.Username + " via " + id.Token
+	default:
+		return "token:" + id.Token
+	}
 }
 
 // auditAPI records an action against the token that performed it, so an API
 // deploy is attributable to a specific credential rather than to "webhook" or
 // nothing at all.
 func (s *Server) auditAPI(r *http.Request, action, target, detail string) {
-	name, _ := r.Context().Value(apiTokenKey{}).(string)
-	if name == "" {
-		name = "token"
-	}
-	s.auditAs(r, "token:"+name, action, target, detail)
+	s.auditAs(r, apiActor(apiIdentity(r)), action, target, detail)
 }
 
 // round1 keeps API numbers readable instead of shipping float noise.
@@ -46,7 +64,8 @@ func round1(v float64) float64 { return math.Round(v*10) / 10 }
 var vpsCollect = vps.Collect
 
 // requireToken authenticates a Bearer token and, when adminOnly, requires that
-// the token was issued with the admin role.
+// it acts as an admin: a service token issued with the admin role, or a
+// personal token whose owner is an admin now.
 func (s *Server) requireToken(adminOnly bool, next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		secret := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
@@ -54,16 +73,20 @@ func (s *Server) requireToken(adminOnly bool, next http.HandlerFunc) http.Handle
 			writeAPIError(w, http.StatusUnauthorized, "missing Authorization: Bearer <token> header")
 			return
 		}
-		name, role, err := auth.AuthenticateToken(s.db, secret)
+		id, err := auth.AuthenticateToken(s.db, secret)
+		if errors.Is(err, auth.ErrTokenExpired) {
+			writeAPIError(w, http.StatusUnauthorized, "token expired; create a new one in Settings")
+			return
+		}
 		if err != nil {
 			writeAPIError(w, http.StatusUnauthorized, "invalid token")
 			return
 		}
-		if adminOnly && role != auth.RoleAdmin {
+		if adminOnly && id.Role != auth.RoleAdmin {
 			writeAPIError(w, http.StatusForbidden, "this token is read-only")
 			return
 		}
-		next(w, r.WithContext(withAPIToken(r, name)))
+		next(w, r.WithContext(withAPIToken(r, id)))
 	})
 }
 

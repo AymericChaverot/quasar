@@ -200,7 +200,7 @@ func statusAllowed(database *sql.DB, cfg StatusConfig, r *http.Request) bool {
 	case "public":
 		return true
 	case "token":
-		_, _, err := auth.AuthenticateToken(database, secret)
+		_, err := auth.AuthenticateToken(database, secret)
 		return secret != "" && err == nil
 	}
 	return false

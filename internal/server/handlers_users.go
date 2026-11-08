@@ -1,6 +1,8 @@
 package server
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -120,6 +122,67 @@ func (s *Server) handleTokenDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "token.delete", name, "")
 	event.Info("api token", fmt.Sprintf("%q revoked", name), "by "+s.actor(r))
+	s.redirectSettings(w, r, okNotice("Token revoked", name))
+}
+
+// handlePersonalTokenCreate issues a personal token to whoever is signed in,
+// viewer or admin: it can never do more than its owner, so creating one is
+// not a privilege. Like a service token, the secret is shown once.
+func (s *Server) handlePersonalTokenCreate(w http.ResponseWriter, r *http.Request) {
+	userID, _, _, _ := s.currentUser(r)
+	if userID == 0 {
+		http.Error(w, "not signed in", http.StatusForbidden)
+		return
+	}
+	name := strings.TrimSpace(r.FormValue("name"))
+	expires := r.FormValue("expires")
+	ttl, err := auth.TokenLifetime(expires)
+	if err != nil {
+		s.redirectSettings(w, r, errNotice("Token not created", "", err))
+		return
+	}
+	secret, err := auth.CreatePersonalToken(s.db, userID, name, ttl)
+	if err != nil {
+		s.redirectSettings(w, r, errNotice("Token not created", "", err))
+		return
+	}
+	s.audit(r, "token.personal-create", name, "expires: "+expires)
+	event.Info("api token", fmt.Sprintf("personal token %q created", name), "by "+s.actor(r))
+
+	s.flash(r, okNotice("Token created", name+" — copy it now: it is not stored and cannot be shown again."))
+	data := s.settingsData(r)
+	data["NewPersonalToken"] = secret
+	s.render(w, r, "settings", data)
+}
+
+// handlePersonalTokenDelete revokes a personal token: a user their own, an
+// admin anybody's — the way an admin would cut off an account's laptop
+// without deleting the account.
+func (s *Server) handlePersonalTokenDelete(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad token id", http.StatusBadRequest)
+		return
+	}
+	userID, _, role, _ := s.currentUser(r)
+	if userID == 0 {
+		http.Error(w, "not signed in", http.StatusForbidden)
+		return
+	}
+	owner := userID
+	if role == auth.RoleAdmin {
+		owner = 0
+	}
+	name, ownerName, err := auth.DeletePersonalToken(s.db, id, owner)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = errors.New("no such token")
+	}
+	if err != nil {
+		s.redirectSettings(w, r, errNotice("Token not revoked", "", err))
+		return
+	}
+	s.audit(r, "token.personal-delete", name, "owned by "+ownerName)
+	event.Info("api token", fmt.Sprintf("personal token %q of %q revoked", name, ownerName), "by "+s.actor(r))
 	s.redirectSettings(w, r, okNotice("Token revoked", name))
 }
 

@@ -105,7 +105,12 @@ func DeleteUser(db *sql.DB, userID int64) error {
 	if _, err := db.Exec("DELETE FROM users WHERE id = ?", userID); err != nil {
 		return err
 	}
-	_, err := db.Exec("DELETE FROM sessions WHERE user_id = ?", userID)
+	if _, err := db.Exec("DELETE FROM sessions WHERE user_id = ?", userID); err != nil {
+		return err
+	}
+	// The foreign key already takes the account's personal tokens with it;
+	// said again here so that nothing depends on the pragma being on.
+	_, err := db.Exec("DELETE FROM api_tokens WHERE user_id = ?", userID)
 	return err
 }
 

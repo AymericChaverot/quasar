@@ -21,6 +21,10 @@ var selfServiceRoutes = map[string]bool{
 	"POST /settings/2fa/enable":  true,
 	"POST /settings/2fa/disable": true,
 	"POST /notifications/seen":   true, // own read mark
+	// Own personal tokens, which never do more than the account itself. The
+	// handler limits a viewer to revoking their own; an admin revokes any.
+	"POST /settings/personal-tokens":             true,
+	"POST /settings/personal-tokens/{id}/delete": true,
 	// A browser asking whether another site may read the status; it changes
 	// nothing and answers only what the operator allowed.
 	"OPTIONS /api/v1/status": true,

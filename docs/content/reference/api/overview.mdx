@@ -7,16 +7,28 @@ The API is served by the dashboard, at `https://admin.your-domain.com/api/v1/`. 
 
 ## Tokens
 
-Create a token in **Settings → API tokens**. Give it a name (such as `github-actions`) and a role:
+There are two kinds of token. Both are shown **once**: only their hash is stored, so a lost token can't be recovered. Revoke it and create another.
+
+### Personal tokens
+
+Any user creates their own in **Settings → Personal tokens**, with a name (such as `laptop`) and an expiry: 30 days, 90 days, 1 year or never. This is what the `qsr` command line signs in with.
+
+- A personal token acts **as its owner**, with the role the owner has at the time of each call: demote the account and its tokens are demoted too.
+- It stops working when it expires, and is deleted with its account.
+- Its actions appear in the [audit log](/server/monitoring/#audit-log) as the owner's, through the token: `alice via laptop`.
+- Each user sees and revokes their own tokens. An admin can also revoke anybody's, under **Service tokens**.
+
+### Service tokens
+
+An admin creates them in **Settings → Service tokens**, for a pipeline. A service token belongs to no account; it has a name (such as `github-actions`) and a role of its own, and lasts until it is revoked:
 
 | Role | Can |
 | --- | --- |
 | **viewer** | List and inspect applications, read server usage. |
 | **admin** | Also deploy and restart applications. |
 
-- The token is shown **once**. Only its hash is stored, so a lost token can't be recovered: revoke it and create another.
-- No token can read environment variables or compose files.
-- Every call that changes something is recorded in the [audit log](/server/monitoring/#audit-log), under the token's name.
+- No service token can read environment variables or compose files.
+- Its actions appear in the audit log under its name: `token:github-actions`.
 
 ## Authentication
 
@@ -36,8 +48,8 @@ Errors return a JSON body with a message:
 
 | Status | Meaning |
 | --- | --- |
-| `401` | The token is missing or invalid. |
-| `403` | The call needs an admin token, and this one is a viewer token. |
+| `401` | The token is missing, invalid or expired. |
+| `403` | The call needs an admin, and this token acts as a viewer. |
 | `404` | No application has this identifier. |
 | `409` | A deployment of this application is already running. |
 

@@ -95,6 +95,20 @@ func (s *Server) settingsData(r *http.Request) map[string]any {
 	registries, _ := db.ListRegistries(s.db)
 	users, _ := auth.ListUsers(s.db)
 	tokens, _ := auth.ListTokens(s.db)
+	// Everyone's own personal tokens, and for an admin everybody else's too,
+	// so that one can be revoked without deleting its account.
+	var mine, others []*auth.Token
+	if userID != 0 {
+		mine, _ = auth.ListPersonalTokens(s.db, userID)
+	}
+	if role == auth.RoleAdmin {
+		all, _ := auth.ListPersonalTokens(s.db, 0)
+		for _, t := range all {
+			if t.UserID != userID {
+				others = append(others, t)
+			}
+		}
+	}
 	gitCreds, _ := db.ListGitCredentials(s.db)
 	return map[string]any{
 		"Title":        "Settings",
@@ -104,6 +118,9 @@ func (s *Server) settingsData(r *http.Request) map[string]any {
 		"UserID":       userID,
 		"Users":        users,
 		"Tokens":       tokens,
+		"MyTokens":     mine,
+		"OtherTokens":  others,
+		"Lifetimes":    auth.TokenLifetimes,
 		"Themes":       themes,
 		"Domain":       s.cfg.Domain,
 		"AppsDir":      s.cfg.AppsDir,

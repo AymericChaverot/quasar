@@ -355,7 +355,9 @@ CREATE TABLE IF NOT EXISTS api_tokens (
 	prefix       TEXT NOT NULL DEFAULT '',
 	token_hash   TEXT NOT NULL UNIQUE,
 	created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	last_used_at DATETIME
+	last_used_at DATETIME,
+	user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+	expires_at   DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -422,6 +424,10 @@ var migrations = []string{
 	"ALTER TABLE metrics ADD COLUMN swap_gb REAL NOT NULL DEFAULT 0",
 	"ALTER TABLE metrics ADD COLUMN mem_gb REAL NOT NULL DEFAULT 0",
 	"ALTER TABLE metrics ADD COLUMN disk_gb REAL NOT NULL DEFAULT 0",
+	// Personal tokens: the account a token belongs to (none for a service
+	// token, which every token from before is), and when it stops working.
+	"ALTER TABLE api_tokens ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE",
+	"ALTER TABLE api_tokens ADD COLUMN expires_at DATETIME",
 }
 
 // maxConns is how many connections the pool keeps: enough for the polls of a

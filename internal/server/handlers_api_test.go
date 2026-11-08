@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"quasar/internal/auth"
 	"quasar/internal/db"
@@ -114,14 +115,64 @@ func TestTokenNameReachesTheHandler(t *testing.T) {
 
 	var seen string
 	h := s.requireToken(true, func(w http.ResponseWriter, r *http.Request) {
-		seen, _ = r.Context().Value(apiTokenKey{}).(string)
+		seen = apiActor(apiIdentity(r))
 	})
 	req := httptest.NewRequest("POST", "/api/v1/apps/x/deploy", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	h.ServeHTTP(httptest.NewRecorder(), req)
 
-	if seen != "github-actions" {
-		t.Errorf("token name in context = %q, want github-actions", seen)
+	if seen != "token:github-actions" {
+		t.Errorf("actor = %q, want token:github-actions", seen)
+	}
+}
+
+// A personal token acts as its owner: with the owner's current role, and in
+// the audit trail under the owner's name, through the token.
+func TestPersonalTokenOnTheAPI(t *testing.T) {
+	s, database := apiTestServer(t)
+	for _, u := range []struct{ name, role string }{{"alice", auth.RoleAdmin}, {"bob", auth.RoleViewer}} {
+		if err := auth.CreateUser(database, u.name, "password123", u.role); err != nil {
+			t.Fatal(err)
+		}
+	}
+	users, _ := auth.ListUsers(database)
+	ids := map[string]int64{}
+	for _, u := range users {
+		ids[u.Username] = u.ID
+	}
+	alice, err := auth.CreatePersonalToken(database, ids["alice"], "laptop", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bob, err := auth.CreatePersonalToken(database, ids["bob"], "desktop", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	call := func(token string) (int, string, string) {
+		var actor string
+		h := s.requireToken(true, func(w http.ResponseWriter, r *http.Request) {
+			actor = apiActor(apiIdentity(r))
+		})
+		req := httptest.NewRequest("POST", "/api/v1/apps/x/deploy", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.String(), actor
+	}
+
+	if code, _, actor := call(alice); code != http.StatusOK || actor != "alice via laptop" {
+		t.Errorf("alice's token: status %d, actor %q", code, actor)
+	}
+	if code, _, _ := call(bob); code != http.StatusForbidden {
+		t.Errorf("a viewer's token on a write route: status %d, want 403", code)
+	}
+	if _, err := database.Exec("UPDATE api_tokens SET expires_at = ? WHERE name = 'desktop'",
+		time.Now().Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if code, body, _ := call(bob); code != http.StatusUnauthorized || !strings.Contains(body, "expired") {
+		t.Errorf("an expired token: status %d, body %q; want 401 saying it expired", code, body)
 	}
 }
 
