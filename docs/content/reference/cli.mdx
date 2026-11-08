@@ -1,0 +1,42 @@
+---
+title: Command line
+description: Drive Quasar from a terminal with qsr.
+---
+
+`qsr` is Quasar's command-line client: list applications, deploy them and wait for the outcome, follow their logs, and edit their environment, from a terminal or a pipeline. It talks to the [API](/reference/api/overview/) and needs Quasar v0.5.2 or later.
+
+Its source, releases and install instructions are on [GitHub](https://github.com/AymericChaverot/quasar-cli).
+
+## Sign in
+
+Create a **personal token** in **Settings → Personal tokens**, then:
+
+```bash
+qsr login prod https://admin.your-domain.com
+```
+
+`qsr` asks for the token, checks it, and keeps it under the name `prod`. A personal token acts as your account, with your role, so a viewer can list and read but not deploy. Several servers each get a name of their own; `qsr context use <name>` switches between them, and `--context <name>` picks one for a single command.
+
+## Everyday commands
+
+| Command | Does |
+| --- | --- |
+| `qsr apps` | List applications and their state. |
+| `qsr apps show blog` | One application, and why its last deploy failed if it did. |
+| `qsr deploy blog` | Fetch the latest version, deploy it, and wait for the outcome. |
+| `qsr start blog`, `stop`, `restart` | Start, stop or restart its containers. |
+| `qsr logs blog -f` | Its recent logs, then new lines as they come. |
+| `qsr env blog` | Its environment variables (an admin's personal token only). |
+| `qsr env set blog DEBUG=1 --deploy` | Change a variable and redeploy with it. |
+
+An application is named by its id, its subdomain or its name. Every command takes `--json` for scripts.
+
+## In a pipeline
+
+Skip `login` and give the address and a token through the environment:
+
+```bash
+QSR_URL=https://admin.your-domain.com QSR_TOKEN=${{ secrets.QUASAR_TOKEN }} qsr deploy blog
+```
+
+`qsr deploy` exits with an error when the deploy fails, so the pipeline fails with it. A [service token](/reference/api/overview/#service-tokens) works here, except for reading environments.
