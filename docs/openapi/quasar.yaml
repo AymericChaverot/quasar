@@ -9,6 +9,8 @@ servers:
 security:
   - bearerAuth: []
 tags:
+  - name: Account
+    description: Who a token acts as.
   - name: Applications
     description: List, inspect, deploy and restart applications.
   - name: Server
@@ -19,6 +21,32 @@ tags:
     description: Deploy without a token, from a secret URL.
 
 paths:
+  /api/v1/me:
+    get:
+      operationId: getMe
+      summary: Who am I
+      description: |
+        Who the token acts as, and the version of the server answering. Works with any token, and is what a client calls to check a token when signing in.
+
+        A personal token reports its owner and the role the owner has now; a service token reports its own role, and no user.
+      tags: [Account]
+      responses:
+        '200':
+          description: The token's identity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+              example:
+                kind: personal
+                token: laptop
+                user: alice
+                role: admin
+                expires_at: '2027-02-07T10:00:00Z'
+                server_version: v0.5.2
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /api/v1/apps:
     get:
       operationId: listApps
@@ -348,6 +376,35 @@ components:
           type: string
           description: How long the application has been running, such as 12m, 5h 20m or 3d 4h. Only set while it is running.
           example: 3d 4h
+
+    Me:
+      type: object
+      required: [kind, token, user, role, expires_at, server_version]
+      properties:
+        kind:
+          type: string
+          enum: [personal, service]
+          description: A personal token belongs to an account; a service token to nobody.
+        token:
+          type: string
+          description: The token's name.
+          example: laptop
+        user:
+          type: [string, 'null']
+          description: The owner of a personal token; null for a service token.
+          example: alice
+        role:
+          type: string
+          enum: [admin, viewer]
+          description: What the token may do now. For a personal token, its owner's current role.
+        expires_at:
+          type: [string, 'null']
+          format: date-time
+          description: When the token stops working; null when it never does.
+        server_version:
+          type: string
+          description: The Quasar version answering, `dev` for a development build.
+          example: v0.5.2
 
     System:
       type: object

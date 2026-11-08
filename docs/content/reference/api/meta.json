@@ -3,6 +3,8 @@
   "icon": "braces",
   "pages": [
     "overview",
+    "---Account---",
+    "get-me",
     "---Applications---",
     "list-apps",
     "get-app",

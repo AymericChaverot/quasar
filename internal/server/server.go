@@ -422,6 +422,7 @@ func (s *Server) routes() {
 	// operator chose, and always the status page's own key.
 	s.public("GET /api/v1/status", s.handleStatusAPI)
 	s.public("OPTIONS /api/v1/status", s.handleStatusPreflight)
+	s.apiRead("GET /api/v1/me", s.handleAPIMe)
 	s.apiRead("GET /api/v1/apps", s.handleAPIApps)
 	s.apiRead("GET /api/v1/apps/{id}", s.handleAPIApp)
 	s.apiRead("GET /api/v1/system", s.handleAPISystem)

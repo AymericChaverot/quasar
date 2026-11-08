@@ -2,6 +2,7 @@ package server
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -201,5 +202,56 @@ func TestAPIAppExposesNoSecrets(t *testing.T) {
 		if !allowed[name] {
 			t.Errorf("apiApp has a new field %q — confirm it holds nothing secret, then add it here", name)
 		}
+	}
+}
+
+// GET /me is what a client signs in with: it has to tell a personal token
+// from a service one, name the owner, and say when the token expires.
+func TestAPIMe(t *testing.T) {
+	s, database := apiTestServer(t)
+	s.routes()
+	if err := auth.CreateUser(database, "alice", "password123", auth.RoleViewer); err != nil {
+		t.Fatal(err)
+	}
+	users, _ := auth.ListUsers(database)
+	personal, err := auth.CreatePersonalToken(database, users[0].ID, "laptop", 24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := auth.CreateToken(database, "ci", auth.RoleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	get := func(token string) map[string]any {
+		t.Helper()
+		req := httptest.NewRequest("GET", "/api/v1/me", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		s.mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+		}
+		var got map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+
+	me := get(personal)
+	if me["kind"] != "personal" || me["user"] != "alice" || me["token"] != "laptop" || me["role"] != auth.RoleViewer {
+		t.Errorf("personal token: %v", me)
+	}
+	if _, ok := me["expires_at"].(string); !ok {
+		t.Errorf("personal token with an expiry reported expires_at %v", me["expires_at"])
+	}
+	if me["server_version"] == "" || me["server_version"] == nil {
+		t.Errorf("no server version: %v", me)
+	}
+
+	me = get(service)
+	if me["kind"] != "service" || me["user"] != nil || me["role"] != auth.RoleAdmin || me["expires_at"] != nil {
+		t.Errorf("service token: %v", me)
 	}
 }

@@ -8,9 +8,11 @@ import (
 	"math"
 	"net/http"
 	"strings"
+	"time"
 
 	"quasar/internal/auth"
 	"quasar/internal/db"
+	"quasar/internal/version"
 	"quasar/internal/vps"
 )
 
@@ -194,6 +196,35 @@ func (s *Server) handleAPIRestart(w http.ResponseWriter, r *http.Request) {
 	}
 	s.auditAPI(r, "app.restart", a.Name, "triggered by API token")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "restarted", "app": a.ID})
+}
+
+// apiMe is who a token acts as, and what it is talking to.
+type apiMe struct {
+	Kind          string     `json:"kind"` // "personal" or "service"
+	Token         string     `json:"token"`
+	User          *string    `json:"user"`
+	Role          string     `json:"role"`
+	ExpiresAt     *time.Time `json:"expires_at"`
+	ServerVersion string     `json:"server_version"`
+}
+
+// handleAPIMe answers who the token is. It is what a client signs in with:
+// one call that proves the token works, says what it may do, and tells the
+// client which server version it is speaking to, so that it can say plainly
+// when the server is too old for a command rather than fail on a missing
+// route.
+func (s *Server) handleAPIMe(w http.ResponseWriter, r *http.Request) {
+	id := apiIdentity(r)
+	me := apiMe{Kind: "service", Token: id.Token, Role: id.Role, ServerVersion: version.Version}
+	if id.Personal() {
+		me.Kind = "personal"
+		me.User = &id.Username
+	}
+	if id.ExpiresAt.Valid {
+		t := id.ExpiresAt.Time.UTC()
+		me.ExpiresAt = &t
+	}
+	writeJSON(w, http.StatusOK, me)
 }
 
 // handleAPISystem reports host usage, for an external monitor that would
