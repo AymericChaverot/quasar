@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS apps (
 	id             TEXT PRIMARY KEY,
 	name           TEXT NOT NULL,
 	subdomain      TEXT NOT NULL UNIQUE,
-	deploy_type    TEXT NOT NULL CHECK (deploy_type IN ('image', 'git', 'compose')),
+	deploy_type    TEXT NOT NULL CHECK (deploy_type IN ('image', 'git', 'compose', 'local')),
 	image_ref      TEXT NOT NULL DEFAULT '',
 	git_url        TEXT NOT NULL DEFAULT '',
 	git_branch     TEXT NOT NULL DEFAULT 'main',
@@ -483,6 +483,9 @@ func Open(path string) (*sql.DB, error) {
 		if _, err := db.Exec(m); err != nil && !alreadyApplied(err) {
 			log.Printf("db: migration %q: %v", m, err)
 		}
+	}
+	if err := allowLocalDeployType(db); err != nil {
+		log.Printf("db: allowing applications deployed from a local folder: %v", err)
 	}
 	// Applications from before colours existed, or added by anything that
 	// does not go through InsertApp, get theirs here. Logged like a migration:
