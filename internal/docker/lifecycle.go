@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/moby/moby/client"
+	"log"
 	"os"
 	"sort"
 	"strconv"
@@ -186,12 +187,15 @@ func (c *Client) Restart(ctx context.Context, a *db.App) error {
 	return err
 }
 
-// Remove tears down the app's containers and deletes its directory on disk.
+// Remove tears down the app's containers, deletes the images built for it,
+// and deletes its directory on disk.
 func (c *Client) Remove(ctx context.Context, a *db.App) error {
 	if c.UsesCompose(a) {
 		// Best effort: the container sweep below is what actually guarantees
 		// the app is gone, and it runs whether or not compose cooperated.
-		_ = c.compose(ctx, a, "down", "--volumes")
+		// --rmi local takes the images the stack built for itself; the ones
+		// it pulled may be shared with other applications, and stay.
+		_ = c.compose(ctx, a, "down", "--volumes", "--rmi", "local")
 	}
 	// Both sets, whichever way the app is deployed today: an interrupted deploy
 	// can leave a replacement container behind, and a git app built the other
@@ -202,8 +206,27 @@ func (c *Client) Remove(ctx context.Context, a *db.App) error {
 	for _, ct := range c.composeContainers(ctx, a.ID) {
 		c.removeContainer(ctx, ct.ID)
 	}
+	c.removeBuilds(ctx, a.ID)
 	c.forgetDeploy(a.ID)
 	return os.RemoveAll(c.AppDir(a.ID))
+}
+
+// removeBuilds deletes every image built from the app's Dockerfile, which
+// the deploys keep a few of for rollback and which nothing else can use: a
+// deleted app's builds would otherwise sit on the disk for good. After the
+// containers, so that none still holds one.
+func (c *Client) removeBuilds(ctx context.Context, appID string) {
+	list, err := c.api.ImageList(ctx, client.ImageListOptions{
+		Filters: make(client.Filters).Add("reference", buildTagPrefix(appID)+":*"),
+	})
+	if err != nil {
+		return
+	}
+	for _, img := range list.Items {
+		if _, err := c.api.ImageRemove(ctx, img.ID, client.ImageRemoveOptions{Force: true, PruneChildren: true}); err != nil {
+			log.Printf("remove: deleting the build %s of %s: %v", img.ID, appID, err)
+		}
+	}
 }
 
 func (c *Client) removeContainer(ctx context.Context, name string) {
