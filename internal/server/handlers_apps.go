@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -188,6 +189,24 @@ func (s *Server) handleAppCreate(w http.ResponseWriter, r *http.Request) {
 // those: the general one, and a station's own. What happens after the fields
 // are known should not depend on which page they came from.
 func (s *Server) createApp(w http.ResponseWriter, r *http.Request, a *db.App) string {
+	if errMsg := s.insertApp(a); errMsg != "" {
+		return errMsg
+	}
+	if a.DeployType != "local" {
+		s.followDeploy(r, a)
+	}
+	s.audit(r, "app.create", a.Name, a.Subdomain+" ("+a.DeployType+")")
+	http.Redirect(w, r, "/apps/"+a.ID, http.StatusSeeOther)
+	return ""
+}
+
+// insertApp checks and stores a new application, then starts its first
+// deploy, and returns what is wrong with it — empty when it was created. It is
+// what the dashboard's forms and the API share.
+//
+// An application deployed from a local folder has nothing to deploy until a
+// folder is uploaded, so it is only stored.
+func (s *Server) insertApp(a *db.App) string {
 	if a.GitBranch == "" {
 		a.GitBranch = "main"
 	}
@@ -201,12 +220,11 @@ func (s *Server) createApp(w http.ResponseWriter, r *http.Request, a *db.App) st
 	if err := db.InsertApp(s.db, s.keyring, a); err != nil {
 		return "database error: " + err.Error()
 	}
-	// A first deploy has nothing local to reuse: it has to pull the image or
-	// clone the repository.
-	s.dock.UpdateAsync(a, "create")
-	s.followDeploy(r, a)
-	s.audit(r, "app.create", a.Name, a.Subdomain+" ("+a.DeployType+")")
-	http.Redirect(w, r, "/apps/"+a.ID, http.StatusSeeOther)
+	if a.DeployType != "local" {
+		// A first deploy has nothing local to reuse: it has to pull the image
+		// or clone the repository.
+		s.dock.UpdateAsync(a, "create")
+	}
 	return ""
 }
 
@@ -256,6 +274,8 @@ func (s *Server) validateNewApp(a *db.App) string {
 		if msg := s.portConflict(a); msg != "" {
 			return msg
 		}
+	case "local":
+		// Its source arrives later, uploaded with qsr.
 	default:
 		return "Invalid deployment type."
 	}
@@ -594,15 +614,37 @@ func (s *Server) handleAppDelete(w http.ResponseWriter, r *http.Request) {
 	if a == nil {
 		return
 	}
+	if err := s.removeApp(a); err != nil {
+		if errors.Is(err, errRemoveContainers) {
+			http.Error(w, "delete failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		internalError(w, r, err)
+		return
+	}
+	// Recorded after the fact and deliberately outside DeleteAppLogs' reach:
+	// deleting an app must not also erase the record of who deleted it.
+	s.audit(r, "app.delete", a.Name, a.Subdomain+" ("+a.DeployType+")")
+	event.Info("app", a.Name, "deleted", "by "+s.actor(r))
+	w.Header().Set("HX-Redirect", "/")
+	w.WriteHeader(http.StatusOK)
+}
+
+// errRemoveContainers marks a delete that failed before anything was deleted:
+// Docker would not remove the application's containers.
+var errRemoveContainers = errors.New("removing the containers")
+
+// removeApp deletes an application: its containers and files, its row, and
+// what hangs off the row. The dashboard and the API share it; each records who
+// did it in its own way.
+func (s *Server) removeApp(a *db.App) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	if err := s.dock.Remove(ctx, a); err != nil {
-		http.Error(w, "delete failed: "+err.Error(), http.StatusInternalServerError)
-		return
+		return fmt.Errorf("%w: %w", errRemoveContainers, err)
 	}
 	if err := db.DeleteApp(s.db, a.ID); err != nil {
-		internalError(w, r, fmt.Errorf("database error: %w", err))
-		return
+		return fmt.Errorf("database error: %w", err)
 	}
 	// The app row is already gone. What is left is its debris, and a failure
 	// to clear it leaves orphaned rows rather than a half-deleted app — worth
@@ -618,10 +660,5 @@ func (s *Server) handleAppDelete(w http.ResponseWriter, r *http.Request) {
 			log.Printf("app delete: clearing the %s of %s: %v", what, a.ID, err)
 		}
 	}
-	// Recorded after the fact and deliberately outside DeleteAppLogs' reach:
-	// deleting an app must not also erase the record of who deleted it.
-	s.audit(r, "app.delete", a.Name, a.Subdomain+" ("+a.DeployType+")")
-	event.Info("app", a.Name, "deleted", "by "+s.actor(r))
-	w.Header().Set("HX-Redirect", "/")
-	w.WriteHeader(http.StatusOK)
+	return nil
 }

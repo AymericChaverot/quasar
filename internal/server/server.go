@@ -424,7 +424,9 @@ func (s *Server) routes() {
 	s.public("OPTIONS /api/v1/status", s.handleStatusPreflight)
 	s.apiRead("GET /api/v1/me", s.handleAPIMe)
 	s.apiRead("GET /api/v1/apps", s.handleAPIApps)
+	s.apiWrite("POST /api/v1/apps", s.handleAPIAppCreate)
 	s.apiRead("GET /api/v1/apps/{id}", s.handleAPIApp)
+	s.apiWrite("DELETE /api/v1/apps/{id}", s.handleAPIAppDelete)
 	// The lines the application page shows, which a viewer may read.
 	s.apiRead("GET /api/v1/apps/{id}/logs", s.handleAPILogs)
 	s.apiRead("GET /api/v1/system", s.handleAPISystem)
