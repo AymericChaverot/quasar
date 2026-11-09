@@ -173,7 +173,7 @@ func (s *Server) apiAppFrom(r *http.Request, a *db.App) apiApp { return apiAppOf
 // apiAppOf is an application as the API reports it.
 func apiAppOf(v AppView) apiApp {
 	a := v.App
-	return apiApp{
+	out := apiApp{
 		ID:         a.ID,
 		Name:       a.Name,
 		Subdomain:  a.Subdomain,
@@ -182,13 +182,18 @@ func apiAppOf(v AppView) apiApp {
 		ImageRef:   a.ImageRef,
 		// An operator may have pasted credentials into the clone URL, and a
 		// viewer token is no place for them.
-		GitURL:    docker.RedactURL(a.GitURL),
-		GitBranch: a.GitBranch,
-		Port:      a.Port,
-		State:     v.Status.State,
-		Uptime:    v.Status.Uptime,
-		Deploy:    apiDeployOf(v.Deploy),
+		GitURL: docker.RedactURL(a.GitURL),
+		Port:   a.Port,
+		State:  v.Status.State,
+		Uptime: v.Status.Uptime,
+		Deploy: apiDeployOf(v.Deploy),
 	}
+	// Every application stores a branch, "main" by default, but only a git
+	// one is deployed from it.
+	if a.DeployType == "git" {
+		out.GitBranch = a.GitBranch
+	}
+	return out
 }
 
 func (s *Server) handleAPIApps(w http.ResponseWriter, r *http.Request) {

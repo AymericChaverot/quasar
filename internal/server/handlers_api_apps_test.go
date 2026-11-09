@@ -119,3 +119,13 @@ func auditHas(t *testing.T, s *Server, action, actor string) bool {
 	}
 	return false
 }
+
+// Only a git application reports the branch it is deployed from: the others
+// store "main" by default, which would read as if they had one.
+func TestAPIAppBranchOnlyForGit(t *testing.T) {
+	git := apiAppOf(AppView{App: &db.App{DeployType: "git", GitBranch: "prod"}})
+	local := apiAppOf(AppView{App: &db.App{DeployType: "local", GitBranch: "main"}})
+	if git.GitBranch != "prod" || local.GitBranch != "" {
+		t.Errorf("git branch %q, local branch %q", git.GitBranch, local.GitBranch)
+	}
+}
