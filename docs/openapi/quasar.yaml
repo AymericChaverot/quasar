@@ -12,7 +12,7 @@ tags:
   - name: Account
     description: Who a token acts as.
   - name: Applications
-    description: List, inspect, deploy and restart applications.
+    description: Create, list, inspect, deploy, upload to and delete applications.
   - name: Server
     description: Server usage.
   - name: Status
@@ -44,6 +44,7 @@ paths:
                 role: admin
                 expires_at: '2027-02-07T10:00:00Z'
                 server_version: v0.5.2
+                upload_max_bytes: 209715200
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -81,6 +82,55 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+    post:
+      operationId: createApp
+      summary: Create an application
+      description: |
+        Creates an application, as the dashboard's New application form does, with the same checks, and starts its first deploy. Poll GET /api/v1/apps/{id} for how it goes.
+
+        An application of type `local` is created without a deploy: it has nothing to run until a folder is uploaded to it with PUT /api/v1/apps/{id}/source.
+
+        Requires an admin. Recorded in the audit log.
+      tags: [Applications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewApp'
+            example:
+              name: Site
+              subdomain: site
+              deploy_type: local
+              port: 8080
+      responses:
+        '201':
+          description: The application was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+        '400':
+          description: A field is missing or invalid. The message says which.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: A Docker image reference is required (e.g. nginx:latest).
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: The subdomain, or a host port the stack publishes, is already another application's.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: This subdomain is already used by another application.
+
   /api/v1/apps/{id}:
     get:
       operationId: getApp
@@ -100,6 +150,40 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+
+    delete:
+      operationId: deleteApp
+      summary: Delete an application
+      description: |
+        Deletes the application with its containers, its files and its data directory, as the dashboard's Delete does. This cannot be undone; back the data up first if it matters.
+
+        Requires an admin. Recorded in the audit log.
+      tags: [Applications]
+      parameters:
+        - $ref: '#/components/parameters/AppId'
+      responses:
+        '200':
+          description: The application was deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, app]
+                properties:
+                  status:
+                    type: string
+                    const: deleted
+                  app:
+                    type: string
+                    description: Identifier of the deleted application.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Deploying'
 
   /api/v1/apps/{id}/logs:
     get:
@@ -221,7 +305,7 @@ paths:
                     type: string
                     description: Identifier of the application.
         '400':
-          description: The body is not `{"content": "..."}`.
+          description: 'The body is not `{"content": "..."}`.'
           content:
             application/json:
               schema:
@@ -244,7 +328,7 @@ paths:
       operationId: deployApp
       summary: Deploy an application
       description: |
-        Fetches the latest version of the application and deploys it, like the Update button in the dashboard: it pulls the image, or pulls the branch and rebuilds.
+        Fetches the latest version of the application and deploys it, like the Update button in the dashboard: it pulls the image, or pulls the branch and rebuilds. An application of type `local` is rebuilt from the folder uploaded last; to deploy a new version of one, upload it with PUT /api/v1/apps/{id}/source.
 
         The call returns as soon as the deployment has started. Poll GET /api/v1/apps/{id} until `deploy.running` is false, then read `deploy.error` for the outcome.
 
@@ -284,6 +368,85 @@ paths:
                 $ref: '#/components/schemas/Error'
               example:
                 error: a deploy is already in progress
+
+  /api/v1/apps/{id}/source:
+    put:
+      operationId: uploadSource
+      summary: Upload a folder and deploy it
+      description: |
+        For an application of type `local`: replaces its source with the folder sent, as a gzipped tar, and deploys it. The folder is built like a git repository: with its compose file when it has one at its root, otherwise with its Dockerfile.
+
+        The archive is unpacked and checked before anything is replaced, so a refused upload leaves the running version as it was. Absolute paths, paths that leave the folder, hard links and links pointing outside it are refused.
+
+        The call returns once the deployment has started. Poll GET /api/v1/apps/{id} until `deploy.running` is false. Send `Content-Length`: an upload larger than `upload_max_bytes` (see GET /api/v1/me) is then refused before it is read.
+
+        Requires an admin. Recorded in the audit log.
+      tags: [Applications]
+      parameters:
+        - $ref: '#/components/parameters/AppId'
+      requestBody:
+        required: true
+        content:
+          application/gzip:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '202':
+          description: The folder was unpacked and its deployment has started.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, app, files, bytes]
+                properties:
+                  status:
+                    type: string
+                    const: deploying
+                  app:
+                    type: string
+                    description: Identifier of the application.
+                  files:
+                    type: integer
+                    description: How many files the folder held.
+                  bytes:
+                    type: integer
+                    description: Their size, unpacked.
+              example:
+                status: deploying
+                app: 3f9c2a7e
+                files: 48
+                bytes: 1203344
+        '400':
+          description: The body is not a gzipped tar, or holds an entry that is refused.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'the upload was refused: ../etc: the path leaves the uploaded folder'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The application is not of type `local`, or a deploy or another upload is under way.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Blog is deployed from a git repository, not from an uploaded folder
+        '413':
+          description: The upload is larger than the limit set in Settings → Folder uploads.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: the upload is larger than the 200 MB this server accepts; an admin can raise the limit in Settings
 
   /api/v1/apps/{id}/start:
     post:
@@ -569,7 +732,7 @@ components:
           example: blog.your-domain.com
         deploy_type:
           type: string
-          enum: [image, git, compose]
+          enum: [image, git, compose, local]
           example: git
         image_ref:
           type: string
@@ -613,6 +776,57 @@ components:
             running: false
             error: null
 
+    NewApp:
+      type: object
+      required: [name, subdomain, deploy_type]
+      description: The fields of the dashboard's New application form. Which source field is required follows the type.
+      properties:
+        name:
+          type: string
+          example: Blog
+        subdomain:
+          type: string
+          description: Lowercase letters, digits and hyphens, or @ for the root domain.
+          example: blog
+        deploy_type:
+          type: string
+          enum: [image, git, compose, local]
+        image_ref:
+          type: string
+          description: Required for `image`.
+          example: nginx:latest
+        git_url:
+          type: string
+          description: Required for `git`.
+          example: https://github.com/me/blog.git
+        git_branch:
+          type: string
+          description: For `git`; main when left out.
+        compose_yaml:
+          type: string
+          description: Required for `compose`, the compose file itself.
+        compose_service:
+          type: string
+          description: For a stack, the service the domain is routed to, when Quasar cannot tell.
+        port:
+          type: integer
+          description: Port the application listens on inside its container; 80 when left out.
+        env_content:
+          type: string
+          description: The environment, as dotenv text.
+        data_mount:
+          type: string
+          description: Container path bound to the application's data directory, such as /data.
+        custom_domains:
+          type: string
+          description: Comma-separated domains also routed to the application.
+        cpu_limit:
+          type: number
+          description: CPUs; 0 for no limit.
+        mem_limit_mb:
+          type: integer
+          description: Megabytes of memory; 0 for no limit.
+
     LifecycleResult:
       type: object
       required: [status, app]
@@ -646,7 +860,7 @@ components:
 
     Me:
       type: object
-      required: [kind, token, user, role, expires_at, server_version]
+      required: [kind, token, user, role, expires_at, server_version, upload_max_bytes]
       properties:
         kind:
           type: string
@@ -672,6 +886,10 @@ components:
           type: string
           description: The Quasar version answering, `dev` for a development build.
           example: v0.5.2
+        upload_max_bytes:
+          type: integer
+          description: The largest folder upload this server accepts, compressed, set in Settings → Folder uploads. A client refuses a larger folder before sending it.
+          example: 209715200
 
     System:
       type: object
