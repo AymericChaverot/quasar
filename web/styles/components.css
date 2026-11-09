@@ -223,17 +223,21 @@ input[type="checkbox"] {
 input[type="radio"] { border-radius: var(--radius-badge); }
 input[type="checkbox"] { border-radius: var(--radius); }
 
-input[type="radio"]:checked,
 input[type="checkbox"]:checked {
   border-color: var(--accent);
   background: var(--accent);
 }
-input[type="radio"]:checked::after {
-  content: "";
-  width: 0.375rem;
-  height: 0.375rem;
-  border-radius: var(--radius-badge);
+/* The dot is what is left of the box once an inset ring of accent is drawn
+   over it, rather than a smaller element centred inside it. At a scale that
+   is not a whole number — 125 %, 150 %, a zoomed page — the box, its border
+   and a separate 6px dot each round to device pixels on their own, and the
+   dot ended a pixel off one way. A ring is drawn from the same box as the
+   border, so whatever the rounding, it is the same on every side. */
+input[type="radio"]:checked {
+  --radio-ring: 0 0 0 0.25rem var(--accent) inset;
+  border-color: var(--accent);
   background: var(--accent-text);
+  box-shadow: var(--radio-ring);
 }
 input[type="checkbox"]:checked::after {
   content: "";
@@ -248,6 +252,9 @@ input[type="radio"]:focus-visible,
 input[type="checkbox"]:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+input[type="radio"]:checked:focus-visible {
+  box-shadow: var(--radio-ring), 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .select {
