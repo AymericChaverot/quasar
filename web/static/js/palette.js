@@ -119,10 +119,13 @@
         out.push({ icon: "restart", title: "Restart", verb: "Restart", action: base + "/restart" });
         out.push({ icon: "stop", title: "Stop", verb: "Stop", danger: true, action: base + "/stop", confirm: "Stop " + a.name + "? It stays down until it is started again." });
       }
-      var git = a.deployType === "git";
+      var git = a.deployType === "git", local = a.deployType === "local";
       out.push({ icon: "redeploy", title: "Redeploy", verb: "Redeploy", action: base + "/redeploy",
-        confirm: "Redeploy " + a.name + "? " + (git ? "The containers are replaced, running the same commit as now." : "The container is replaced, running the same image as now.") });
-      out.push({ icon: "update", title: "Update", within: git ? "pull and rebuild" : "pull the image again", verb: "Update", action: base + "/update",
+        confirm: "Redeploy " + a.name + "? " + (git ? "The containers are replaced, running the same commit as now."
+          : local ? "The containers are replaced, built again from the folder uploaded last."
+          : "The container is replaced, running the same image as now.") });
+      // A folder is only ever updated from the machine it is on, with qsr.
+      if (!local) out.push({ icon: "update", title: "Update", within: git ? "pull and rebuild" : "pull the image again", verb: "Update", action: base + "/update",
         confirm: "Update " + a.name + "? " + (git ? "The repository is pulled and rebuilt from the branch head." : "Its images are pulled again.") + " Roll back from the deployment history if it goes wrong." });
     }
     out.forEach(function (it) { it.group = a.name; });

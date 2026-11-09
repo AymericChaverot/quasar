@@ -150,7 +150,7 @@ func (s *Server) appViewBase(a *db.App, admin bool) AppView {
 		Domain:  s.cfg.Domain,
 		Deploy:  s.dock.Deploying(a.ID),
 		Build:   build,
-		Stack:   a.DeployType == "compose" || (a.DeployType == "git" && build.Mode == db.GitBuildCompose),
+		Stack:   a.DeployType == "compose" || (a.BuildsFromSource() && build.Mode == db.GitBuildCompose),
 		Network: s.dock.Network(),
 		IsAdmin: admin,
 	}

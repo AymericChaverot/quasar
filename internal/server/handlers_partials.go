@@ -37,7 +37,7 @@ func (s *Server) handleSystemContainersPartial(w http.ResponseWriter, r *http.Re
 func (s *Server) handleDeployFields(w http.ResponseWriter, r *http.Request) {
 	t := r.URL.Query().Get("type")
 	switch t {
-	case "image", "git", "compose":
+	case "image", "git", "compose", "local":
 		s.renderPartial(w, "deploy_fields_"+t, map[string]any{})
 	default:
 		http.Error(w, "unknown type", http.StatusBadRequest)

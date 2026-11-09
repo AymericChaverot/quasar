@@ -2,6 +2,7 @@
      offers both ways. Rendered with an AppView; replaces itself on save,
      because saving changes what the panel says about itself. */}}
 {{define "git_build_panel"}}
+{{$src := "repository"}}{{if eq .DeployType "local"}}{{$src = "uploaded folder"}}{{end}}
 <div id="git-build" class="card space-y-3 p-4">
   <div class="flex flex-wrap items-center gap-2">
     {{if eq .Build.Mode "compose"}}
@@ -11,7 +12,7 @@
     <span class="badge badge-ok"><span class="dot"></span>Dockerfile</span>
     <span class="mono muted text-sm">Dockerfile</span>
     {{else}}
-    <span class="badge badge-muted"><span class="dot"></span>nothing checked out</span>
+    <span class="badge badge-muted"><span class="dot"></span>{{if eq .DeployType "local"}}nothing uploaded{{else}}nothing checked out{{end}}</span>
     {{end}}
     {{if .Build.Both}}<span class="chip">both available</span>{{end}}
   </div>
@@ -26,6 +27,11 @@
     One image is built from this Dockerfile and run as a single container, routed by the
     subdomain and port configured for the app.
   </p>
+  {{else if eq .DeployType "local"}}
+  <p class="muted text-sm">
+    No folder has been uploaded yet. Deploy one from your machine with
+    <span class="mono">qsr deploy {{.Subdomain}} &lt;folder&gt;</span> and this panel will report what it found at its root.
+  </p>
   {{else}}
   <p class="muted text-sm">
     The repository is not on disk yet. Deploy the application and this panel will report what
@@ -37,7 +43,7 @@
   <p class="text-sm" style="color: var(--warn)">
     This application is set to build from
     {{if eq .Build.Choice "compose"}}a compose file{{else}}a Dockerfile{{end}},
-    but the checkout has none — it is being built the other way instead.
+    but the {{$src}} has none — it is being built the other way instead.
   </p>
   {{end}}
 
@@ -52,7 +58,7 @@
     <form hx-post="/apps/{{.ID}}/git-build" hx-target="#git-build" hx-swap="outerHTML"
           class="flex flex-wrap items-center gap-3">
       <select name="git_build" class="input w-auto!">
-        <option value="" {{if eq .Build.Choice ""}}selected{{end}}>Automatic — compose file when the repository has one</option>
+        <option value="" {{if eq .Build.Choice ""}}selected{{end}}>Automatic — compose file when the {{$src}} has one</option>
         {{if .Build.HasCompose}}
         <option value="compose" {{if eq .Build.Choice "compose"}}selected{{end}}>docker compose</option>
         {{end}}
@@ -64,7 +70,7 @@
       <span class="help mt-0!">Redeploy to apply.</span>
     </form>
     <p class="help">
-      A repository holding a compose file describes a whole stack, and a Dockerfile beside it
+      A {{$src}} holding a compose file describes a whole stack, and a Dockerfile beside it
       describes one service of that stack — so compose wins by default. Choose Dockerfile when
       the compose file is there for local development only. Switching removes the containers the
       other mode left behind, but keeps their volumes.
@@ -72,9 +78,9 @@
   </div>
   {{else if .Build.Mode}}
   <p class="help">
-    The repository offers only this one way to build, so there is nothing to choose. Add
+    The {{$src}} offers only this one way to build, so there is nothing to choose. Add
     {{if eq .Build.Mode "compose"}}a Dockerfile{{else}}a compose file{{end}} at its root and
-    redeploy if you want the other.
+    {{if eq .DeployType "local"}}deploy the folder again{{else}}redeploy{{end}} if you want the other.
   </p>
   {{end}}
 </div>

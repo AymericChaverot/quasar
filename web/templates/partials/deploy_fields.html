@@ -25,6 +25,14 @@
 </div>
 {{end}}
 
+{{define "deploy_fields_local"}}
+<p class="help mt-0!">
+  The application is created empty, and deployed once you send it a folder from your machine with
+  <span class="mono">qsr deploy &lt;subdomain&gt; &lt;folder&gt;</span>. The folder must hold a
+  <span class="mono">Dockerfile</span> or a <span class="mono">docker-compose.yml</span> at its root, as a repository would.
+</p>
+{{end}}
+
 {{define "deploy_fields_compose"}}
 <div>
   <label for="compose_yaml" class="label">docker-compose.yml</label>

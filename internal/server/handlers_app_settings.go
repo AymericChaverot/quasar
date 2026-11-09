@@ -107,8 +107,8 @@ func (s *Server) handleAppGitBuild(w http.ResponseWriter, r *http.Request) {
 	if a == nil {
 		return
 	}
-	if a.DeployType != "git" {
-		http.Error(w, "only git applications are built from a repository", http.StatusBadRequest)
+	if !a.BuildsFromSource() {
+		http.Error(w, "only applications built from a repository or an uploaded folder have a build to choose", http.StatusBadRequest)
 		return
 	}
 	mode := r.FormValue("git_build")

@@ -31,7 +31,8 @@ type PaletteApp struct {
 	Name  string `json:"name"`
 	Host  string `json:"host,omitempty"`
 	State string `json:"state"`
-	// Git, Compose say which words the redeploy and update questions use.
+	// Git, Compose and Local say which words the redeploy and update
+	// questions use, and whether there is an update to offer at all.
 	DeployType string `json:"deployType"`
 	// Address is where a stack that publishes a port of its own is reached
 	// — a game server, a database — for the palette to copy; Proto is the

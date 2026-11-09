@@ -177,7 +177,7 @@
   {{template "ports_card" .}}
 </section>
 {{end}}
-{{if eq .DeployType "git"}}
+{{if .BuildsFromSource}}
 <section class="mt-8">
   <h2 class="h-label mb-3">Build</h2>
   {{template "git_build_panel" .}}
@@ -326,6 +326,20 @@
 <section class="mt-8">
   <h2 class="h-label mb-3">Source</h2>
   {{template "git_source_panel" (dict "App" . "URL" (redactURL .GitURL) "Branch" .GitBranch)}}
+</section>
+{{end}}
+{{if eq .DeployType "local"}}
+<section class="mt-8">
+  <h2 class="h-label mb-3">Source</h2>
+  <div class="card space-y-2 p-4">
+    <p class="text-sm">Deployed from a folder on your machine. Upload a new version and deploy it with</p>
+    <p class="mono text-sm">qsr deploy {{.Subdomain}} &lt;folder&gt;</p>
+    <p class="help">
+      What the folder's <span class="mono">.gitignore</span> and <span class="mono">.dockerignore</span> list is left out, and
+      so is <span class="mono">.git</span>. Each upload replaces the previous one; built from a Dockerfile, the images of the last
+      few stay in the deployment history to roll back to.
+    </p>
+  </div>
 </section>
 {{end}}
 <div class="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">

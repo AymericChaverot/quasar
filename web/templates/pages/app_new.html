@@ -174,10 +174,16 @@
                hx-get="/partials/deploy-fields?type=compose" hx-target="#deploy-fields" hx-swap="innerHTML">
         <span>Docker Compose</span>
       </label>
+      <label class="flex items-center gap-2">
+        <input type="radio" name="deploy_type" value="local" {{if eq $deploy "local"}}checked{{end}}
+               hx-get="/partials/deploy-fields?type=local" hx-target="#deploy-fields" hx-swap="innerHTML">
+        <span>Local folder</span>
+      </label>
     </div>
     <div id="deploy-fields">
       {{if eq $deploy "compose"}}{{template "deploy_fields_compose" .}}
       {{else if eq $deploy "git"}}{{template "deploy_fields_git" .}}
+      {{else if eq $deploy "local"}}{{template "deploy_fields_local" .}}
       {{else}}{{template "deploy_fields_image" .}}{{end}}
     </div>
   </section>
