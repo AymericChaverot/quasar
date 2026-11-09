@@ -201,7 +201,7 @@ func linkStaysInside(rel, target string) error {
 }
 
 // fileMode keeps an entry's permission bits, owner-readable and writable at
-// least, and nothing beyond them: no setuid, no sticky bit.
+// least, and nothing beyond them: no setuid or setgid.
 func fileMode(m int64) os.FileMode {
 	return os.FileMode(m)&0o755 | 0o600
 }
