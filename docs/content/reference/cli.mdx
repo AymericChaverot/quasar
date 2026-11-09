@@ -28,8 +28,23 @@ qsr login prod https://admin.your-domain.com
 | `qsr logs blog -f` | Its recent logs, then new lines as they come. |
 | `qsr env blog` | Its environment variables (an admin's personal token only). |
 | `qsr env set blog DEBUG=1 --deploy` | Change a variable and redeploy with it. |
+| `qsr apps create blog --git https://github.com/me/blog.git` | Create an application (also `--image`, `--compose` or `--local`) and deploy it. |
+| `qsr apps delete blog` | Delete it, with its containers, files and data, once its name is typed back. |
 
 An application is named by its id, its subdomain or its name. Every command takes `--json` for scripts.
+
+## Deploy a folder from your machine
+
+An application created with `--local` has no repository or image: it runs the folder you send it, built the way a repository is, with its compose file when it has one at its root and otherwise with its Dockerfile.
+
+```bash
+qsr apps create "My site" --local --port 8080
+qsr deploy my-site ./site
+```
+
+`qsr deploy` packs the folder, leaving out `.git` and whatever its `.gitignore` and `.dockerignore` exclude, uploads it, and waits for the deploy like any other. Each upload replaces the previous one; **Redeploy** on the dashboard builds the last one again. An admin sets the largest upload accepted in **Settings → Folder uploads**, 200 MB compressed by default, and `qsr` refuses a larger folder before sending it.
+
+Creating, deleting and deploying folders need Quasar v0.6.0 or later.
 
 ## In a pipeline
 
