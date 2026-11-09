@@ -495,6 +495,28 @@ curl -X POST -H "Authorization: Bearer qsr_…" https://admin.{{.Domain}}/api/v1
     </form>
   </section>
 
+  {{/* What `qsr deploy <app> <folder>` may send. Checked before the upload is
+       read when the client says its size, and again as it arrives. */}}
+  <section id="uploads" class="space-y-4">
+    <h2 class="h-label">Folder uploads</h2>
+    {{with .Uploads}}
+    <form method="post" action="/settings/uploads" class="card space-y-4 p-4">
+      <div class="flex flex-wrap items-end field-row gap-3">
+        <label class="text-sm">
+          <span class="label mb-1!">Largest upload (MB)</span>
+          <input name="upload_limit_mb" type="number" min="{{.Min}}" max="{{.Max}}" value="{{.LimitMB}}" required class="input mono w-28!">
+        </label>
+        <button type="submit" class="btn">Save</button>
+      </div>
+      <p class="help">
+        Applications deployed from a local folder receive it from <span class="mono">qsr deploy</span>, compressed,
+        without what its <span class="mono">.gitignore</span> and <span class="mono">.dockerignore</span> leave out.
+        A folder larger than {{.LimitMB}} MB once compressed is refused before it is sent.
+      </p>
+    </form>
+    {{end}}
+  </section>
+
   <section id="sign-in" class="space-y-4">
     <h2 class="h-label">Sign-in protection</h2>
     {{with .SignIn}}

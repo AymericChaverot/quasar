@@ -225,6 +225,8 @@ func deployCause(source string) string {
 		return "source changed"
 	case "api":
 		return "from the API"
+	case "upload":
+		return "from an uploaded folder"
 	case "webhook":
 		return "from a webhook"
 	case "rollback":

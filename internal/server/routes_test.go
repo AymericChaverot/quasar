@@ -132,6 +132,9 @@ func TestAPIRoutesRequireAToken(t *testing.T) {
 func TestAPIWriteRoutesNeedAnAdminToken(t *testing.T) {
 	s := newTestServer(t)
 	for _, pattern := range []string{
+		"POST /api/v1/apps",
+		"DELETE /api/v1/apps/{id}",
+		"PUT /api/v1/apps/{id}/source",
 		"POST /api/v1/apps/{id}/deploy",
 		"POST /api/v1/apps/{id}/restart",
 		"POST /api/v1/apps/{id}/start",

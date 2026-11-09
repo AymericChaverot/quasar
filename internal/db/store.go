@@ -173,6 +173,9 @@ const (
 	SettingLoginAttempts    = "login_max_attempts"
 	SettingLoginLockMinutes = "login_lock_minutes"
 
+	// The largest folder upload accepted, compressed, in megabytes.
+	SettingUploadLimitMB = "upload_limit_mb"
+
 	// Host usage percentages that trigger a notification; 0 turns one off.
 	SettingAlertDisk = "alert_disk_percent"
 	SettingAlertMem  = "alert_mem_percent"

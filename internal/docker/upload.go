@@ -32,6 +32,10 @@ func (e *UploadTooLargeError) Error() string {
 // thousand to one, which is what a decompression bomb does.
 const expandFactor = 10
 
+// ErrUploadBusy is an upload to an app another upload is still being
+// unpacked for.
+var ErrUploadBusy = errors.New("another upload to this application is being unpacked")
+
 // UploadStats describes an upload that was unpacked.
 type UploadStats struct {
 	Files int
@@ -45,6 +49,10 @@ type UploadStats struct {
 //
 // On any error the previous source is left exactly as it was.
 func (c *Client) ReplaceSource(appID string, body io.Reader, limit int64) (UploadStats, error) {
+	if _, busy := c.uploads.LoadOrStore(appID, struct{}{}); busy {
+		return UploadStats{}, ErrUploadBusy
+	}
+	defer c.uploads.Delete(appID)
 	src := c.sourceDir(appID)
 	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil {
 		return UploadStats{}, err

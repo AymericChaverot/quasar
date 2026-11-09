@@ -281,6 +281,9 @@ type apiMe struct {
 	Role          string     `json:"role"`
 	ExpiresAt     *time.Time `json:"expires_at"`
 	ServerVersion string     `json:"server_version"`
+	// UploadMaxBytes is the largest folder upload accepted, compressed, so a
+	// client can refuse one before sending it.
+	UploadMaxBytes int64 `json:"upload_max_bytes"`
 }
 
 // handleAPIMe answers who the token is. It is what a client signs in with:
@@ -290,7 +293,8 @@ type apiMe struct {
 // route.
 func (s *Server) handleAPIMe(w http.ResponseWriter, r *http.Request) {
 	id := apiIdentity(r)
-	me := apiMe{Kind: "service", Token: id.Token, Role: id.Role, ServerVersion: version.Version}
+	me := apiMe{Kind: "service", Token: id.Token, Role: id.Role, ServerVersion: version.Version,
+		UploadMaxBytes: s.uploadLimit()}
 	if id.Personal() {
 		me.Kind = "personal"
 		me.User = &id.Username

@@ -99,6 +99,7 @@ var palettePages = []struct {
 	{PalettePage{Title: "Image registries", Within: "Settings", Href: "/settings#registries", Words: "docker ghcr login"}, true},
 	{PalettePage{Title: "Integrations", Within: "Settings", Href: "/settings#integrations", Words: "notifications webhook ntfy email smtp alerts thresholds"}, true},
 	{PalettePage{Title: "Sign-in protection", Within: "Settings", Href: "/settings#sign-in", Words: "brute force lockout"}, true},
+	{PalettePage{Title: "Folder uploads", Within: "Settings", Href: "/settings#uploads", Words: "qsr deploy local folder size limit"}, true},
 	{PalettePage{Title: "Logs & audit retention", Within: "Settings", Href: "/settings#retention", Words: "purge keep"}, true},
 	{PalettePage{Title: "Sessions", Within: "Settings", Href: "/settings#sessions", Words: "sign out everywhere"}, true},
 }

@@ -47,6 +47,10 @@ type Client struct {
 	mu   sync.Mutex
 	runs map[string]*deployRun // app ID -> in-flight/last deploy
 
+	// The apps whose upload is being unpacked right now, so that two uploads
+	// to one app cannot write into the same staging directory.
+	uploads sync.Map // app ID -> struct{}
+
 	// The latest CPU reading of each container sampled, by ID; see
 	// StatsByName.
 	cpuMu      sync.Mutex

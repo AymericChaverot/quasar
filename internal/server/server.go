@@ -328,6 +328,7 @@ func (s *Server) routes() {
 
 	s.admin("POST /settings/sessions/clear", s.handleSessionsClear)
 	s.admin("POST /settings/sign-in", s.handleSignInProtection)
+	s.admin("POST /settings/uploads", s.handleUploadSettings)
 	s.admin("POST /settings/sign-in/unblock", s.handleSignInUnblock)
 	s.admin("POST /settings/retention", s.handleRetention)
 	s.admin("POST /settings/logs/purge", s.handlePurgeLogs)
@@ -431,6 +432,7 @@ func (s *Server) routes() {
 	s.apiRead("GET /api/v1/apps/{id}/logs", s.handleAPILogs)
 	s.apiRead("GET /api/v1/system", s.handleAPISystem)
 	s.apiWrite("POST /api/v1/apps/{id}/deploy", s.handleAPIDeploy)
+	s.apiWrite("PUT /api/v1/apps/{id}/source", s.handleAPIUpload)
 	// Admin tokens only, and for reading a personal one: see handlers_api_env.go.
 	s.apiWrite("GET /api/v1/apps/{id}/env", s.handleAPIEnvGet)
 	s.apiWrite("PUT /api/v1/apps/{id}/env", s.handleAPIEnvPut)
