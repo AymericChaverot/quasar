@@ -88,7 +88,11 @@ func (p HostPort) Clashes(o HostPort) bool {
 //
 // A file that will not parse yields nothing. The deploy reports that far better
 // than a port list can.
-func HostPortsIn(compose string, env map[string]string) []HostPort {
+//
+// choice and appPort are the app's routed service and port, which decide what
+// the adaptation also takes out: the routed service's own publish of the port
+// it is routed on.
+func HostPortsIn(compose string, env map[string]string, choice string, appPort int) []HostPort {
 	var doc yaml.Node
 	if err := yaml.Unmarshal([]byte(compose), &doc); err != nil {
 		return nil
@@ -101,10 +105,19 @@ func HostPortsIn(compose string, env map[string]string) []HostPort {
 		return nil
 	}
 
+	services := readServices(servicesNode, env)
+	// Decided the way adaptCompose decides it. A file its author wired to
+	// Traefik is run as written, so only the edge ports go.
+	door, routed := "", 0
+	if !anyTraefikLabels(services) {
+		if web := pickWebService(services, choice, appPort); web != nil {
+			door, routed = proxiedDoor(services, web, web.routedPort(appPort))
+		}
+	}
 	var out []HostPort
-	for _, s := range readServices(servicesNode, env) {
+	for _, s := range services {
 		for _, p := range s.ports {
-			if p.hostLo == 0 || p.bindsEdge() {
+			if p.hostLo == 0 || dropsPort(s, p, door, routed) {
 				continue
 			}
 			out = append(out, HostPort{Service: s.name, IP: p.hostIP, Lo: p.hostLo, Hi: p.hostHi, Proto: p.proto})
@@ -122,7 +135,7 @@ func (c *Client) HostPortsFor(a *db.App) []HostPort {
 	}
 	env := envMap(a.EnvContent)
 	if a.DeployType == "compose" {
-		return HostPortsIn(a.ComposeYAML, env)
+		return HostPortsIn(a.ComposeYAML, env, a.ComposeService, a.Port)
 	}
 	_, src := c.composeSource(a)
 	if src == "" {
@@ -132,7 +145,17 @@ func (c *Client) HostPortsFor(a *db.App) []HostPort {
 	if err != nil {
 		return nil
 	}
-	return HostPortsIn(string(raw), env)
+	return HostPortsIn(string(raw), env, a.ComposeService, a.Port)
+}
+
+// anyTraefikLabels reports a file whose author wired it to Traefik already.
+func anyTraefikLabels(services []composeService) bool {
+	for _, s := range services {
+		if s.hasTraefikLabels() {
+			return true
+		}
+	}
+	return false
 }
 
 // EnvMap parses .env content into what compose interpolates ${VAR} with.

@@ -36,6 +36,8 @@ YAML anchors and merge keys (`&anchor`, `<<: *defaults`) are supported.
 
 Host ports other than 80 and 443 are **kept**: a stack may need to expose a database or a game server on purpose.
 
+One exception: when the routed service is the one the rest of the stack sits behind (rule 2 above), its publish of the routed port is dropped as well. That is how a stack opens itself on a laptop, such as an nginx on `8080:80`; on the server Traefik serves that port over HTTPS on the application's domain, and leaving it published would also expose the site in plain HTTP on a raw port. Its other ports stay, and a service alone in its file keeps all of its own, so a game server keeps the port players join on.
+
 The **Connect** section, first on the application's Overview, lists them: the address to connect to, the protocol, the service that publishes it, and how far it reaches. A port bound to `127.0.0.1` is reachable from the server only, and is left out of the dashboard's list.
 
 :::warning

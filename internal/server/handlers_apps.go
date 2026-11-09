@@ -309,7 +309,7 @@ func (s *Server) validateNewApp(a *db.App) string {
 // bind, and stops — with the reason in a log nobody is watching, since the
 // dashboard would have shown the deploy as done.
 func (s *Server) portConflict(a *db.App) string {
-	wanted := docker.HostPortsIn(a.ComposeYAML, docker.EnvMap(a.EnvContent))
+	wanted := docker.HostPortsIn(a.ComposeYAML, docker.EnvMap(a.EnvContent), a.ComposeService, a.Port)
 	if len(wanted) == 0 {
 		return ""
 	}

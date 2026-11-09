@@ -105,21 +105,60 @@ func TestAdaptComposeResolvesParameterisedHostPort(t *testing.T) {
 	}
 }
 
-// With the variable unset the default applies, 8080 is not a port Traefik
-// holds, and the binding is the author's to keep — but it bypasses Traefik, so
-// the report has to name it.
-func TestAdaptComposeKeepsNonEdgeParameterisedPort(t *testing.T) {
+// With the variable unset the default applies, and 8080 is not a port Traefik
+// holds. The binding still goes: nginx fronts the stack, Traefik is its front
+// door here, and 8080:80 left in would publish the site in plain HTTP on a raw
+// port of the server, beside its domain. It is reported as dropped, as the
+// author wrote it.
+func TestAdaptComposeDropsTheFrontDoorsLaptopPort(t *testing.T) {
 	out, rep, err := adaptCompose([]byte(portfolioStack), testOptions("", 80))
 	if err != nil {
 		t.Fatalf("adaptCompose() error = %v", err)
 	}
-	if len(rep.Unpublished) != 0 {
-		t.Errorf("unpublished = %v, want nothing dropped", rep.Unpublished)
+	if rep.Service != "nginx" || rep.Port != 80 {
+		t.Errorf("routed %s on %d, want nginx on 80", rep.Service, rep.Port)
 	}
-	if len(rep.Published) != 1 || !strings.Contains(rep.Published[0], "nginx") {
-		t.Errorf("published = %v, want the nginx binding reported as bypassing Traefik", rep.Published)
+	if len(rep.Unpublished) != 1 || !strings.Contains(rep.Unpublished[0], "${HTTP_PORT:-8080}:80") {
+		t.Errorf("unpublished = %v, want the nginx binding as written", rep.Unpublished)
 	}
-	if !strings.Contains(string(out), "${HTTP_PORT:-8080}:80") {
-		t.Errorf("the author's binding was not left as written:\n%s", out)
+	if len(rep.Published) != 0 {
+		t.Errorf("published = %v, want nothing left on the host", rep.Published)
+	}
+	if strings.Contains(string(out), "ports:") {
+		t.Errorf("the generated file still publishes a host port:\n%s", out)
+	}
+	if got := HostPortsIn(portfolioStack, nil, "", 80); len(got) != 0 {
+		t.Errorf("HostPortsIn = %+v, want nothing: the page would offer a port the stack no longer publishes", got)
+	}
+}
+
+// What the front door publishes beside its routed port is the author's: an
+// admin port, a metrics port.
+func TestAdaptComposeKeepsTheFrontDoorsOtherPorts(t *testing.T) {
+	stack := strings.Replace(portfolioStack, `      - "${HTTP_PORT:-8080}:80"`,
+		`      - "${HTTP_PORT:-8080}:80"`+"\n"+`      - "9113:9113"`, 1)
+	_, rep, err := adaptCompose([]byte(stack), testOptions("", 80))
+	if err != nil {
+		t.Fatalf("adaptCompose() error = %v", err)
+	}
+	if len(rep.Published) != 1 || !strings.Contains(rep.Published[0], "9113:9113") {
+		t.Errorf("published = %v, want only the metrics port", rep.Published)
+	}
+}
+
+// A service alone in its file is routed too, but it is no proxy in front of
+// anything: the catalogue's Minecraft is routed on 25565 and publishes 25565,
+// and that published port is how players join.
+func TestAdaptComposeKeepsALoneServersPort(t *testing.T) {
+	const game = "services:\n  minecraft:\n    image: itzg/minecraft-server\n    ports:\n      - \"25565:25565\"\n"
+	_, rep, err := adaptCompose([]byte(game), testOptions("minecraft", 25565))
+	if err != nil {
+		t.Fatalf("adaptCompose() error = %v", err)
+	}
+	if len(rep.Unpublished) != 0 || len(rep.Published) != 1 {
+		t.Errorf("unpublished %v, published %v: the game port must stay", rep.Unpublished, rep.Published)
+	}
+	if got := HostPortsIn(game, nil, "minecraft", 25565); len(got) != 1 || got[0].Lo != 25565 {
+		t.Errorf("HostPortsIn = %+v, want 25565", got)
 	}
 }

@@ -139,15 +139,18 @@ func adaptCompose(src []byte, opt adaptOptions) ([]byte, ComposeAdaptation, erro
 	}
 	rep.Service = web.name
 	rep.Port = web.routedPort(opt.Port)
+	door, doorPort := proxiedDoor(services, web, rep.Port)
 
-	// Every service is stripped, not just the routed one: whichever of them
-	// binds 80 is what stops the stack from starting.
+	// Every service is stripped of the edge ports, not just the routed one:
+	// whichever of them binds 80 is what stops the stack from starting. A
+	// proxy in front of the stack also loses its publish of the routed port.
 	for _, s := range services {
-		for _, text := range s.unpublishEdgePorts() {
+		drop := func(p composePort) bool { return dropsPort(s, p, door, doorPort) }
+		for _, text := range s.unpublishPorts(drop) {
 			rep.Unpublished = append(rep.Unpublished, s.name+" "+text)
 		}
 		for _, p := range s.ports {
-			if p.hostLo > 0 && !p.bindsEdge() {
+			if p.hostLo > 0 && !drop(p) {
 				rep.Published = append(rep.Published, s.name+" "+p.text)
 			}
 		}
@@ -538,10 +541,44 @@ func (s composeService) routedPort(appPort int) int {
 	return declared[0]
 }
 
-// unpublishEdgePorts drops the entries binding a host port Traefik holds and
-// keeps the container port reachable as an expose entry. It returns the
-// dropped entries as written.
-func (s composeService) unpublishEdgePorts() []string {
+// proxiedDoor names the routed service and port when the routed service is
+// the front of the stack's depends_on graph — it waits for the others and
+// nothing waits for it, the place of an nginx or an app in front of its
+// database — and returns "" otherwise.
+//
+// That service publishing the routed port is the stack's front door as it was
+// opened on a laptop, nginx on localhost:8080, and here Traefik is that door,
+// over HTTPS on the application's domain. Left in, it would also publish the
+// site in plain HTTP on a raw port of the server, beside the domain and
+// around its protections.
+//
+// Only the front of a graph, because a single service is just as routed and
+// may well be a game server, whose published port is the whole point: the
+// catalogue's Minecraft is routed on 25565 and publishes 25565.
+func proxiedDoor(services []composeService, web *composeService, routed int) (string, int) {
+	if front := frontOfGraph(services); web != nil && front != nil && front.name == web.name {
+		return web.name, routed
+	}
+	return "", 0
+}
+
+// dropsPort reports a port entry the adaptation takes out of the file: one on
+// a host port Traefik holds, whichever service it is on, and one on door
+// (see proxiedDoor) publishing the port it is routed on.
+func dropsPort(s composeService, p composePort, door string, routed int) bool {
+	if p.bindsEdge() {
+		return true
+	}
+	if door == "" || s.name != door || p.hostLo == 0 {
+		return false
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(p.container))
+	return err == nil && n == routed
+}
+
+// unpublishPorts drops the entries drop picks and keeps their container ports
+// reachable as expose entries. It returns the dropped entries as written.
+func (s composeService) unpublishPorts(drop func(composePort) bool) []string {
 	ports := mapValue(s.node, "ports")
 	if ports == nil || ports.Kind != yaml.SequenceNode {
 		return nil
@@ -549,7 +586,7 @@ func (s composeService) unpublishEdgePorts() []string {
 	var dropped []string
 	kept := ports.Content[:0]
 	for i, entry := range ports.Content {
-		if i < len(s.ports) && s.ports[i].bindsEdge() {
+		if i < len(s.ports) && drop(s.ports[i]) {
 			dropped = append(dropped, s.ports[i].text)
 			addExpose(s.node, s.ports[i].container)
 			continue
