@@ -100,9 +100,12 @@
     <h2 class="h-label">Personal tokens</h2>
     <div class="card space-y-4 p-4">
       {{if .NewPersonalToken}}
-      <div class="alert-ok space-y-2 p-3">
+      <div class="alert-ok space-y-2 p-3" data-reveal>
         <p class="text-sm font-medium">Copy this token now — it is not stored and will never be shown again.</p>
-        <code class="mono block break-all rounded p-2 text-sm" style="background: var(--surface-2)">{{.NewPersonalToken}}</code>
+        <div class="flex items-start gap-2">
+          <code class="mono block min-w-0 flex-1 break-all rounded p-2 text-sm" style="background: var(--surface-2)">{{.NewPersonalToken}}</code>
+          <button type="button" class="btn token-copy shrink-0" data-copy="{{.NewPersonalToken}}" title="Copy the token" aria-label="Copy the token"><span class="copy-idle">{{template "icon_copy"}}Copy</span><span class="copy-ok">{{template "icon_check"}}Copied</span></button>
+        </div>
       </div>
       {{end}}
       {{if .MyTokens}}
@@ -220,9 +223,12 @@
     <h2 class="h-label">Service tokens</h2>
     <div class="card space-y-4 p-4">
       {{if .NewToken}}
-      <div class="alert-ok space-y-2 p-3">
+      <div class="alert-ok space-y-2 p-3" data-reveal>
         <p class="text-sm font-medium">Copy this token now — it is not stored and will never be shown again.</p>
-        <code class="mono block break-all rounded p-2 text-sm" style="background: var(--surface-2)">{{.NewToken}}</code>
+        <div class="flex items-start gap-2">
+          <code class="mono block min-w-0 flex-1 break-all rounded p-2 text-sm" style="background: var(--surface-2)">{{.NewToken}}</code>
+          <button type="button" class="btn token-copy shrink-0" data-copy="{{.NewToken}}" title="Copy the token" aria-label="Copy the token"><span class="copy-idle">{{template "icon_copy"}}Copy</span><span class="copy-ok">{{template "icon_check"}}Copied</span></button>
+        </div>
       </div>
       {{end}}
       {{if .Tokens}}

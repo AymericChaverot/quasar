@@ -5246,6 +5246,24 @@
     margin-top: 0.0625rem;
     color: var(--warn);
   }
+  .copy-idle, .copy-ok {
+    display: inline-flex;
+    align-items: center;
+    gap: inherit;
+  }
+  .copy-ok {
+    display: none;
+  }
+  .is-done > .copy-idle {
+    display: none;
+  }
+  .is-done > .copy-ok {
+    display: inline-flex;
+  }
+  .token-copy.is-done {
+    color: var(--ok);
+    border-color: var(--ok);
+  }
   .station {
     border: var(--border-w) solid var(--border);
     border-radius: var(--radius);

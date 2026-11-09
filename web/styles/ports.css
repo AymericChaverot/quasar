@@ -69,3 +69,15 @@
   color: var(--text-muted);
 }
 .ports-foot > .ico { width: 0.9375rem; height: 0.9375rem; flex: none; margin-top: 0.0625rem; color: var(--warn); }
+
+/* Every copy button holds both faces, and copy.js marks it is-done for a
+   moment once the text is on the clipboard: the copy icon gives way to a
+   check, since the clipboard itself shows nothing. */
+.copy-idle,
+.copy-ok { display: inline-flex; align-items: center; gap: inherit; }
+.copy-ok { display: none; }
+.is-done > .copy-idle { display: none; }
+.is-done > .copy-ok { display: inline-flex; }
+
+/* The labelled one beside a secret shown once (a new token). */
+.token-copy.is-done { color: var(--ok); border-color: var(--ok); }

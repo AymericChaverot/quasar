@@ -6,7 +6,7 @@
 {{define "port_proto"}}<span class="port-proto{{if eq . "udp"}} is-udp{{end}}">{{.}}</span>{{end}}
 
 {{/* The button that copies an address; copy.js does the copying. */}}
-{{define "copy_button"}}<button type="button" class="copy-btn" data-copy="{{.}}" title="Copy {{.}}" aria-label="Copy {{.}}">{{template "icon_copy"}}</button>{{end}}
+{{define "copy_button"}}<button type="button" class="copy-btn" data-copy="{{.}}" title="Copy {{.}}" aria-label="Copy {{.}}"><span class="copy-idle">{{template "icon_copy"}}</span><span class="copy-ok">{{template "icon_check"}}</span></button>{{end}}
 
 {{/* Beside the domain in the page's header: the public addresses only. */}}
 {{define "ports_header"}}
