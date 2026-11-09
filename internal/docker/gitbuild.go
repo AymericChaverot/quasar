@@ -60,7 +60,7 @@ func findComposeFile(dir string) string {
 // honour it — a repository with no Dockerfile cannot be built from one.
 func (c *Client) GitBuildFor(a *db.App) GitBuild {
 	b := GitBuild{Choice: a.GitBuild}
-	if a.DeployType != "git" {
+	if !a.BuildsFromSource() {
 		return b
 	}
 	src := c.sourceDir(a.ID)
@@ -88,7 +88,7 @@ func (c *Client) UsesCompose(a *db.App) bool {
 	if a.DeployType == "compose" {
 		return true
 	}
-	return a.DeployType == "git" && c.GitBuildFor(a).Mode == db.GitBuildCompose
+	return a.BuildsFromSource() && c.GitBuildFor(a).Mode == db.GitBuildCompose
 }
 
 // composeSource returns the directory docker compose runs in and the compose

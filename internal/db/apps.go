@@ -23,7 +23,7 @@ type App struct {
 	ID          string
 	Name        string
 	Subdomain   string
-	DeployType  string // "image", "git" or "compose"
+	DeployType  string // "image", "git", "compose" or "local"
 	ImageRef    string
 	GitURL      string
 	GitBranch   string
@@ -69,6 +69,14 @@ type App struct {
 	LogColor string
 
 	CreatedAt time.Time
+}
+
+// BuildsFromSource reports whether the app is built from a source tree Quasar
+// keeps on disk — a git checkout, or a folder uploaded with qsr — rather than
+// run from an image or from a compose file pasted into the dashboard. Both
+// kinds are built the same way; they differ only in where the tree comes from.
+func (a *App) BuildsFromSource() bool {
+	return a.DeployType == "git" || a.DeployType == "local"
 }
 
 // IPAllowList splits IPAllowCIDRs into entries for the Traefik middleware.

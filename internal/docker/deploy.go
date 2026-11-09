@@ -134,6 +134,17 @@ var (
 		{phaseBuild, "Building the stack", 40},
 		{phaseStart, "Starting the stack", 35},
 	}
+	// An uploaded folder is already on disk by the time its deploy starts, so
+	// there is nothing to fetch.
+	localImagePlan = []deployPhase{
+		{phaseBuild, "Building the image", 55},
+		{phaseStart, "Starting the container", 22},
+		{phaseHealth, "Waiting for it to serve", 23},
+	}
+	localStackPlan = []deployPhase{
+		{phaseBuild, "Building the stack", 60},
+		{phaseStart, "Starting the stack", 40},
+	}
 )
 
 // deployPlanFor is the sequence of steps a deploy of this app will run.
@@ -146,9 +157,16 @@ func (c *Client) deployPlanFor(a *db.App) []deployPhase {
 	switch {
 	case a.DeployType == "compose":
 		return composePlan
-	case a.DeployType != "git":
+	case !a.BuildsFromSource():
 		return imagePlan
-	case c.GitBuildFor(a).Mode == db.GitBuildCompose:
+	}
+	stack := c.GitBuildFor(a).Mode == db.GitBuildCompose
+	switch {
+	case a.DeployType == "local" && stack:
+		return localStackPlan
+	case a.DeployType == "local":
+		return localImagePlan
+	case stack:
 		return gitStackPlan
 	default:
 		return gitImagePlan
@@ -232,6 +250,10 @@ func (c *Client) deploy(ctx context.Context, a *db.App, fetch bool) (string, err
 		return c.deployGit(ctx, a, fetch)
 	case "compose":
 		return "", c.deployCompose(ctx, a, fetch)
+	case "local":
+		// The newest version is whatever was uploaded last, already on disk;
+		// fetch only pulls the images a stack names.
+		return c.deployLocal(ctx, a, fetch)
 	default:
 		return "", fmt.Errorf("unknown deploy type %q", a.DeployType)
 	}
@@ -638,8 +660,25 @@ func (c *Client) deployGit(ctx context.Context, a *db.App, pull bool) (string, e
 	if err != nil {
 		return "", err
 	}
+	return c.deploySource(ctx, a, src, pull, "the repository")
+}
 
-	// Switching a repository between the two modes moves its containers
+// deployLocal builds the folder last uploaded for the app with qsr. pull asks
+// a stack to pull the images it names, as an update of a git stack does.
+func (c *Client) deployLocal(ctx context.Context, a *db.App, pull bool) (string, error) {
+	src := c.sourceDir(a.ID)
+	if st, err := os.Stat(src); err != nil || !st.IsDir() {
+		return "", fmt.Errorf("nothing has been uploaded yet: deploy a folder with `qsr deploy %s <folder>`", a.Subdomain)
+	}
+	c.note(a.ID, "building the folder uploaded last")
+	return c.deploySource(ctx, a, src, pull, "the uploaded folder")
+}
+
+// deploySource builds a source tree on disk — a checkout or an uploaded
+// folder, named by what for the error that has neither file to build from —
+// as a stack or as a single image, and runs it.
+func (c *Client) deploySource(ctx context.Context, a *db.App, src string, pull bool, what string) (string, error) {
+	// Switching a source between the two modes moves its containers
 	// somewhere else entirely, so whatever the app ran before has to be
 	// removed here — nothing further down would recognise it as this app's.
 	// Volumes are left alone: a mode switch is not a request to lose data.
@@ -670,7 +709,7 @@ func (c *Client) deployGit(ctx context.Context, a *db.App, pull bool) (string, e
 		return tag, nil
 
 	default:
-		return "", fmt.Errorf("the repository has neither a Dockerfile nor a compose file at its root")
+		return "", fmt.Errorf("%s has neither a Dockerfile nor a compose file at its root", what)
 	}
 }
 
