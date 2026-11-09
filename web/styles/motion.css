@@ -28,3 +28,22 @@
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Going from one page of the dashboard to the next — which is also what every
+   plain form does, posting and getting the page back — keeps the old page on
+   screen until the new one is ready to draw, then crossfades, briefly. Without
+   it the browser could show the new page half-built: at the top before it is
+   put back where it was, panels not filled in yet. A browser without
+   cross-document view transitions navigates as before. */
+@view-transition {
+  navigation: auto;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 120ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
+}

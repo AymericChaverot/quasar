@@ -4469,6 +4469,17 @@
       animation-iteration-count: 1 !important;
     }
   }
+  @view-transition {
+    navigation: auto;
+  }
+  ::view-transition-old(root), ::view-transition-new(root) {
+    animation-duration: 120ms;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) {
+      animation: none !important;
+    }
+  }
   .toasts {
     position: fixed;
     top: 4.5rem;

@@ -22,6 +22,11 @@
        paint, where a stylesheet built in the browser only arrived after the
        script that builds it had run. */}}
   <link rel="stylesheet" href="/static/app.css">
+  {{/* Puts the page back where it was after a plain form posts (see the
+       file). Deferred, so it runs with the whole page parsed, and
+       render-blocking, so that happens before the first paint rather than
+       after the page was shown at the top. */}}
+  <script src="/static/js/keep-scroll.js" defer blocking="render"></script>
 </head>
 <body class="h-full antialiased">
   {{if not .HideNav}}
